@@ -9,9 +9,15 @@ export default defineConfig({
     host: true,
     port: 5173,
     strictPort: true,
-    // faz `npm run dev` falar com o backend sem depender do nginx
+    // faz `npm run dev` falar com o backend sem depender do nginx.
+    // O alvo é configurável porque a 3000 é porta disputada: se outro
+    // serviço a ocupar, o proxy responde 404 em HTML e a interface parece
+    // quebrada sem nenhum erro que aponte para o motivo.
     proxy: {
-      '/api': { target: 'http://localhost:3000', changeOrigin: true },
+      '/api': {
+        target: process.env.BACKEND_URL ?? 'http://localhost:3000',
+        changeOrigin: true,
+      },
     },
   },
 })
