@@ -313,3 +313,47 @@ Esplora não tem backoff contra o 429 do explorador público.
 ### Suíte depois das correções
 
 18 arquivos de teste, 117 testes, typecheck limpo.
+
+## Correções encontradas na verificação ponta a ponta em signet
+
+A conferência manual com um backend Esplora de signet real revelou dois defeitos
+que a suíte não pegava. Ambos corrigidos com teste antes da correção.
+
+### Derivação quebrada em testnet e signet
+
+`HDKey.fromExtendedKey()` recusava o tpub canônico com `Version mismatch`, porque
+a `@scure/bip32` assume as version bytes de mainnet quando não recebe outras.
+Consequência: **toda** carteira de testnet ou signet — a rede padrão do projeto e
+a da demonstração — ficava presa em `error`, falhando a cada tick do worker sem
+derivar um endereço sequer.
+
+O teste de signet que existia partia de uma chave de mainnet e conferia só o
+prefixo `tb1`, então passava sem tocar no caminho quebrado.
+
+A derivação passou a ler as version bytes da própria chave: como a chave é lida
+e como o endereço é escrito são coisas separadas.
+
+- `backend/src/wallet/descriptor.ts` — `BIP32_VERSIONS` e `keyNetworkOf()`
+- `backend/src/wallet/derive.ts`
+- `backend/test/derive.test.ts` — deriva de vpub e prova que tpub e xpub da mesma
+  conta produzem o mesmo script
+
+### Cadastro aceitava chave da rede errada
+
+Um backend Esplora atende uma rede só. A carteira cadastrada com chave da outra
+rede derivava endereços que o explorador recusa e morria em `error` sem dizer o
+motivo. `POST /api/wallets` passou a recusar no cadastro, com mensagem que nomeia
+as duas redes.
+
+- `backend/src/wallet/routes.ts`, `backend/test/wallets.test.ts`
+
+### Verificação executada
+
+Backend em `NETWORK=signet` contra `https://mempool.space/signet/api`:
+
+- carteira cadastrada por vpub chegou a `sync_state = synced`, `sync_height =
+  319324` (a ponta real da signet no momento), 42 endereços `tb1q…` derivados,
+  nenhum erro no log — onde antes havia `Version mismatch` a cada 30 segundos
+- zpub de mainnet recusado no cadastro com a mensagem esperada
+
+Suíte completa: 18 arquivos, 123 testes. `npx tsc --noEmit` limpo.
