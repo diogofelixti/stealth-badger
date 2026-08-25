@@ -3223,6 +3223,27 @@ describe('catálogo', () => {
     expect(CATALOG.pt['alert.dust_received.body']).toContain('UTXO')
   })
 
+  it('cobre as chaves de interface que a tela consome', () => {
+    const daTela = [
+      'feed.title', 'feed.live', 'feed.empty',
+      'balance.total', 'balance.wallets', 'balance.utxos', 'balance.frozen',
+      'wallets.title', 'wallets.add', 'wallets.formTitle',
+      'wallets.labelPlaceholder', 'wallets.keyPlaceholder', 'wallets.watchOnly',
+      'wallets.submit', 'wallets.submitting',
+      'wallet.coins', 'wallet.frozen', 'wallet.importing',
+      'wallet.importingNote', 'wallet.syncError',
+      'auth.tagline', 'auth.email', 'auth.password', 'auth.login', 'auth.register',
+      'privacy.public', 'privacy.publicHint',
+      'privacy.sovereign', 'privacy.sovereignHint',
+      'severity.info', 'severity.warning', 'severity.critical',
+    ]
+    for (const lang of LANGS) {
+      for (const k of daTela) {
+        expect(CATALOG[lang][k], `${lang}:${k}`).toBeTruthy()
+      }
+    }
+  })
+
   it('cobre todo tipo de alerta com título e corpo nos dois idiomas', () => {
     const tipos = ['funds_received', 'funds_spent', 'dust_received',
                    'address_reused', 'reorg_detected']
@@ -3349,6 +3370,44 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'severity.info': 'informativo',
     'severity.warning': 'atenção',
     'severity.critical': 'crítico',
+
+    'feed.title': 'Registro',
+    'feed.live': 'ao vivo',
+    'feed.empty': 'Nenhum alerta ainda. O watchtower avisa assim que algo se mexer.',
+
+    'balance.total': 'Saldo total',
+    'balance.wallets': '{n} carteiras',
+    'balance.utxos': '{n} UTXOs',
+    'balance.frozen': '{n} congelado',
+
+    'wallets.title': 'Carteiras',
+    'wallets.add': '+ Vigiar carteira',
+    'wallets.formTitle': 'Vigiar uma carteira',
+    'wallets.labelPlaceholder': 'Rótulo — por exemplo, Cold wallet',
+    'wallets.keyPlaceholder': 'xpub, ypub, zpub, tpub, upub ou vpub',
+    'wallets.watchOnly':
+      'Somente chaves públicas. O Stealth Badger é watch-only e recusa qualquer ' +
+      'material que permita gastar.',
+    'wallets.submit': 'Começar a vigiar',
+    'wallets.submitting': 'cadastrando…',
+
+    'wallet.coins': 'Moedas',
+    'wallet.frozen': 'congelado',
+    'wallet.importing': 'Importando {progress}%',
+    'wallet.importingNote':
+      'Varrendo a cadeia de troco. O saldo total acima ainda não inclui esta carteira.',
+    'wallet.syncError': 'Falha na sincronização',
+
+    'auth.tagline': 'Watchtower de privacidade para Bitcoin',
+    'auth.email': 'e-mail',
+    'auth.password': 'senha (mínimo 12 caracteres)',
+    'auth.login': 'Entrar',
+    'auth.register': 'Criar conta',
+
+    'privacy.public': 'Explorador público',
+    'privacy.publicHint': '{host} enxerga quais endereços você consulta',
+    'privacy.sovereign': 'Soberano',
+    'privacy.sovereignHint': 'Consultando {host} — infraestrutura própria',
   },
 
   en: {
@@ -3380,6 +3439,44 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'severity.info': 'info',
     'severity.warning': 'warning',
     'severity.critical': 'critical',
+
+    'feed.title': 'Log',
+    'feed.live': 'live',
+    'feed.empty': 'No alerts yet. The watchtower speaks up the moment something moves.',
+
+    'balance.total': 'Total balance',
+    'balance.wallets': '{n} wallets',
+    'balance.utxos': '{n} UTXOs',
+    'balance.frozen': '{n} frozen',
+
+    'wallets.title': 'Wallets',
+    'wallets.add': '+ Watch a wallet',
+    'wallets.formTitle': 'Watch a wallet',
+    'wallets.labelPlaceholder': 'Label — for example, Cold wallet',
+    'wallets.keyPlaceholder': 'xpub, ypub, zpub, tpub, upub or vpub',
+    'wallets.watchOnly':
+      'Public keys only. Stealth Badger is watch-only and refuses anything that ' +
+      'could spend.',
+    'wallets.submit': 'Start watching',
+    'wallets.submitting': 'adding…',
+
+    'wallet.coins': 'Coins',
+    'wallet.frozen': 'frozen',
+    'wallet.importing': 'Importing {progress}%',
+    'wallet.importingNote':
+      'Scanning the change chain. The total above does not include this wallet yet.',
+    'wallet.syncError': 'Sync failed',
+
+    'auth.tagline': 'Bitcoin privacy watchtower',
+    'auth.email': 'email',
+    'auth.password': 'password (at least 12 characters)',
+    'auth.login': 'Sign in',
+    'auth.register': 'Create account',
+
+    'privacy.public': 'Public explorer',
+    'privacy.publicHint': '{host} can see which addresses you look up',
+    'privacy.sovereign': 'Sovereign',
+    'privacy.sovereignHint': 'Querying {host} — your own infrastructure',
   },
 }
 ```
@@ -3467,7 +3564,7 @@ registerI18nRoutes(app)
 cd backend && npm test -- i18n
 ```
 
-Esperado: PASS, 12 testes.
+Esperado: PASS, 13 testes.
 
 - [ ] **Step 6: Escrever o teste dos alertas**
 
