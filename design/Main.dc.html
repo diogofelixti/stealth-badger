@@ -1,0 +1,200 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #E0A33C; text-decoration: none; }
+    a:hover { color: #EDE6DC; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 900px; background: #16110E; color: #EDE6DC; font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; display: flex; flex-direction: column; overflow: hidden;">
+
+  <!-- ASSINATURA: a listra aposemática. A aplicação veste a coloração de
+       advertência enquanto o usuário consulta um explorador público.
+       Em modo soberano esta faixa vira uma linha sólida de 1px em #7E9E8E. -->
+  <div style="height: 5px; flex-shrink: 0; background: repeating-linear-gradient(90deg, #E0A33C 0px, #E0A33C 13px, #16110E 13px, #16110E 26px);"></div>
+
+  <!-- cabeçalho -->
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 18px 32px; border-bottom: 1px solid #3B2F26; flex-shrink: 0;">
+
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+        <rect x="1" y="1" width="20" height="20" rx="2" stroke="#EDE6DC" stroke-width="1.5"/>
+        <path d="M7 1 L7 21 M11 1 L11 21 M15 1 L15 21" stroke="#EDE6DC" stroke-width="1.5"/>
+      </svg>
+      <span style="font-size: 15px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;">Stealth Badger</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 20px;">
+      <!-- badge de privacidade — persistente, nunca um aviso que some -->
+      <div style="display: flex; align-items: center; gap: 10px; border: 1px solid #E0A33C; border-radius: 3px; padding: 7px 12px;">
+        <div style="width: 26px; height: 10px; background: repeating-linear-gradient(90deg, #E0A33C 0px, #E0A33C 4px, #16110E 4px, #16110E 8px);"></div>
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #E0A33C;">Explorador público</span>
+        <span style="font-size: 12px; color: #9C8F80;">mempool.space enxerga o que você consulta</span>
+      </div>
+
+      <!-- seletor de idioma -->
+      <div style="display: flex; align-items: center; border: 1px solid #3B2F26; border-radius: 3px; overflow: hidden;">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; padding: 6px 10px; background: #2A211A; color: #EDE6DC;">PT</span>
+        <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.08em; padding: 6px 10px; color: #6B6055;">EN</span>
+      </div>
+
+      <span style="font-size: 12px; color: #6B6055;">dono@exemplo.com</span>
+    </div>
+  </div>
+
+  <!-- corpo -->
+  <div style="display: grid; grid-template-columns: 460px minmax(0, 1fr); gap: 0; flex-grow: 1; min-height: 0;">
+
+    <!-- COLUNA ESQUERDA — o que você vigia -->
+    <div style="border-right: 1px solid #3B2F26; padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; overflow: hidden;">
+
+      <!-- agregado primeiro: a pergunta que se faz ao abrir a tela -->
+      <div>
+        <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #6B6055; margin-bottom: 10px;">Saldo total</div>
+        <div style="display: flex; align-items: baseline; gap: 9px; margin-bottom: 12px;">
+          <span style="font-size: 40px; font-weight: 500; letter-spacing: -0.02em; line-height: 1;">1.284.310</span>
+          <span style="font-size: 14px; color: #9C8F80;">sats</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #9C8F80;">
+          <span>2 carteiras</span>
+          <span style="color: #3B2F26;">|</span>
+          <span>6 UTXOs</span>
+          <span style="color: #3B2F26;">|</span>
+          <span style="color: #C4472F;">1 congelado</span>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #3B2F26;"></div>
+
+      <div style="display: flex; align-items: baseline; justify-content: space-between;">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #6B6055;">Carteiras</span>
+        <a href="#" style="font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;">+ Vigiar carteira</a>
+      </div>
+
+      <!-- cold wallet, importando — o estado aparece, a tela não finge ter os dados -->
+      <div style="background: #1F1813; border: 1px solid #3B2F26; border-radius: 3px; padding: 16px 18px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px;">
+          <span style="font-size: 15px; font-weight: 500;">Cold wallet</span>
+          <span style="font-size: 11px; color: #6B6055;">c81b04af</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px;">
+          <span style="font-size: 24px; font-weight: 500; color: #6B6055;">———</span>
+          <span style="font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #E0A33C;">Importando 43%</span>
+        </div>
+        <div style="height: 3px; background: #2A211A; border-radius: 2px; overflow: hidden; margin-bottom: 9px;">
+          <div style="width: 43%; height: 100%; background: #E0A33C;"></div>
+        </div>
+        <div style="font-size: 12px; color: #9C8F80; font-family: 'IBM Plex Sans', system-ui, sans-serif;">
+          Varrendo a cadeia de troco. O saldo total acima ainda não inclui esta carteira.
+        </div>
+      </div>
+
+      <!-- hot wallet, sincronizada, com as moedas à vista -->
+      <div style="background: #1F1813; border: 1px solid #3B2F26; border-radius: 3px; padding: 16px 18px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px;">
+          <span style="font-size: 15px; font-weight: 500;">Hot wallet</span>
+          <span style="font-size: 11px; color: #6B6055;">7a3f9c2e</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px;">
+          <span style="font-size: 24px; font-weight: 500; letter-spacing: -0.01em;">412.850</span>
+          <span style="font-size: 13px; color: #9C8F80;">sats</span>
+        </div>
+        <div style="font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #6B6055; margin-bottom: 14px;">p2wpkh · signet · 4 UTXOs</div>
+
+        <div style="font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #6B6055; margin-bottom: 9px;">Moedas</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          <span style="font-size: 12px; border: 1px solid #3B2F26; border-radius: 2px; padding: 5px 9px;">220.000</span>
+          <span style="font-size: 12px; border: 1px solid #3B2F26; border-radius: 2px; padding: 5px 9px;">140.000</span>
+          <span style="font-size: 12px; border: 1px solid #3B2F26; border-radius: 2px; padding: 5px 9px;">52.250</span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; border: 1px solid #C4472F; border-radius: 2px; padding: 5px 9px; color: #C4472F;">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+              <rect x="1.5" y="4.5" width="7" height="5" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M3.2 4.5 V3 a1.8 1.8 0 0 1 3.6 0 V4.5" stroke="currentColor" stroke-width="1.2"/>
+            </svg>
+            600 · congelado
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- COLUNA DIREITA — o que ele viu -->
+    <div style="padding: 24px 32px; display: flex; flex-direction: column; gap: 14px; overflow: hidden;">
+
+      <div style="display: flex; align-items: baseline; justify-content: space-between;">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #6B6055;">Registro</span>
+        <span style="font-size: 11px; letter-spacing: 0.08em; color: #6B6055;">ao vivo</span>
+      </div>
+
+      <!-- CRÍTICO — régua listrada, a listra completa -->
+      <div style="display: flex; background: #1F1813; border: 1px solid #3B2F26; border-left: none; border-radius: 0 3px 3px 0;">
+        <div style="width: 4px; flex-shrink: 0; background: repeating-linear-gradient(180deg, #C4472F 0px, #C4472F 7px, #EDE6DC 7px, #EDE6DC 14px);"></div>
+        <div style="padding: 16px 18px; flex-grow: 1;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 8px;">
+            <span style="font-size: 15px; font-weight: 600;">Possível dust attack</span>
+            <span style="font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #C4472F; white-space: nowrap;">Crítico</span>
+          </div>
+          <div style="font-size: 13px; line-height: 1.55; color: #9C8F80; font-family: 'IBM Plex Sans', system-ui, sans-serif; margin-bottom: 12px;">
+            Chegaram 600 sats de origem desconhecida em <span style="font-family: 'IBM Plex Mono', monospace; color: #EDE6DC;">tb1q…306fyu</span>. Dust é plantado para rastrear você no instante em que gastar. Este UTXO já foi congelado.
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="font-size: 11px; color: #6B6055;">25/08/2026 08:14</span>
+            <span style="font-size: 11px; color: #6B6055;">·</span>
+            <a href="#" style="font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;">Ver o UTXO</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ATENÇÃO — régua sólida -->
+      <div style="display: flex; background: #1F1813; border: 1px solid #3B2F26; border-left: none; border-radius: 0 3px 3px 0;">
+        <div style="width: 4px; flex-shrink: 0; background: #E0A33C;"></div>
+        <div style="padding: 16px 18px; flex-grow: 1;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 8px;">
+            <span style="font-size: 15px; font-weight: 600;">Address reuse detectado</span>
+            <span style="font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #E0A33C; white-space: nowrap;">Atenção</span>
+          </div>
+          <div style="font-size: 13px; line-height: 1.55; color: #9C8F80; font-family: 'IBM Plex Sans', system-ui, sans-serif; margin-bottom: 12px;">
+            <span style="font-family: 'IBM Plex Mono', monospace; color: #EDE6DC;">tb1q…jy8z30</span> recebeu pela segunda vez. Os dois pagamentos passam a estar publicamente ligados — é a maior causa isolada de perda de privacidade.
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="font-size: 11px; color: #6B6055;">25/08/2026 07:52</span>
+            <span style="font-size: 11px; color: #6B6055;">·</span>
+            <a href="#" style="font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;">Gerar endereço novo</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- INFORMATIVO — sem croma nenhum. Cor é alarme. -->
+      <div style="display: flex; background: #1F1813; border: 1px solid #3B2F26; border-left: none; border-radius: 0 3px 3px 0;">
+        <div style="width: 4px; flex-shrink: 0; background: #3B2F26;"></div>
+        <div style="padding: 16px 18px; flex-grow: 1;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 8px;">
+            <span style="font-size: 15px; font-weight: 500;">Fundos recebidos</span>
+            <span style="font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #6B6055; white-space: nowrap;">Informativo</span>
+          </div>
+          <div style="font-size: 13px; line-height: 1.55; color: #9C8F80; font-family: 'IBM Plex Sans', system-ui, sans-serif; margin-bottom: 12px;">
+            <span style="font-family: 'IBM Plex Mono', monospace; color: #EDE6DC;">52.250 sats</span> confirmados no bloco 319.233, em endereço novo.
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="font-size: 11px; color: #6B6055;">25/08/2026 07:31</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size: 11px; color: #6B6055; padding-top: 4px;">
+        última varredura há 12 s · altura 319.233
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

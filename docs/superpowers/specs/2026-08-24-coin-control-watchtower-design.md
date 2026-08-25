@@ -259,7 +259,7 @@ alerta novo do worker ao stream SSE sem polling, window functions para projetar 
 ao longo do tempo.
 
 ```sql
-users        (id, email, password_hash, is_admin, created_at)
+users        (id, email, password_hash, is_admin, language, created_at)
 sessions     (id, user_id, expires_at)
 
 backends     (id, user_id NULL=global, kind, url, capabilities JSONB,
@@ -286,7 +286,7 @@ utxo_tags    (wallet_id, txid, vout, tag_id)
 spend_rules  (id, wallet_id, kind, group_key)            -- do_not_spend_together
 
 alert_rules  (id, user_id, wallet_id NULL=todas, type, threshold JSONB, enabled)
-alerts       (id, user_id, wallet_id, type, severity, title, body,
+alerts       (id, user_id, wallet_id, type, severity, params JSONB,
               dedupe_key UNIQUE, event_id, created_at, read_at, delivered JSONB)
 channels     (id, user_id, kind, config_encrypted, enabled)
 
@@ -296,6 +296,36 @@ tx_fingerprints  (txid, features JSONB, wallet_guess, computed_at)
 
 `chain_events` é a fonte da verdade; `utxos` é cache reconstruível. Se a projeção
 divergir, ela pode ser derrubada e reconstruída a partir do log.
+
+### 7.1 Modelo bilíngue
+
+Decidido em 2026-08-25: a interface é português e inglês desde o MVP. O texto que o
+usuário lê nunca é gravado no banco nem embutido em código — o alerta guarda `type` e
+`params`, e um catálogo transforma isso em frase.
+
+```
+alerts.type   = 'dust_received'
+alerts.params = { "valueSats": 600, "address": "tb1q…306fyu" }
+
+pt → "Chegaram {valueSats} sats de origem desconhecida em {address}.
+      Dust é plantado para rastrear você no instante em que gastar."
+en → "{valueSats} sats arrived from an unknown source at {address}.
+      Dust is planted to trace you the moment you spend."
+```
+
+**Um catálogo só, servido pelo backend.** Os dois lados precisam dele: a tela para
+renderizar, o worker para escrever a notificação de push. Duplicar as frases em dois
+pacotes garante divergência. Como frontend e backend são contêineres separados com
+builds independentes, um diretório compartilhado não sobrevive ao `COPY . .` de cada
+Dockerfile. Então o backend é dono do catálogo e o expõe em `GET /api/i18n/:lang`; a
+tela busca uma vez e guarda. Acrescentar um idioma vira um arquivo no backend, sem
+rebuild do frontend.
+
+**Push é renderizado no servidor**, com `users.language` — notificação não tem
+seletor de idioma para o usuário clicar.
+
+**Jargão de Bitcoin fica em inglês nos dois catálogos.** Ver Global Constraints do
+plano de implementação.
 
 ---
 

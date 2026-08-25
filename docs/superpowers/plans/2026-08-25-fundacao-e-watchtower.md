@@ -25,6 +25,14 @@
 - **Testes acompanham cada task.** É critério de avaliação do hackathon e entrega obrigatória.
 - Mensagens de commit em português, no imperativo, descrevendo o que mudou e por quê.
 - Rede padrão de desenvolvimento: **signet**. A demonstração usa signet e mainnet.
+- **A interface é bilíngue, português e inglês, desde o MVP.** Nenhum texto voltado ao
+  usuário nasce embutido em código: alertas guardam `type` e `params`, e o texto é
+  renderizado a partir de um catálogo servido pelo backend.
+- **Jargão de Bitcoin permanece em inglês nos dois idiomas** — `dust attack`,
+  `address reuse`, `cold wallet`, `hot wallet`, `UTXO`, `xpub`, `descriptor`,
+  `coinjoin`, `gap limit`, `mempool`, `reorg`. Traduzir esses termos produz texto que
+  soa a manual mal vertido e afasta justamente quem entende do assunto. O que muda de
+  idioma é o texto explicativo em volta.
 
 ---
 
@@ -127,8 +135,8 @@ Sem isto nada mais pode ser testado. Entrega: `docker compose up` sobe Postgres 
     "migrate": "tsx src/db/migrate.ts"
   },
   "dependencies": {
-    "fastify": "^4.28.1",
-    "@fastify/cookie": "^9.4.0",
+    "fastify": "^5.8.3",
+    "@fastify/cookie": "^10.0.1",
     "pg": "^8.13.1",
     "@scure/bip32": "^1.5.0",
     "@scure/btc-signer": "^1.4.0",
@@ -475,39 +483,38 @@ Regra que não se negocia: **severidade tem que ser legível sem depender de cor
 
 ```css
 :root {
-  /* superfícies */
-  --sb-bg:            #0d0f0e;
-  --sb-surface:       #161a18;
-  --sb-surface-raised:#1e2422;
-  --sb-border:        #2a322e;
+  /* TERRA — o sett do texugo, não o preto neutro de terminal.
+     Toda superfície é quente e sem croma. */
+  --sb-sett:         #16110E;  /* fundo da página */
+  --sb-soil:         #1F1813;  /* superfície */
+  --sb-clay:         #2A211A;  /* superfície elevada */
+  --sb-root:         #3B2F26;  /* borda */
 
-  /* texto */
-  --sb-text:          #e8ece9;
-  --sb-text-muted:    #8b9691;
-  --sb-text-faint:    #5a6560;
+  /* PELO — o branco do texugo é osso, não #fff */
+  --sb-bone:         #EDE6DC;
+  --sb-muted:        #9C8F80;
+  --sb-faint:        #6B6055;
 
-  /* marca */
-  --sb-accent:        #7dd3a0;
-  --sb-accent-dim:    #4a8a68;
+  /* SINAL — regra dura: croma só existe quando algo está errado.
+     A interface é monocromática até haver o que avisar. */
+  --sb-caution:      #E0A33C;  /* atenção · explorador público */
+  --sb-alarm:        #C4472F;  /* crítico */
+  --sb-moss:         #7E9E8E;  /* soberano · nada a reportar */
 
-  /* severidade — sempre acompanhada de ícone e peso, nunca cor sozinha */
-  --sb-info:          #6ba4d8;
-  --sb-warning:       #d8a75f;
-  --sb-critical:      #e0655f;
-
-  /* postura de privacidade — o badge mais importante da interface */
-  --sb-public:        #d8a75f;
-  --sb-sovereign:     #7dd3a0;
-
-  /* tipografia */
-  --sb-font-ui:   ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --sb-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  /* TIPOGRAFIA — inversão deliberada: monoespaçada é a face padrão da
+     interface, não a secundária. Um watchtower produz um log, e log é
+     artefato monoespaçado. A sans serve só para prosa corrida. */
+  --sb-font-data:  'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --sb-font-prose: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
 
   --sb-text-xs: 0.75rem;
-  --sb-text-sm: 0.875rem;
-  --sb-text-base: 1rem;
+  --sb-text-sm: 0.8125rem;
+  --sb-text-base: 0.9375rem;
   --sb-text-lg: 1.125rem;
   --sb-text-xl: 1.5rem;
+
+  --sb-track-tight: -0.01em;
+  --sb-track-label:  0.08em;   /* rótulos em caixa alta, espaçados */
 
   /* espaçamento — escala de 4px */
   --sb-space-1: 0.25rem;
@@ -517,10 +524,21 @@ Regra que não se negocia: **severidade tem que ser legível sem depender de cor
   --sb-space-6: 1.5rem;
   --sb-space-8: 2rem;
 
-  --sb-radius: 6px;
-  --sb-radius-lg: 10px;
+  --sb-radius: 3px;      /* quase reto: instrumento, não cartão */
+  --sb-radius-lg: 5px;
 }
 ```
+
+**Assinatura da interface — a listra de advertência.** A faixa preto-e-branca do
+texugo é coloração aposemática: existe para avisar. A aplicação veste essa listra
+na aresta superior da página **enquanto o usuário estiver consultando um
+explorador público**. Não é um toast que some nem um selo no canto: a interface
+inteira está usando a coloração de advertência. Em modo soberano a aresta vira
+uma linha sólida e discreta em `--sb-moss`.
+
+A mesma listra codifica severidade na régua esquerda de cada alerta: crítico
+recebe a faixa completa, atenção recebe meia, informativo não recebe nenhuma.
+A listra nunca decora — sempre significa.
 
 Regra de uso: **todo endereço, txid, valor em sats e caminho de derivação usa `--sb-font-mono`.** Dado de Bitcoin é dado técnico e precisa alinhar em coluna para ser conferível de relance.
 
@@ -831,6 +849,9 @@ CREATE TABLE users (
   email         TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   is_admin      BOOLEAN NOT NULL DEFAULT false,
+  -- idioma preferido: decide em que língua o push do ntfy sai, já que
+  -- notificação não tem seletor para o usuário clicar
+  language      TEXT NOT NULL DEFAULT 'pt' CHECK (language IN ('pt','en')),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -933,15 +954,18 @@ CREATE TABLE channels (
 );
 CREATE INDEX ON channels (user_id) WHERE enabled;
 
--- dedupe_key é a defesa contra três notificações da mesma transação
+-- dedupe_key é a defesa contra três notificações da mesma transação.
+-- NÃO existem colunas title e body: gravar texto pronto congela o idioma do
+-- alerta para sempre e faz o seletor de idioma não valer para o histórico.
+-- Grava-se `type` mais os `params` que a frase precisa; o catálogo bilíngue
+-- renderiza na hora de exibir ou de notificar.
 CREATE TABLE alerts (
   id         BIGSERIAL PRIMARY KEY,
   user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   wallet_id  BIGINT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
   type       TEXT NOT NULL,
   severity   TEXT NOT NULL CHECK (severity IN ('info','warning','critical')),
-  title      TEXT NOT NULL,
-  body       TEXT NOT NULL,
+  params     JSONB NOT NULL DEFAULT '{}'::jsonb,
   dedupe_key TEXT NOT NULL UNIQUE,
   event_id   BIGINT REFERENCES chain_events(id),
   delivered  JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -1108,6 +1132,72 @@ describe('rotas de autenticação', () => {
     expect(rows[0]!.is_admin).toBe(true)
   })
 
+  it('assume português quando o registro não informa idioma', async () => {
+    const app = buildApp()
+    await app.inject({
+      method: 'POST', url: '/api/auth/register',
+      payload: { email: 'sem-idioma@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const { rows } = await pool.query<{ language: string }>(
+      `SELECT language FROM users WHERE email = 'sem-idioma@exemplo.com'`,
+    )
+    expect(rows[0]!.language).toBe('pt')
+  })
+
+  it('guarda o idioma informado no registro', async () => {
+    const app = buildApp()
+    await app.inject({
+      method: 'POST', url: '/api/auth/register',
+      payload: { email: 'en@exemplo.com', password: 'senha-bem-comprida', language: 'en' },
+    })
+    const { rows } = await pool.query<{ language: string }>(
+      `SELECT language FROM users WHERE email = 'en@exemplo.com'`,
+    )
+    expect(rows[0]!.language).toBe('en')
+  })
+
+  it('troca o idioma e devolve o novo valor em /me', async () => {
+    const app = buildApp()
+    await app.inject({
+      method: 'POST', url: '/api/auth/register',
+      payload: { email: 'troca@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const login = await app.inject({
+      method: 'POST', url: '/api/auth/login',
+      payload: { email: 'troca@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+
+    const put = await app.inject({
+      method: 'PUT', url: '/api/auth/language',
+      cookies: { sb_session: cookie }, payload: { language: 'en' },
+    })
+    expect(put.statusCode).toBe(200)
+
+    const me = await app.inject({
+      method: 'GET', url: '/api/auth/me', cookies: { sb_session: cookie },
+    })
+    expect(me.json().language).toBe('en')
+  })
+
+  it('recusa idioma não suportado', async () => {
+    const app = buildApp()
+    await app.inject({
+      method: 'POST', url: '/api/auth/register',
+      payload: { email: 'ruim@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const login = await app.inject({
+      method: 'POST', url: '/api/auth/login',
+      payload: { email: 'ruim@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const res = await app.inject({
+      method: 'PUT', url: '/api/auth/language',
+      cookies: { sb_session: login.cookies.find(c => c.name === 'sb_session')!.value },
+      payload: { language: 'tlh' },
+    })
+    expect(res.statusCode).toBe(400)
+  })
+
   it('recusa login com senha errada', async () => {
     const app = buildApp()
     await app.inject({
@@ -1198,7 +1288,9 @@ import { createSession, userIdForToken, destroySession } from './sessions'
 
 const COOKIE = 'sb_session'
 
-interface Credentials { email: string; password: string }
+type Language = 'pt' | 'en'
+
+interface Credentials { email: string; password: string; language?: Language }
 
 export function registerAuthRoutes(app: FastifyInstance): void {
   app.decorateRequest('userId', null)
@@ -1217,10 +1309,13 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     const { rows: existing } = await pool.query('SELECT count(*) AS n FROM users')
     const isFirst = Number(existing[0]!.n) === 0
 
+    const language: Language = req.body.language === 'en' ? 'en' : 'pt'
+
     try {
       await pool.query(
-        `INSERT INTO users (email, password_hash, is_admin) VALUES ($1, $2, $3)`,
-        [email, await hashPassword(password), isFirst],
+        `INSERT INTO users (email, password_hash, is_admin, language)
+         VALUES ($1, $2, $3, $4)`,
+        [email, await hashPassword(password), isFirst, language],
       )
     } catch {
       return reply.code(409).send({ error: 'e-mail já cadastrado' })
@@ -1256,11 +1351,27 @@ export function registerAuthRoutes(app: FastifyInstance): void {
 
   app.get('/api/auth/me', async (req, reply) => {
     if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
-    const { rows } = await pool.query<{ email: string; is_admin: boolean }>(
-      'SELECT email, is_admin FROM users WHERE id = $1',
+    const { rows } = await pool.query<{ email: string; is_admin: boolean; language: Language }>(
+      'SELECT email, is_admin, language FROM users WHERE id = $1',
       [req.userId],
     )
-    return reply.send({ email: rows[0]!.email, isAdmin: rows[0]!.is_admin })
+    return reply.send({
+      email: rows[0]!.email,
+      isAdmin: rows[0]!.is_admin,
+      language: rows[0]!.language,
+    })
+  })
+
+  // O idioma vive no usuário, e não só no navegador, porque a notificação de
+  // push é escrita no servidor e não tem seletor para o usuário clicar.
+  app.put<{ Body: { language: Language } }>('/api/auth/language', async (req, reply) => {
+    if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
+    const { language } = req.body
+    if (language !== 'pt' && language !== 'en') {
+      return reply.code(400).send({ error: `idioma não suportado: ${language}` })
+    }
+    await pool.query('UPDATE users SET language = $2 WHERE id = $1', [req.userId, language])
+    return reply.send({ ok: true, language })
   })
 }
 ```
@@ -1301,7 +1412,7 @@ export function buildApp(): FastifyInstance {
 cd backend && npm test -- auth
 ```
 
-Esperado: PASS, 9 testes.
+Esperado: PASS, 13 testes.
 
 - [ ] **Step 5: Commit**
 
