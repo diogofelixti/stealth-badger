@@ -40,3 +40,6 @@ tmp/
 
 # material de curso de terceiros — não redistribuir num repo público
 docs/*.pdf
+
+# scratch do executor de planos
+.superpowers/

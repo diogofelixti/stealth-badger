@@ -851,7 +851,11 @@ CREATE TABLE backends (
   capabilities JSONB NOT NULL DEFAULT '{}'::jsonb,
   is_public    BOOLEAN NOT NULL DEFAULT true,
   network      TEXT NOT NULL CHECK (network IN ('mainnet','signet','testnet')),
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- NULLS NOT DISTINCT faz o user_id NULL dos backends globais participar da
+  -- unicidade. Sem isto, ON CONFLICT nunca dispara e cada carteira cadastrada
+  -- insere uma linha duplicada de backend.
+  UNIQUE NULLS NOT DISTINCT (user_id, url, network)
 );
 
 CREATE TABLE wallets (
@@ -2197,20 +2201,17 @@ interface CreateWalletBody { label: string; key: string; gapLimit?: number }
 
 async function ensureBackend(network: Network): Promise<number> {
   const cfg = loadConfig()
+  // DO UPDATE em vez de DO NOTHING para que RETURNING sempre traga o id,
+  // tanto na inserção quanto no reaproveitamento
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO backends (user_id, kind, url, is_public, network)
      VALUES (NULL, 'esplora', $1, $2, $3)
-     ON CONFLICT DO NOTHING
+     ON CONFLICT (user_id, url, network)
+     DO UPDATE SET is_public = EXCLUDED.is_public
      RETURNING id`,
     [cfg.esploraUrl, cfg.publicBackend, network],
   )
-  if (rows[0]) return Number(rows[0].id)
-
-  const existing = await pool.query<{ id: string }>(
-    `SELECT id FROM backends WHERE url = $1 AND network = $2 LIMIT 1`,
-    [cfg.esploraUrl, network],
-  )
-  return Number(existing.rows[0]!.id)
+  return Number(rows[0]!.id)
 }
 
 export function registerWalletRoutes(app: FastifyInstance): void {
@@ -3706,7 +3707,11 @@ export async function tick(opts: TickOptions = {}): Promise<TickReport> {
   }>(
     `SELECT w.id, w.user_id, b.url, b.is_public
        FROM wallets w JOIN backends b ON b.id = w.backend_id
-      WHERE w.sync_state <> 'importing'`,
+      ORDER BY w.id`,
+    // Sem filtro por sync_state: o laço é sequencial num processo só, então
+    // nenhuma carteira pode estar em sincronização quando esta consulta roda.
+    // Filtrar por <> 'importing' só criava um modo de falha permanente — um
+    // crash no meio da sincronização deixaria a carteira parada para sempre.
   )
 
   let walletsSynced = 0
