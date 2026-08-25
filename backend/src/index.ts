@@ -1,13 +1,19 @@
 import { buildApp } from './app'
 import { loadConfig } from './config'
+import { migrate } from './db/migrate'
+import { startAlertListener } from './stream/sse'
+import { tick } from './worker/tick'
 
 const config = loadConfig()
-const app = buildApp()
 
-app.listen({ port: config.port, host: '0.0.0.0' }, (err, address) => {
-  if (err) {
-    console.error(err)
-    process.exit(1)
-  }
-  console.log(`stealth-badger ouvindo em ${address} · rede ${config.network}`)
-})
+await migrate()
+await startAlertListener()
+
+const app = buildApp()
+await app.listen({ port: config.port, host: '0.0.0.0' })
+console.log('stealth-badger ouvindo na porta ' + config.port + ' · rede ' + config.network)
+
+const INTERVALO_MS = 30_000
+setInterval(() => {
+  tick().catch(err => console.error('falha no ciclo do worker:', err))
+}, INTERVALO_MS)

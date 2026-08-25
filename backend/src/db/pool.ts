@@ -1,6 +1,6 @@
 import pg from 'pg'
 
-const connectionString =
+export const connectionString =
   process.env.DATABASE_URL ??
   'postgres://badger:badger@localhost:5432/stealth_badger'
 
