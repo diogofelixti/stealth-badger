@@ -61,6 +61,7 @@ o descriptor antes e varrer a cadeia a partir de uma altura.
 
 | Documento | Conteúdo |
 |---|---|
+| [`docs/specification.md`](docs/specification.md) | **comportamento esperado** — o que o sistema faz, e o que ainda não faz |
 | [`docs/superpowers/specs/2026-08-24-coin-control-watchtower-design.md`](docs/superpowers/specs/2026-08-24-coin-control-watchtower-design.md) | design completo: arquitetura, modelo de dados, recorte, riscos |
 | [`docs/hackathon-briefing.md`](docs/hackathon-briefing.md) | regras do hackathon e o que impõem ao projeto |
 
