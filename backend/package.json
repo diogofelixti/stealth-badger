@@ -1,0 +1,28 @@
+{
+  "name": "stealth-badger-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "migrate": "tsx src/db/migrate.ts"
+  },
+  "dependencies": {
+    "fastify": "^4.28.1",
+    "@fastify/cookie": "^9.4.0",
+    "pg": "^8.13.1",
+    "@scure/bip32": "^1.5.0",
+    "@scure/btc-signer": "^1.4.0",
+    "@noble/hashes": "^1.6.1",
+    "@node-rs/argon2": "^2.0.2",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.9",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
