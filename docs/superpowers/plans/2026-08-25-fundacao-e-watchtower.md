@@ -3163,23 +3163,313 @@ o mesmo estado não duplica eventos."
 
 ---
 
-### Task 10: Motor de alertas com deduplicação
+### Task 10: Catálogo bilíngue e motor de alertas com deduplicação
 
 **Files:**
+- Create: `backend/src/i18n/catalog.ts`, `backend/src/i18n/render.ts`, `backend/src/i18n/routes.ts`
 - Create: `backend/src/alerts/dedupe.ts`, `backend/src/alerts/rules.ts`, `backend/src/alerts/store.ts`
-- Test: `backend/test/alerts.test.ts`
+- Modify: `backend/src/app.ts`
+- Test: `backend/test/i18n.test.ts`, `backend/test/alerts.test.ts`
 
 **Interfaces:**
-- Consumes: `pool`, `StoredEvent`
+- Consumes: `pool`, `StoredEvent`, `buildApp`
 - Produces:
+  - `type Lang = 'pt' | 'en'`, `LANGS: Lang[]`
+  - `CATALOG: Record<Lang, Record<string, string>>`
+  - `render(key: string, params: Record<string, unknown>, lang: Lang): string`
+  - `renderAlert(type: string, params: Record<string, unknown>, lang: Lang): { title: string; body: string }`
+  - `registerI18nRoutes(app)` — `GET /api/i18n/:lang`
   - `confirmationState(height: number | null, tip: number): 'mempool' | 'conf1' | 'conf6'`
   - `dedupeKey(walletId: number, txid: string, state: string): string`
-  - `alertsForEvent(event: StoredEvent, ctx: AlertContext): AlertCandidate[]`
+  - `alertsForEvent(event: StoredEvent, ctx: AlertContext): AlertCandidate[]` — **carrega `type` e `params`, nunca texto**
   - `saveAlert(c: AlertCandidate): Promise<number | null>` — `null` quando já existia
+  - `recentAlerts(userId: number, limit?: number)`
 
-> Sem deduplicação o usuário recebe três notificações da mesma transação e desinstala o produto. A chave é determinística e tem `UNIQUE` no banco: mempool e confirmado geram alertas distintos **de propósito**, mas reprocessamento, retentativa do worker e reinício do container não geram nada.
+> **Por que não se grava texto.** Se o alerta guardasse a frase pronta, ela ficaria
+> naquele idioma para sempre e o seletor não valeria para o histórico. O alerta guarda
+> `type` e `params`; o catálogo vira frase na hora de exibir ou notificar.
+>
+> **Jargão de Bitcoin fica em inglês nos dois catálogos** — `dust attack`,
+> `address reuse`, `UTXO`, `mempool`, `reorg`. O que muda de idioma é o texto em volta.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Escrever o teste do catálogo**
+
+`backend/test/i18n.test.ts`:
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { CATALOG, LANGS } from '../src/i18n/catalog'
+import { render, renderAlert } from '../src/i18n/render'
+import { buildApp } from '../src/app'
+
+describe('catálogo', () => {
+  it('tem exatamente as mesmas chaves em todos os idiomas', () => {
+    const pt = Object.keys(CATALOG.pt).sort()
+    const en = Object.keys(CATALOG.en).sort()
+    expect(en).toEqual(pt)
+  })
+
+  it('não deixa nenhuma frase vazia', () => {
+    for (const lang of LANGS) {
+      for (const [key, value] of Object.entries(CATALOG[lang])) {
+        expect(value.trim(), `${lang}:${key}`).not.toBe('')
+      }
+    }
+  })
+
+  it('mantém o jargão de Bitcoin em inglês também no catálogo português', () => {
+    expect(CATALOG.pt['alert.dust_received.title']).toContain('dust attack')
+    expect(CATALOG.pt['alert.address_reused.title']).toContain('Address reuse')
+    expect(CATALOG.pt['alert.dust_received.body']).toContain('UTXO')
+  })
+
+  it('cobre todo tipo de alerta com título e corpo nos dois idiomas', () => {
+    const tipos = ['funds_received', 'funds_spent', 'dust_received',
+                   'address_reused', 'reorg_detected']
+    for (const lang of LANGS) {
+      for (const t of tipos) {
+        expect(CATALOG[lang][`alert.${t}.title`], `${lang}:${t}`).toBeTruthy()
+        expect(CATALOG[lang][`alert.${t}.body`], `${lang}:${t}`).toBeTruthy()
+      }
+    }
+  })
+})
+
+describe('render', () => {
+  it('substitui parâmetros nomeados', () => {
+    expect(render('alert.reorg_detected.body', { height: 319233 }, 'pt'))
+      .toContain('319.233')
+  })
+
+  it('formata número conforme o idioma', () => {
+    expect(render('alert.reorg_detected.body', { height: 319233 }, 'en'))
+      .toContain('319,233')
+  })
+
+  it('resolve parâmetro que aponta para outra chave do catálogo', () => {
+    const pt = render('alert.funds_received.body', { value: 50000, state: '@state.mempool' }, 'pt')
+    const en = render('alert.funds_received.body', { value: 50000, state: '@state.mempool' }, 'en')
+    expect(pt).toContain(CATALOG.pt['state.mempool'])
+    expect(en).toContain(CATALOG.en['state.mempool'])
+  })
+
+  it('devolve a própria chave quando ela não existe, em vez de string vazia', () => {
+    expect(render('nao.existe', {}, 'pt')).toBe('nao.existe')
+  })
+
+  it('deixa o marcador visível quando falta o parâmetro, em vez de apagar', () => {
+    expect(render('alert.reorg_detected.body', {}, 'pt')).toContain('{height}')
+  })
+})
+
+describe('renderAlert', () => {
+  it('monta título e corpo de um dust attack nos dois idiomas', () => {
+    const params = { value: 600, threshold: 1000, address: 'tb1q…306fyu' }
+    const pt = renderAlert('dust_received', params, 'pt')
+    const en = renderAlert('dust_received', params, 'en')
+
+    expect(pt.title).toContain('dust attack')
+    expect(pt.body).toContain('600')
+    expect(en.title).toContain('dust attack')
+    expect(en.body).toContain('600')
+    expect(pt.body).not.toBe(en.body)
+  })
+})
+
+describe('GET /api/i18n/:lang', () => {
+  it('serve o catálogo pedido', async () => {
+    const app = buildApp()
+    const res = await app.inject({ method: 'GET', url: '/api/i18n/en' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()['alert.dust_received.title']).toBe(CATALOG.en['alert.dust_received.title'])
+  })
+
+  it('recusa idioma desconhecido', async () => {
+    const app = buildApp()
+    const res = await app.inject({ method: 'GET', url: '/api/i18n/tlh' })
+    expect(res.statusCode).toBe(404)
+  })
+})
+```
+
+- [ ] **Step 2: Rodar e confirmar que falha**
+
+```bash
+cd backend && npm test -- i18n
+```
+
+Esperado: FAIL — `src/i18n/catalog` não resolve.
+
+- [ ] **Step 3: Escrever o catálogo**
+
+`backend/src/i18n/catalog.ts`:
+
+```ts
+export type Lang = 'pt' | 'en'
+
+export const LANGS: Lang[] = ['pt', 'en']
+
+export function isLang(v: string): v is Lang {
+  return (LANGS as string[]).includes(v)
+}
+
+/**
+ * Chaves planas e pontuadas, para o catálogo viajar como JSON até a tela.
+ * Jargão de Bitcoin permanece em inglês nos dois idiomas: traduzir "dust attack"
+ * ou "address reuse" produz texto que soa a manual mal vertido e afasta quem
+ * entende do assunto. O que muda de idioma é o texto explicativo em volta.
+ */
+export const CATALOG: Record<Lang, Record<string, string>> = {
+  pt: {
+    'alert.funds_received.title': 'Fundos recebidos',
+    'alert.funds_received.body': '{value} sats, {state}.',
+
+    'alert.funds_spent.title': 'Fundos gastos',
+    'alert.funds_spent.body': 'O UTXO {txid}:{vout} foi consumido.',
+
+    'alert.dust_received.title': 'Possível dust attack',
+    'alert.dust_received.body':
+      'Chegaram {value} sats de origem desconhecida em {address}, abaixo do limiar ' +
+      'de {threshold} sats. Dust é plantado para rastrear você no instante em que ' +
+      'gastar. Congele este UTXO.',
+
+    'alert.address_reused.title': 'Address reuse detectado',
+    'alert.address_reused.body':
+      'O endereço {address} recebeu de novo. Os dois pagamentos passam a estar ' +
+      'publicamente ligados — é a maior causa isolada de perda de privacidade.',
+
+    'alert.reorg_detected.title': 'Reorg detectado',
+    'alert.reorg_detected.body':
+      'Transações a partir da altura {height} foram revertidas e o saldo recalculado.',
+
+    'state.mempool': 'ainda no mempool',
+    'state.conf1': 'confirmado',
+    'state.conf6': 'confirmado com 6 blocos',
+
+    'severity.info': 'informativo',
+    'severity.warning': 'atenção',
+    'severity.critical': 'crítico',
+  },
+
+  en: {
+    'alert.funds_received.title': 'Funds received',
+    'alert.funds_received.body': '{value} sats, {state}.',
+
+    'alert.funds_spent.title': 'Funds spent',
+    'alert.funds_spent.body': 'UTXO {txid}:{vout} was consumed.',
+
+    'alert.dust_received.title': 'Possible dust attack',
+    'alert.dust_received.body':
+      '{value} sats arrived from an unknown source at {address}, below the ' +
+      '{threshold} sats threshold. Dust is planted to trace you the moment you ' +
+      'spend. Freeze this UTXO.',
+
+    'alert.address_reused.title': 'Address reuse detected',
+    'alert.address_reused.body':
+      'Address {address} received again. Both payments are now publicly linked — ' +
+      'the single largest cause of lost privacy.',
+
+    'alert.reorg_detected.title': 'Reorg detected',
+    'alert.reorg_detected.body':
+      'Transactions from height {height} were rolled back and the balance recomputed.',
+
+    'state.mempool': 'still in the mempool',
+    'state.conf1': 'confirmed',
+    'state.conf6': 'confirmed with 6 blocks',
+
+    'severity.info': 'info',
+    'severity.warning': 'warning',
+    'severity.critical': 'critical',
+  },
+}
+```
+
+- [ ] **Step 4: Escrever o renderizador**
+
+`backend/src/i18n/render.ts` — três regras, e só três:
+
+```ts
+import { CATALOG, type Lang } from './catalog'
+
+const LOCALE: Record<Lang, string> = { pt: 'pt-BR', en: 'en-US' }
+
+/**
+ * 1. `{nome}` é trocado por `params.nome`.
+ * 2. Número é formatado no locale do idioma (1.284.310 contra 1,284,310).
+ * 3. Valor de parâmetro começando com `@` é chave do próprio catálogo e é
+ *    resolvido recursivamente — permite `{state}` virar "ainda no mempool"
+ *    ou "still in the mempool" sem que a regra de negócio saiba de idioma.
+ *
+ * Chave ausente devolve a própria chave, e parâmetro ausente deixa o marcador
+ * visível: falhar de forma visível é melhor que servir frase truncada.
+ */
+export function render(
+  key: string,
+  params: Record<string, unknown>,
+  lang: Lang,
+): string {
+  const template = CATALOG[lang][key]
+  if (template === undefined) return key
+
+  return template.replace(/\{(\w+)\}/g, (marker, name: string) => {
+    const value = params[name]
+    if (value === undefined || value === null) return marker
+    if (typeof value === 'string' && value.startsWith('@')) {
+      return render(value.slice(1), {}, lang)
+    }
+    if (typeof value === 'number') return value.toLocaleString(LOCALE[lang])
+    return String(value)
+  })
+}
+
+export function renderAlert(
+  type: string,
+  params: Record<string, unknown>,
+  lang: Lang,
+): { title: string; body: string } {
+  return {
+    title: render(`alert.${type}.title`, params, lang),
+    body: render(`alert.${type}.body`, params, lang),
+  }
+}
+```
+
+`backend/src/i18n/routes.ts` — o catálogo é servido por HTTP porque frontend e
+backend são contêineres com builds independentes, então um diretório compartilhado
+não sobreviveria ao `COPY . .` de cada Dockerfile:
+
+```ts
+import type { FastifyInstance } from 'fastify'
+import { CATALOG, isLang } from './catalog'
+
+export function registerI18nRoutes(app: FastifyInstance): void {
+  app.get<{ Params: { lang: string } }>('/api/i18n/:lang', async (req, reply) => {
+    const { lang } = req.params
+    if (!isLang(lang)) {
+      return reply.code(404).send({ error: `idioma não suportado: ${lang}` })
+    }
+    return reply.header('cache-control', 'public, max-age=300').send(CATALOG[lang])
+  })
+}
+```
+
+Registrar em `backend/src/app.ts`, junto das demais rotas:
+
+```ts
+import { registerI18nRoutes } from './i18n/routes'
+// ...
+registerI18nRoutes(app)
+```
+
+- [ ] **Step 5: Rodar e confirmar que o catálogo passa**
+
+```bash
+cd backend && npm test -- i18n
+```
+
+Esperado: PASS, 12 testes.
+
+- [ ] **Step 6: Escrever o teste dos alertas**
 
 `backend/test/alerts.test.ts`:
 
@@ -3190,6 +3480,7 @@ import { pool } from '../src/db/pool'
 import { confirmationState, dedupeKey } from '../src/alerts/dedupe'
 import { alertsForEvent } from '../src/alerts/rules'
 import { saveAlert } from '../src/alerts/store'
+import { renderAlert } from '../src/i18n/render'
 import type { StoredEvent } from '../src/events/log'
 
 describe('confirmationState', () => {
@@ -3218,31 +3509,51 @@ describe('alertsForEvent', () => {
     txid: 'aa', vout: 0, payload: { addressId: 1, valueSats: 50_000 },
     occurredAt: new Date(),
   }
+  const ctx = { userId: 3, tipHeight: 200, dustThreshold: 1000,
+                addressWasUsed: false, address: 'tb1qexemplo' }
 
   it('gera alerta informativo ao receber fundos', () => {
-    const [a] = alertsForEvent(base, { userId: 3, tipHeight: 200, dustThreshold: 1000, addressWasUsed: false })
+    const [a] = alertsForEvent(base, ctx)
     expect(a!.type).toBe('funds_received')
     expect(a!.severity).toBe('info')
   })
 
-  it('classifica recebimento pequeno como poeira, com severidade crítica', () => {
-    const dust = { ...base, payload: { addressId: 1, valueSats: 600 } }
-    const kinds = alertsForEvent(dust, { userId: 3, tipHeight: 200, dustThreshold: 1000, addressWasUsed: false })
-    const poeira = kinds.find(a => a.type === 'dust_received')
-    expect(poeira).toBeDefined()
-    expect(poeira!.severity).toBe('critical')
+  it('não carrega texto pronto — só tipo e parâmetros', () => {
+    const [a] = alertsForEvent(base, ctx)
+    expect(a).not.toHaveProperty('title')
+    expect(a).not.toHaveProperty('body')
+    expect(a!.params).toMatchObject({ value: 50_000 })
   })
 
-  it('alerta reutilização de endereço quando o endereço já tinha uso', () => {
-    const kinds = alertsForEvent(base, { userId: 3, tipHeight: 200, dustThreshold: 1000, addressWasUsed: true })
+  it('os parâmetros rendem frase nos dois idiomas', () => {
+    const [a] = alertsForEvent(base, ctx)
+    const pt = renderAlert(a!.type, a!.params, 'pt')
+    const en = renderAlert(a!.type, a!.params, 'en')
+    expect(pt.title).toBe('Fundos recebidos')
+    expect(en.title).toBe('Funds received')
+    expect(pt.body).not.toContain('{')
+    expect(en.body).not.toContain('{')
+  })
+
+  it('classifica recebimento pequeno como dust, com severidade crítica', () => {
+    const dust = { ...base, payload: { addressId: 1, valueSats: 600 } }
+    const achado = alertsForEvent(dust, ctx).find(a => a.type === 'dust_received')
+    expect(achado).toBeDefined()
+    expect(achado!.severity).toBe('critical')
+    expect(achado!.params).toMatchObject({ value: 600, threshold: 1000 })
+  })
+
+  it('alerta address reuse quando o endereço já tinha uso', () => {
+    const kinds = alertsForEvent(base, { ...ctx, addressWasUsed: true })
     expect(kinds.map(a => a.type)).toContain('address_reused')
   })
 
-  it('gera alerta de aviso ao detectar reorganização', () => {
+  it('gera alerta de aviso ao detectar reorg', () => {
     const reorg: StoredEvent = { ...base, type: 'reorg_detected', txid: null, vout: null }
-    const [a] = alertsForEvent(reorg, { userId: 3, tipHeight: 200, dustThreshold: 1000, addressWasUsed: false })
+    const [a] = alertsForEvent(reorg, ctx)
     expect(a!.type).toBe('reorg_detected')
     expect(a!.severity).toBe('warning')
+    expect(a!.params).toMatchObject({ height: 200 })
   })
 })
 
@@ -3265,7 +3576,7 @@ describe('saveAlert', () => {
 
   const candidate = (key: string) => ({
     userId, walletId, type: 'funds_received', severity: 'info' as const,
-    title: 'Fundos recebidos', body: '50.000 sats', dedupeKey: key, eventId: null,
+    params: { value: 50_000, state: '@state.conf1' }, dedupeKey: key, eventId: null,
   })
 
   it('grava o alerta e devolve o id', async () => {
@@ -3282,18 +3593,17 @@ describe('saveAlert', () => {
     const { rows } = await pool.query<{ count: string }>('SELECT count(*) FROM alerts')
     expect(Number(rows[0]!.count)).toBe(1)
   })
+
+  it('guarda os parâmetros como JSONB, e nenhum texto renderizado', async () => {
+    await saveAlert(candidate('k1'))
+    const { rows } = await pool.query<{ params: Record<string, unknown> }>(
+      'SELECT params FROM alerts')
+    expect(rows[0]!.params).toMatchObject({ value: 50_000, state: '@state.conf1' })
+  })
 })
 ```
 
-- [ ] **Step 2: Rodar e confirmar que falha**
-
-```bash
-cd backend && npm test -- alerts
-```
-
-Esperado: FAIL — `src/alerts/dedupe` não resolve.
-
-- [ ] **Step 3: Implementar**
+- [ ] **Step 7: Implementar dedupe, regras e persistência**
 
 `backend/src/alerts/dedupe.ts`:
 
@@ -3315,7 +3625,7 @@ export function dedupeKey(walletId: number, txid: string, state: string): string
 }
 ```
 
-`backend/src/alerts/rules.ts`:
+`backend/src/alerts/rules.ts` — a regra de negócio não conhece idioma nenhum:
 
 ```ts
 import type { StoredEvent } from '../events/log'
@@ -3328,8 +3638,8 @@ export interface AlertCandidate {
   walletId: number
   type: string
   severity: Severity
-  title: string
-  body: string
+  /** insumos da frase, nunca a frase — ver §7.1 do design */
+  params: Record<string, unknown>
   dedupeKey: string
   eventId: number | null
 }
@@ -3339,9 +3649,8 @@ export interface AlertContext {
   tipHeight: number
   dustThreshold: number
   addressWasUsed: boolean
+  address: string
 }
-
-const fmt = (sats: number) => `${sats.toLocaleString('pt-BR')} sats`
 
 export function alertsForEvent(event: StoredEvent, ctx: AlertContext): AlertCandidate[] {
   const out: AlertCandidate[] = []
@@ -3350,8 +3659,7 @@ export function alertsForEvent(event: StoredEvent, ctx: AlertContext): AlertCand
   if (event.type === 'reorg_detected') {
     return [{
       ...base, type: 'reorg_detected', severity: 'warning',
-      title: 'Reorganização de cadeia detectada',
-      body: `Transações a partir da altura ${event.height} foram revertidas e o saldo recalculado.`,
+      params: { height: event.height },
       dedupeKey: `wallet:${event.walletId}:reorg:${event.height}:${event.id}`,
     }]
   }
@@ -3362,18 +3670,14 @@ export function alertsForEvent(event: StoredEvent, ctx: AlertContext): AlertCand
 
     out.push({
       ...base, type: 'funds_received', severity: 'info',
-      title: 'Fundos recebidos',
-      body: `${fmt(value)} · ${state === 'mempool' ? 'no mempool' : 'confirmado'}`,
+      params: { value, state: `@state.${state}` },
       dedupeKey: dedupeKey(event.walletId, event.txid, state),
     })
 
     if (value > 0 && value < ctx.dustThreshold) {
       out.push({
         ...base, type: 'dust_received', severity: 'critical',
-        title: 'Possível ataque de poeira',
-        body:
-          `Recebidos ${fmt(value)}, abaixo do limiar de ${fmt(ctx.dustThreshold)}. ` +
-          `Poeira costuma ser plantada para rastrear você quando gasta. Congele este UTXO.`,
+        params: { value, threshold: ctx.dustThreshold, address: ctx.address },
         dedupeKey: dedupeKey(event.walletId, event.txid, `dust:${state}`),
       })
     }
@@ -3381,10 +3685,7 @@ export function alertsForEvent(event: StoredEvent, ctx: AlertContext): AlertCand
     if (ctx.addressWasUsed) {
       out.push({
         ...base, type: 'address_reused', severity: 'critical',
-        title: 'Endereço reutilizado',
-        body:
-          'Um endereço que já tinha histórico recebeu de novo. Reutilização liga ' +
-          'pagamentos entre si publicamente e é a principal causa de perda de privacidade.',
+        params: { address: ctx.address },
         dedupeKey: dedupeKey(event.walletId, event.txid, `reuse:${state}`),
       })
     }
@@ -3393,8 +3694,7 @@ export function alertsForEvent(event: StoredEvent, ctx: AlertContext): AlertCand
   if (event.type === 'utxo_spent' && event.txid) {
     out.push({
       ...base, type: 'funds_spent', severity: 'info',
-      title: 'Fundos gastos',
-      body: `UTXO ${event.txid.slice(0, 12)}…:${event.vout} foi consumido.`,
+      params: { txid: `${event.txid.slice(0, 12)}…`, vout: event.vout },
       dedupeKey: dedupeKey(event.walletId, event.txid, `spent:${event.vout}`),
     })
   }
@@ -3403,7 +3703,8 @@ export function alertsForEvent(event: StoredEvent, ctx: AlertContext): AlertCand
 }
 ```
 
-`backend/src/alerts/store.ts` — `ON CONFLICT DO NOTHING` faz o banco ser a autoridade sobre duplicidade, o que continua correto mesmo com dois workers concorrentes:
+`backend/src/alerts/store.ts` — `ON CONFLICT DO NOTHING` faz do banco a autoridade
+sobre duplicidade, o que continua correto mesmo com dois workers concorrentes:
 
 ```ts
 import { pool } from '../db/pool'
@@ -3411,25 +3712,27 @@ import type { AlertCandidate } from './rules'
 
 export async function saveAlert(c: AlertCandidate): Promise<number | null> {
   const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO alerts (user_id, wallet_id, type, severity, title, body, dedupe_key, event_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    `INSERT INTO alerts (user_id, wallet_id, type, severity, params, dedupe_key, event_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
      ON CONFLICT (dedupe_key) DO NOTHING
      RETURNING id`,
-    [c.userId, c.walletId, c.type, c.severity, c.title, c.body, c.dedupeKey, c.eventId],
+    [c.userId, c.walletId, c.type, c.severity, JSON.stringify(c.params),
+     c.dedupeKey, c.eventId],
   )
   if (!rows[0]) return null
 
   const id = Number(rows[0].id)
-  // acorda os streams SSE conectados sem que ninguém precise fazer polling
+  // acorda os streams SSE conectados sem que ninguém faça polling
   await pool.query(`SELECT pg_notify('sb_alerts', $1)`, [
     JSON.stringify({ id, userId: c.userId, walletId: c.walletId, severity: c.severity }),
   ])
   return id
 }
 
+/** Devolve tipo e parâmetros; quem renderiza é a tela, no idioma escolhido. */
 export async function recentAlerts(userId: number, limit = 50) {
   const { rows } = await pool.query(
-    `SELECT id, wallet_id AS "walletId", type, severity, title, body,
+    `SELECT id, wallet_id AS "walletId", type, severity, params,
             created_at AS "createdAt", read_at AS "readAt"
        FROM alerts WHERE user_id = $1
       ORDER BY created_at DESC LIMIT $2`,
@@ -3439,27 +3742,31 @@ export async function recentAlerts(userId: number, limit = 50) {
 }
 ```
 
-- [ ] **Step 4: Rodar e confirmar que passa**
+- [ ] **Step 8: Rodar e confirmar que passa**
 
 ```bash
-cd backend && npm test -- alerts
+cd backend && npm test -- i18n alerts
 ```
 
-Esperado: PASS, 14 testes.
+Esperado: PASS, 12 + 16 testes.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add backend/src/alerts backend/test/alerts.test.ts
-git commit -m "Adiciona motor de alertas com deduplicação determinística
+git add backend/src/i18n backend/src/alerts backend/src/app.ts backend/test
+git commit -m "Adiciona catálogo bilíngue e motor de alertas com deduplicação
 
-A chave de deduplicação tem UNIQUE no banco, então o banco é a
-autoridade sobre duplicidade mesmo com workers concorrentes. Alerta de
-poeira e de reutilização de endereço nascem críticos: são vazamento de
-privacidade, não movimentação de saldo."
+O alerta guarda tipo e parâmetros, nunca a frase pronta: texto renderizado
+no banco congelaria o idioma e faria o seletor não valer para o histórico.
+O catálogo é servido por HTTP porque frontend e backend têm builds
+independentes. Jargão de Bitcoin permanece em inglês nos dois idiomas.
+
+A chave de deduplicação tem UNIQUE no banco, então o banco é a autoridade
+sobre duplicidade mesmo com workers concorrentes."
 ```
 
 ---
+
 ### Task 11: Entrega de alertas — ntfy, webhook, feed ao vivo e laço do worker
 
 Fecha o fluxo do watchtower. Ao final desta task existe demonstração de ponta a ponta.
@@ -3589,12 +3896,32 @@ describe('tick', () => {
     expect(r.alertsCreated).toBeGreaterThan(0)
   })
 
-  it('classifica 600 sats como poeira, com severidade crítica', async () => {
+  it('classifica 600 sats como dust, com severidade crítica', async () => {
     await tick({ adapterFactory: () => adapterWithDust() })
     const { rows } = await pool.query<{ type: string; severity: string }>(
       'SELECT type, severity FROM alerts')
-    const poeira = rows.find(r => r.type === 'dust_received')
-    expect(poeira?.severity).toBe('critical')
+    const dust = rows.find(r => r.type === 'dust_received')
+    expect(dust?.severity).toBe('critical')
+  })
+
+  it('grava parâmetros, e nenhum texto renderizado, no alerta', async () => {
+    await tick({ adapterFactory: () => adapterWithDust() })
+    const { rows } = await pool.query<{ params: Record<string, unknown> }>(
+      `SELECT params FROM alerts WHERE type = 'dust_received'`)
+    expect(rows[0]!.params).toMatchObject({ value: 600, threshold: 1000 })
+    expect(rows[0]!.params.address).toBeTruthy()
+  })
+
+  it('o mesmo alerta rende frases diferentes em pt e en', async () => {
+    const { renderAlert } = await import('../src/i18n/render')
+    await tick({ adapterFactory: () => adapterWithDust() })
+    const { rows } = await pool.query<{ type: string; params: Record<string, unknown> }>(
+      `SELECT type, params FROM alerts WHERE type = 'dust_received'`)
+    const pt = renderAlert(rows[0]!.type, rows[0]!.params, 'pt')
+    const en = renderAlert(rows[0]!.type, rows[0]!.params, 'en')
+    expect(pt.body).not.toBe(en.body)
+    expect(pt.body).not.toContain('{')
+    expect(en.body).not.toContain('{')
   })
 
   it('rodar duas vezes não duplica alerta — a chave de dedup segura', async () => {
@@ -3686,10 +4013,29 @@ export async function sendToWebhook(
 ```ts
 import { pool } from '../../db/pool'
 import { open } from '../../crypto/secretbox'
-import { sendToNtfy, type DeliverableAlert } from './ntfy'
+import { renderAlert } from '../../i18n/render'
+import type { Lang } from '../../i18n/catalog'
+import type { Severity } from '../rules'
+import { sendToNtfy } from './ntfy'
 import { sendToWebhook } from './webhook'
 
-export async function deliver(alert: DeliverableAlert, userId: number): Promise<void> {
+/**
+ * O push é renderizado NO SERVIDOR, com o idioma do usuário: notificação não
+ * tem seletor de idioma para a pessoa clicar. A tela renderiza por conta
+ * própria, no idioma escolhido naquele momento.
+ */
+export async function deliver(
+  alert: { id: number; walletId: number; type: string; severity: Severity;
+           params: Record<string, unknown> },
+  userId: number,
+): Promise<void> {
+  const { rows: userRows } = await pool.query<{ language: Lang }>(
+    'SELECT language FROM users WHERE id = $1', [userId],
+  )
+  const lang: Lang = userRows[0]?.language ?? 'pt'
+  const { title, body } = renderAlert(alert.type, alert.params, lang)
+  const rendered = { ...alert, title, body }
+
   const { rows } = await pool.query<{ id: string; kind: string; config_encrypted: Buffer }>(
     'SELECT id, kind, config_encrypted FROM channels WHERE user_id = $1 AND enabled',
     [userId],
@@ -3700,8 +4046,8 @@ export async function deliver(alert: DeliverableAlert, userId: number): Promise<
     const config = JSON.parse(open(row.config_encrypted, process.env.MASTER_KEY_HEX!))
     const result =
       row.kind === 'ntfy'
-        ? await sendToNtfy(alert, config)
-        : await sendToWebhook(alert, config)
+        ? await sendToNtfy(rendered, config)
+        : await sendToWebhook(rendered, config)
     report[`${row.kind}:${row.id}`] = result
   }
 
@@ -3849,16 +4195,18 @@ export async function tick(opts: TickOptions = {}): Promise<TickReport> {
     const novos = events.filter(e => result.newEvents.includes(e.id))
 
     for (const event of novos) {
-      const addressWasUsed = await hadPriorUse(walletId, event)
+      const { address, wasUsedBefore } = await addressContext(walletId, event)
       for (const candidate of alertsForEvent(event, {
-        userId, tipHeight: result.tipHeight, dustThreshold: DUST_THRESHOLD, addressWasUsed,
+        userId, tipHeight: result.tipHeight, dustThreshold: DUST_THRESHOLD,
+        addressWasUsed: wasUsedBefore, address,
       })) {
         const id = await saveAlert(candidate)
         if (id === null) continue
         alertsCreated++
+        // o alerta viaja como tipo e parâmetros; quem vira frase é o deliver
         await deliver(
           { id, walletId, type: candidate.type, severity: candidate.severity,
-            title: candidate.title, body: candidate.body },
+            params: candidate.params },
           userId,
         )
       }
@@ -3868,12 +4216,23 @@ export async function tick(opts: TickOptions = {}): Promise<TickReport> {
   return { walletsSynced, alertsCreated }
 }
 
-/** Reutilização: o endereço deste UTXO já recebeu antes, em outra transação? */
-async function hadPriorUse(
+/**
+ * Devolve o endereço do evento e se ele já havia recebido antes.
+ * As duas informações vêm juntas porque as regras precisam das duas: o endereço
+ * entra nos parâmetros da frase, e o uso anterior decide se há address reuse.
+ */
+async function addressContext(
   walletId: number, event: { id: number; payload: Record<string, unknown> },
-): Promise<boolean> {
+): Promise<{ address: string; wasUsedBefore: boolean }> {
   const addressId = (event.payload as { addressId?: number }).addressId
-  if (!addressId) return false
+  if (!addressId) return { address: '', wasUsedBefore: false }
+
+  const { rows: addr } = await pool.query<{ address: string }>(
+    'SELECT address FROM addresses WHERE id = $1', [addressId],
+  )
+  const full = addr[0]?.address ?? ''
+  // encurtado aqui, e não no catálogo, para o texto ficar igual nos dois idiomas
+  const address = full.length > 18 ? `${full.slice(0, 8)}…${full.slice(-6)}` : full
 
   const { rows } = await pool.query<{ count: string }>(
     `SELECT count(*) FROM chain_events
@@ -3881,7 +4240,7 @@ async function hadPriorUse(
         AND id < $2 AND (payload->>'addressId')::int = $3`,
     [walletId, event.id, addressId],
   )
-  return Number(rows[0]!.count) > 0
+  return { address, wasUsedBefore: Number(rows[0]!.count) > 0 }
 }
 ```
 
@@ -4064,10 +4423,15 @@ export function shorten(id: string, head = 8, tail = 6): string {
 ```ts
 export type Severity = 'info' | 'warning' | 'critical'
 
+export type Lang = 'pt' | 'en'
+
+/** Sem title nem body: o texto é renderizado na tela, no idioma escolhido. */
 export interface Alert {
   id: number; walletId: number; type: string; severity: Severity
-  title: string; body: string; createdAt: string; readAt?: string | null
+  params: Record<string, unknown>; createdAt: string; readAt?: string | null
 }
+
+export type Catalog = Record<string, string>
 
 export interface Wallet {
   id: number; label: string; scriptType: string; network: string
@@ -4104,28 +4468,83 @@ export const api = {
       method: 'POST', body: JSON.stringify({ label, key }),
     }),
   alerts: () => request<Alert[]>('/api/alerts'),
+  catalog: (lang: Lang) => request<Catalog>(`/api/i18n/${lang}`),
+  setLanguage: (language: Lang) =>
+    request<{ ok: true; language: Lang }>('/api/auth/language', {
+      method: 'PUT', body: JSON.stringify({ language }),
+    }),
 }
 ```
 
 - [ ] **Step 5: Implementar os componentes**
 
+`frontend/src/lib/i18n.ts` — as **frases** têm fonte única, no backend; o que se
+repete aqui são as três regras de interpolação, cerca de quinze linhas. Duplicar
+lógica curta é aceitável; duplicar texto é o que geraria divergência:
+
+```ts
+import type { Catalog, Lang } from './api'
+
+const LOCALE: Record<Lang, string> = { pt: 'pt-BR', en: 'en-US' }
+
+/**
+ * Mesmas três regras do renderizador do servidor:
+ * `{nome}` vira params.nome; número é formatado no locale; valor começando
+ * com `@` é chave do próprio catálogo, resolvida recursivamente.
+ */
+export function render(
+  catalog: Catalog, key: string,
+  params: Record<string, unknown>, lang: Lang,
+): string {
+  const template = catalog[key]
+  if (template === undefined) return key
+
+  return template.replace(/\{(\w+)\}/g, (marker, name: string) => {
+    const value = params[name]
+    if (value === undefined || value === null) return marker
+    if (typeof value === 'string' && value.startsWith('@')) {
+      return render(catalog, value.slice(1), {}, lang)
+    }
+    if (typeof value === 'number') return value.toLocaleString(LOCALE[lang])
+    return String(value)
+  })
+}
+
+export function renderAlert(
+  catalog: Catalog, type: string,
+  params: Record<string, unknown>, lang: Lang,
+): { title: string; body: string } {
+  return {
+    title: render(catalog, `alert.${type}.title`, params, lang),
+    body: render(catalog, `alert.${type}.body`, params, lang),
+  }
+}
+```
+
 `frontend/src/components/AlertFeed.tsx`:
 
 ```tsx
-import type { Alert, Severity } from '../lib/api'
+import type { Alert, Catalog, Lang, Severity } from '../lib/api'
+import { render, renderAlert } from '../lib/i18n'
 
-/** Severidade sempre legível sem cor: símbolo e palavra acompanham o tom. */
-export const SEVERITY_MARK: Record<Severity, { glyph: string; label: string; token: string }> = {
-  info:     { glyph: '·', label: 'informativo', token: 'var(--sb-info)' },
-  warning:  { glyph: '▲', label: 'atenção',     token: 'var(--sb-warning)' },
-  critical: { glyph: '■', label: 'crítico',     token: 'var(--sb-critical)' },
+/**
+ * Severidade legível sem depender de cor: o rótulo em caixa alta carrega a
+ * informação, e a cor apenas reforça. Daltonismo é comum, e o alerta crítico
+ * é justamente o que não pode passar batido.
+ */
+export const SEVERITY_TOKEN: Record<Severity, string> = {
+  info:     'var(--sb-text-faint)',
+  warning:  'var(--sb-caution)',
+  critical: 'var(--sb-alarm)',
 }
 
-export function AlertFeed({ alerts }: { alerts: Alert[] }) {
+export function AlertFeed(
+  { alerts, catalog, lang }: { alerts: Alert[]; catalog: Catalog; lang: Lang },
+) {
   if (alerts.length === 0) {
     return (
       <p className="font-mono text-sm text-faint">
-        Nenhum alerta ainda. O watchtower avisa assim que algo se mexer.
+        {render(catalog, 'feed.empty', {}, lang)}
       </p>
     )
   }
@@ -4133,24 +4552,36 @@ export function AlertFeed({ alerts }: { alerts: Alert[] }) {
   return (
     <div className="flex flex-col gap-2">
       {alerts.map(a => {
-        const mark = SEVERITY_MARK[a.severity]
+        const token = SEVERITY_TOKEN[a.severity]
+        const { title, body } = renderAlert(catalog, a.type, a.params, lang)
+        // crítico recebe a listra completa do texugo; os demais, régua sólida
+        const rule =
+          a.severity === 'critical'
+            ? `repeating-linear-gradient(180deg, ${token} 0 7px, var(--sb-bone) 7px 14px)`
+            : token
         return (
           <article
             key={a.id}
             data-severity={a.severity}
-            className="rounded border border-line bg-surface p-3"
-            style={{ borderLeft: `3px solid ${mark.token}` }}
+            className="flex rounded border border-line bg-surface"
+            style={{ borderLeft: 'none' }}
           >
-            <div className="flex items-baseline justify-between gap-3">
-              <h3 className="text-sm font-semibold">{a.title}</h3>
-              <span className="font-mono text-xs" style={{ color: mark.token }}>
-                {mark.glyph} {mark.label}
-              </span>
+            <div style={{ width: '4px', flexShrink: 0, background: rule }} />
+            <div className="flex-grow p-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 className="text-sm font-semibold">{title}</h3>
+                <span
+                  className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em]"
+                  style={{ color: token }}
+                >
+                  {render(catalog, `severity.${a.severity}`, {}, lang)}
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-muted">{body}</p>
+              <time className="mt-1 block font-mono text-xs text-faint">
+                {new Date(a.createdAt).toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US')}
+              </time>
             </div>
-            <p className="mt-1 text-sm text-muted">{a.body}</p>
-            <time className="mt-1 block font-mono text-xs text-faint">
-              {new Date(a.createdAt).toLocaleString('pt-BR')}
-            </time>
           </article>
         )
       })}

@@ -17,26 +17,24 @@
 
 <div style="width: 1440px; height: 900px; background: #16110E; color: #EDE6DC; font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; display: flex; flex-direction: column; overflow: hidden;">
 
-  <!-- ASSINATURA: a listra aposemática. A aplicação veste a coloração de
-       advertência enquanto o usuário consulta um explorador público.
-       Em modo soberano esta faixa vira uma linha sólida de 1px em #7E9E8E. -->
-  <div style="height: 5px; flex-shrink: 0; background: repeating-linear-gradient(90deg, #E0A33C 0px, #E0A33C 13px, #16110E 13px, #16110E 26px);"></div>
+  <!-- ASSINATURA: a listra aposemática, em osso sobre terra — a coloração real
+       do texugo. A aplicação a veste enquanto o usuário consulta um explorador
+       público. Em modo soberano vira uma linha sólida de 1px em #7E9E8E.
+       Preto-e-branco, e não âmbar, para nunca ser confundida com o laranja
+       da marca: se o alarme tem a cor do logo, ele deixa de ler como alarme. -->
+  <div style="height: 5px; flex-shrink: 0; background: repeating-linear-gradient(90deg, #EDE6DC 0px, #EDE6DC 13px, #16110E 13px, #16110E 26px);"></div>
 
   <!-- cabeçalho -->
   <div style="display: flex; align-items: center; justify-content: space-between; padding: 18px 32px; border-bottom: 1px solid #3B2F26; flex-shrink: 0;">
 
     <div style="display: flex; align-items: center; gap: 12px;">
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
-        <rect x="1" y="1" width="20" height="20" rx="2" stroke="#EDE6DC" stroke-width="1.5"/>
-        <path d="M7 1 L7 21 M11 1 L11 21 M15 1 L15 21" stroke="#EDE6DC" stroke-width="1.5"/>
-      </svg>
+      <img src="logo-96.png" alt="Stealth Badger" width="28" height="28" style="display: block;">
       <span style="font-size: 15px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;">Stealth Badger</span>
     </div>
 
     <div style="display: flex; align-items: center; gap: 20px;">
       <!-- badge de privacidade — persistente, nunca um aviso que some -->
       <div style="display: flex; align-items: center; gap: 10px; border: 1px solid #E0A33C; border-radius: 3px; padding: 7px 12px;">
-        <div style="width: 26px; height: 10px; background: repeating-linear-gradient(90deg, #E0A33C 0px, #E0A33C 4px, #16110E 4px, #16110E 8px);"></div>
         <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #E0A33C;">Explorador público</span>
         <span style="font-size: 12px; color: #9C8F80;">mempool.space enxerga o que você consulta</span>
       </div>
