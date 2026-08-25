@@ -1,31 +1,75 @@
-import { StrictMode } from 'react'
+import { StrictMode, useCallback, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Shell } from './components/Shell'
+import { api, type Catalog, type Lang, type Me } from './lib/api'
+import { Dashboard } from './pages/Dashboard'
+import { Login } from './pages/Login'
 import './styles/index.css'
 
-/**
- * Casca sem telas: a Task 12 troca este arquivo pelo roteamento entre login e
- * painel. Até lá, a aplicação sobe mostrando a postura do backend de cadeia e
- * o convite para a primeira carteira.
- */
+const IDIOMA_SALVO = 'sb_lang'
+
+function idiomaInicial(): Lang {
+  const salvo = localStorage.getItem(IDIOMA_SALVO)
+  if (salvo === 'pt' || salvo === 'en') return salvo
+  return navigator.language.startsWith('pt') ? 'pt' : 'en'
+}
+
 function App() {
-  return (
-    <Shell backend={{ isPublic: true, host: 'mempool.space' }}>
-      <section className="mx-auto max-w-2xl px-4 py-16 sm:px-8">
-        <h1 className="text-lg font-semibold uppercase tracking-label">
-          Nada sob vigília
-        </h1>
-        <p className="mt-3 max-w-prose font-prose text-sm leading-relaxed text-muted">
-          O Stealth Badger acompanha carteiras watch-only e avisa quando um
-          movimento expõe você — endereço reutilizado, poeira plantada, troco
-          entregando quanto você tem. Cadastre uma chave pública estendida para
-          começar.
-        </p>
-        <p className="mt-6 font-mono text-xs uppercase tracking-label text-faint">
-          Chave pública apenas · nenhuma capacidade de gasto entra aqui
-        </p>
-      </section>
-    </Shell>
+  const [me, setMe] = useState<Me | null>(null)
+  const [carregado, setCarregado] = useState(false)
+  const [lang, setLang] = useState<Lang>(idiomaInicial)
+  const [catalog, setCatalog] = useState<Catalog>({})
+
+  // O idioma vive no usuário, porque o push é renderizado no servidor; o
+  // localStorage só cobre a tela de entrada, antes de haver usuário.
+  const trocarIdioma = useCallback(
+    (novo: Lang) => {
+      setLang(novo)
+      localStorage.setItem(IDIOMA_SALVO, novo)
+      if (me) void api.setLanguage(novo).catch(() => undefined)
+    },
+    [me],
+  )
+
+  const identificar = useCallback(async () => {
+    try {
+      const usuario = await api.me()
+      setMe(usuario)
+      setLang(usuario.language)
+    } catch {
+      setMe(null)
+    } finally {
+      setCarregado(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    void identificar()
+  }, [identificar])
+
+  useEffect(() => {
+    void api
+      .catalog(lang)
+      .then(setCatalog)
+      .catch(() => setCatalog({}))
+  }, [lang])
+
+  if (!carregado) return null
+
+  return me ? (
+    <Dashboard
+      me={me}
+      catalog={catalog}
+      lang={lang}
+      onLang={trocarIdioma}
+      onSaiu={() => setMe(null)}
+    />
+  ) : (
+    <Login
+      catalog={catalog}
+      lang={lang}
+      onLang={trocarIdioma}
+      onEntrou={() => void identificar()}
+    />
   )
 }
 
