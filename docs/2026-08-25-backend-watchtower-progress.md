@@ -4,7 +4,7 @@ Data: 2026-08-25
 
 ## Contexto
 
-Este registro documenta o trabalho realizado depois da Task 1, mantendo a Task 2 de frontend/design parada para revisão humana/Claude Code, conforme combinado.
+Este registro documenta o trabalho realizado depois da Task 1, mantendo a Task 2 de frontend/design parada para revisão humana, conforme combinado.
 
 O foco foi seguir com o backend do watchtower: autenticação, carteira watch-only, derivação HD, adapter Esplora, sync, eventos, alertas, SSE e entrega por canais.
 
@@ -226,7 +226,7 @@ Observação: o container `ntfy` ficou iniciado após a validação.
 
 ### Task 2 - Frontend/design
 
-A Task 2 permanece parada conforme combinado. O scaffold de frontend ainda depende de aprovação humana/Claude Code do dashboard e dos tokens visuais.
+A Task 2 permanece parada conforme combinado. O scaffold de frontend ainda depende de aprovação humana do dashboard e dos tokens visuais.
 
 Consequência atual: `docker-compose.yml` referencia `./frontend`, mas o diretório `frontend/` ainda não existe neste ponto. O backend está validado, mas o Compose completo ainda depende dessa task.
 
