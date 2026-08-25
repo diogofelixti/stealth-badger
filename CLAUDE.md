@@ -58,7 +58,11 @@ TypeScript ponta a ponta.
 2. **O aviso de privacidade é persistente**, nunca um toast que some. Quando o usuário
    está consultando via serviço público, ele precisa saber o tempo todo.
 3. **Nenhuma chave privada, seed ou capacidade de gasto entra no sistema.** Só watch-only.
-4. **xpub é cifrado em repouso** com chave derivada da senha do usuário.
+4. **xpub é cifrado em repouso** com AES-256-GCM, sob a chave-mestra do servidor
+   (`MASTER_KEY_HEX`). Não é chave derivada da senha do usuário, porque o worker
+   sincroniza com o usuário deslogado e não teria como abrir o xpub. A consequência
+   é explícita: quem tem o banco *e* a chave-mestra enxerga os xpubs vigiados — por
+   isso o projeto é self-hostável, e a chave nunca é versionada.
 5. **`chain_events` é append-only.** Nunca sofre UPDATE de conteúdo nem DELETE; reorg
    gera evento compensatório. Todo o resto é projeção reconstruível.
 6. **Alertar sobre privacidade, não sobre saldo** — é a tese do produto.
