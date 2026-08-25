@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { ChainAdapter } from '../src/chain/types'
 import { open } from '../src/crypto/secretbox'
 import { buildApp } from '../src/app'
 import { pool } from '../src/db/pool'
+import { deriveAddress } from '../src/wallet/derive'
+import { parseExtendedKey } from '../src/wallet/descriptor'
 import { resetDb } from './helpers/db'
 
 const ZPUB =
@@ -167,5 +170,130 @@ describe('POST /api/wallets', () => {
       cookies: { sb_session: outro.cookies.find(c => c.name === 'sb_session')!.value },
     })
     expect(lista.json()).toEqual([])
+  })
+})
+
+
+// tpub de carteira native segwit real. Pela SLIP-132 um tpub significa
+// p2pkh, mas Bitcoin Core e Sparrow exportam tpub puro para qualquer tipo
+// de script — então o tipo precisa ser descoberto, não assumido.
+const TPUB =
+  'tpubDCxX2sYFS5bDkSe5GKKYHjBW7tgyN1R3UchpLJvdbf54ohxeGRtd8MbDUe1cguVHe4vnK68DsuD5MXjxi9EXx16rb9EnNsaF5KT99CinaJz'
+
+function adapterQueConhece(enderecos: Set<string>): ChainAdapter {
+  return {
+    capabilities: () => ({
+      randomAccess: true,
+      needsRegistration: false,
+      supportsSubscribe: false,
+      hasTxIndex: true,
+      isPublic: true,
+      host: 'falso',
+    }),
+    tipHeight: async () => 100,
+    blockHashAt: async () => 'hash',
+    getHistoryForAddress: async (a: string) =>
+      enderecos.has(a) ? [{ txid: 'aa', height: 10, blockHash: 'bb' }] : [],
+  }
+}
+
+function enderecosSegwitDo(tpub: string): Set<string> {
+  const { canonicalXpub } = parseExtendedKey(tpub)
+  return new Set(
+    Array.from(
+      { length: 3 },
+      (_, i) => deriveAddress(canonicalXpub, 'p2wpkh', 'testnet', 0, i).address,
+    ),
+  )
+}
+
+describe('POST /api/wallets — tipo de script ambíguo', () => {
+  // O defeito relatado: a carteira entrava como p2pkh, derivava endereços
+  // legados que nunca existiram, sincronizava até `synced` e mostrava saldo
+  // zero. Nenhum erro em lugar nenhum.
+  it('descobre native segwit em vez de assumir legado a partir de tpub', async () => {
+    process.env.NETWORK = 'signet'
+    const app = buildApp({ adapterFactory: () => adapterQueConhece(enderecosSegwitDo(TPUB)) })
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'a@b.co', password: 'senha-longa-de-teste', language: 'pt' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'a@b.co', password: 'senha-longa-de-teste' },
+    })
+    const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre', key: TPUB },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(res.json().scriptType).toBe('p2wpkh')
+  })
+
+  it('mantém o tipo declarado por zpub sem consultar a cadeia', async () => {
+    process.env.NETWORK = 'mainnet'
+    let consultou = false
+    const app = buildApp({
+      adapterFactory: () => {
+        consultou = true
+        return adapterQueConhece(new Set())
+      },
+    })
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'c@d.co', password: 'senha-longa-de-teste', language: 'pt' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'c@d.co', password: 'senha-longa-de-teste' },
+    })
+    const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre', key: ZPUB },
+    })
+
+    expect(res.json().scriptType).toBe('p2wpkh')
+    expect(consultou).toBe(false)
+  })
+
+  // Carteira nova não tem histórico em tipo nenhum. Assumir legado aqui é o
+  // que criava o problema; native segwit é o padrão de qualquer carteira
+  // criada hoje.
+  it('sem histórico em nenhum tipo, assume native segwit', async () => {
+    process.env.NETWORK = 'signet'
+    const app = buildApp({ adapterFactory: () => adapterQueConhece(new Set()) })
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'e@f.co', password: 'senha-longa-de-teste', language: 'pt' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'e@f.co', password: 'senha-longa-de-teste' },
+    })
+    const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre', key: TPUB },
+    })
+
+    expect(res.json().scriptType).toBe('p2wpkh')
   })
 })

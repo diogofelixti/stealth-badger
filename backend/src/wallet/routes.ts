@@ -1,8 +1,27 @@
 import type { FastifyInstance } from 'fastify'
+import type { ChainAdapter } from '../chain/types'
+import { createEsploraAdapter } from '../chain/esplora'
 import { loadConfig } from '../config'
 import { seal } from '../crypto/secretbox'
 import { pool } from '../db/pool'
-import { parseExtendedKey, type KeyNetwork, type Network } from './descriptor'
+import { detectScriptType } from './detect'
+import {
+  parseExtendedKey,
+  type KeyNetwork,
+  type Network,
+  type ScriptType,
+} from './descriptor'
+
+export interface WalletRouteOptions {
+  adapterFactory?: (backend: { url: string; isPublic: boolean }) => ChainAdapter
+}
+
+/**
+ * Quando nem a chave nem a cadeia dizem o tipo, é carteira nova: sem
+ * histórico não há o que detectar. Native segwit é o que qualquer carteira
+ * criada hoje usa — e era assumir legado que produzia o saldo zero silencioso.
+ */
+const PADRAO_QUANDO_NAO_DA_PARA_SABER: ScriptType = 'p2wpkh'
 
 interface CreateWalletBody {
   label: string
@@ -23,7 +42,15 @@ async function ensureBackend(network: Network): Promise<number> {
   return Number(rows[0]!.id)
 }
 
-export function registerWalletRoutes(app: FastifyInstance): void {
+export function registerWalletRoutes(
+  app: FastifyInstance,
+  opts: WalletRouteOptions = {},
+): void {
+  const adapterFactory =
+    opts.adapterFactory ??
+    ((b: { url: string; isPublic: boolean }) =>
+      createEsploraAdapter(b.url, { isPublic: b.isPublic }))
+
   app.post<{ Body: CreateWalletBody }>('/api/wallets', async (req, reply) => {
     if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
 
@@ -55,6 +82,21 @@ export function registerWalletRoutes(app: FastifyInstance): void {
 
     const network: Network = cfg.network
 
+    // `xpub`/`tpub` não dizem o tipo de script: quem exporta por descriptor
+    // usa a mesma codificação para legado, segwit e taproot. Assumir errado
+    // não dá erro — a carteira sincroniza e mostra saldo zero para sempre.
+    let scriptType = parsed.scriptType
+    if (parsed.scriptTypeAmbiguous) {
+      const adapter = adapterFactory({
+        url: cfg.esploraUrl,
+        isPublic: cfg.publicBackend,
+      })
+      scriptType =
+        (await detectScriptType(parsed.canonicalXpub, network, adapter).catch(
+          () => null,
+        )) ?? PADRAO_QUANDO_NAO_DA_PARA_SABER
+    }
+
     const backendId = await ensureBackend(network)
     const { rows } = await pool.query<{ id: string }>(
       `INSERT INTO wallets
@@ -67,7 +109,7 @@ export function registerWalletRoutes(app: FastifyInstance): void {
         label.trim(),
         seal(parsed.canonicalXpub, cfg.masterKeyHex),
         parsed.fingerprint,
-        parsed.scriptType,
+        scriptType,
         network,
         gapLimit ?? 20,
         backendId,
@@ -77,7 +119,7 @@ export function registerWalletRoutes(app: FastifyInstance): void {
     return reply.code(201).send({
       id: Number(rows[0]!.id),
       label: label.trim(),
-      scriptType: parsed.scriptType,
+      scriptType,
       network,
       fingerprint: parsed.fingerprint,
       syncState: 'pending',

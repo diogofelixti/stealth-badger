@@ -72,18 +72,36 @@ renderizada no servidor, quando não há navegador nenhum.
 
 `xpub`, `ypub`, `zpub` (mainnet) e `tpub`, `upub`, `vpub` (testnet/signet).
 
-O tipo de script é inferido das *version bytes*, não perguntado ao usuário:
-
-| Prefixo | Script |
-|---|---|
-| `xpub` / `tpub` | `p2pkh` |
-| `ypub` / `upub` | `p2sh-p2wpkh` |
-| `zpub` / `vpub` | `p2wpkh` |
-
 A chave é normalizada para a codificação canônica (`xpub` ou `tpub`) antes de ser
 cifrada e guardada.
 
-### 4.2 Recusas, todas com mensagem acionável
+### 4.2 Como o tipo de script é determinado
+
+O tipo nunca é perguntado ao usuário. Para as codificações da SLIP-132 ele é lido das
+*version bytes*:
+
+| Prefixo | Script |
+|---|---|
+| `ypub` / `upub` | `p2sh-p2wpkh` |
+| `zpub` / `vpub` | `p2wpkh` |
+
+**`xpub` e `tpub` são um caso à parte: eles não dizem o tipo de script.** A SLIP-132 os
+atribui a BIP-44 legado, mas Bitcoin Core e Sparrow nunca a adotaram — trabalham com
+*output descriptors*, onde o tipo vive fora da chave — e exportam `tpub` puro para
+legado, segwit aninhado, native segwit e taproot indistintamente.
+
+Tratar esse palpite como certeza produz a pior classe de defeito que este projeto
+admite: a carteira é aceita, deriva endereços que nunca existiram, sincroniza até
+`synced` e mostra **saldo zero sem erro nenhum**.
+
+Por isso, quando a chave é ambígua, o sistema **descobre o tipo perguntando à cadeia**:
+deriva os três primeiros endereços de cada tipo candidato e adota aquele que tem
+histórico. A ordem de tentativa é `p2wpkh`, `p2sh-p2wpkh`, `p2pkh`, `p2tr`.
+
+Se nenhum candidato tem histórico, a carteira é nova e não há o que detectar: o sistema
+assume **`p2wpkh`**, que é o que qualquer carteira criada hoje usa.
+
+### 4.3 Recusas, todas com mensagem acionável
 
 | Entrada | Resposta |
 |---|---|
@@ -97,7 +115,7 @@ Aceitar a chave da outra rede faria o watchtower derivar endereços que o explor
 recusa, e a carteira morreria em `error` sem dizer o motivo — falha silenciosa no
 lugar exato onde ainda dá para explicar o problema.
 
-### 4.3 Resposta
+### 4.4 Resposta
 
 `201` com `id`, `label`, `scriptType`, `network`, `fingerprint` e `syncState: "pending"`.
 **Nunca** contém o xpub.

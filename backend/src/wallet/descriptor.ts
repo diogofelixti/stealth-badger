@@ -13,6 +13,14 @@ export interface ParsedKey {
   scriptType: ScriptType
   keyNetwork: KeyNetwork
   fingerprint: string
+  /**
+   * `true` quando o tipo de script foi assumido, não lido. A SLIP-132 diz
+   * que `xpub`/`tpub` são BIP-44 legado, mas Bitcoin Core e Sparrow nunca a
+   * adotaram e exportam `tpub` puro para qualquer tipo de script. Nessas
+   * chaves `scriptType` é um palpite, e tratá-lo como certeza faz a carteira
+   * derivar endereços que nunca existiram e mostrar saldo zero sem erro.
+   */
+  scriptTypeAmbiguous: boolean
 }
 
 const PUBLIC_VERSIONS: Record<
@@ -35,6 +43,9 @@ const PRIVATE_VERSIONS = new Set([
   '044a4e28',
   '045f18bc',
 ])
+
+/** Version bytes que não dizem nada sobre o tipo de script. */
+const AMBIGUOUS_VERSIONS = new Set(['0488b21e', '043587cf'])
 
 const CANONICAL: Record<KeyNetwork, string> = {
   mainnet: '0488b21e',
@@ -102,5 +113,6 @@ export function parseExtendedKey(key: string): ParsedKey {
     scriptType: info.scriptType,
     keyNetwork: info.keyNetwork,
     fingerprint: bytesToHex(raw.slice(5, 9)),
+    scriptTypeAmbiguous: AMBIGUOUS_VERSIONS.has(version),
   }
 }
