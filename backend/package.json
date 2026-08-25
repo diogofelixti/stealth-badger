@@ -2,6 +2,10 @@
   "name": "stealth-badger-backend",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.19 <21",
+    "npm": ">=10"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
@@ -10,7 +14,7 @@
     "migrate": "tsx src/db/migrate.ts"
   },
   "dependencies": {
-    "fastify": "^4.28.1",
+    "fastify": "^5.8.3",
     "@fastify/cookie": "^9.4.0",
     "pg": "^8.13.1",
     "@scure/bip32": "^1.5.0",

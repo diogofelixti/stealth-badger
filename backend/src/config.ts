@@ -15,8 +15,10 @@ function required(name: string): string {
 
 export function loadConfig(): Config {
   const key = required('MASTER_KEY_HEX')
-  if (key.length !== 64) {
-    throw new Error('MASTER_KEY_HEX deve ter 64 caracteres hex (32 bytes)')
+  if (!/^[0-9a-f]{64}$/i.test(key)) {
+    throw new Error(
+      'MASTER_KEY_HEX deve ter 64 caracteres hexadecimais (32 bytes)',
+    )
   }
   const network = (process.env.NETWORK ?? 'signet') as Config['network']
   if (!['mainnet', 'signet', 'testnet'].includes(network)) {

@@ -64,6 +64,14 @@ o descriptor antes e varrer a cadeia a partir de uma altura.
 | [`docs/superpowers/specs/2026-08-24-coin-control-watchtower-design.md`](docs/superpowers/specs/2026-08-24-coin-control-watchtower-design.md) | design completo: arquitetura, modelo de dados, recorte, riscos |
 | [`docs/hackathon-briefing.md`](docs/hackathon-briefing.md) | regras do hackathon e o que impõem ao projeto |
 
+## Notas de segurança
+
+As dependências da suíte de testes (`vitest` e, por baixo dela, `vite`/`esbuild`) têm
+avisos de segurança publicados relacionados ao servidor de UI do Vitest
+(`vitest --ui`). Este projeto nunca inicia esse servidor, e `npm install --omit=dev`
+já mantém esses pacotes fora da imagem do container em produção. Quem rodar
+`vitest --ui` manualmente numa máquina acessível pela rede deve estar ciente disso.
+
 ## Créditos
 
 A análise de privacidade se apoia no [`am-i-exposed`](https://github.com/Copexit/am-i-exposed)
