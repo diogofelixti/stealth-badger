@@ -387,8 +387,23 @@ Um xpub revela saldo e histórico completos **para sempre**. Num ambiente multi-
 guardá-lo em texto puro transforma um vazamento de banco em catástrofe permanente para
 todos os usuários.
 
-- **xpub cifrado em repouso** com chave derivada da senha do usuário: o servidor não
-  consegue ler fora de uma sessão ativa. É também um argumento forte na apresentação
+- **xpub cifrado em repouso** com AES-256-GCM, chave-mestra do servidor vinda de variável
+  de ambiente. Protege contra o risco realista — dump de banco, backup vazado, Postgres
+  mal exposto — e **não** contra comprometimento total do servidor. Declarar isso com
+  essas palavras; ver a nota de modelo de ameaça abaixo
+
+> **Nota de modelo de ameaça (corrigida em 2026-08-25).** Uma versão anterior deste
+> design previa cifrar o xpub com chave derivada da senha do usuário, afirmando que o
+> servidor não conseguiria lê-lo fora de uma sessão ativa. **Isso é incompatível com um
+> watchtower:** se a chave só existe durante a sessão, o worker não consegue sincronizar
+> enquanto o usuário está offline — exatamente quando a vigilância importa. O modelo
+> adotado é chave-mestra do servidor.
+>
+> O caminho para um modelo mais forte, registrado como evolução futura: derivar e
+> persistir apenas os *endereços* (dado público, que o worker precisa em claro de
+> qualquer forma) e manter o xpub cifrado com a chave do usuário, exigindo sessão ativa
+> só para estender o gap limit. Custo: recebimentos além da janela derivada passam
+> despercebidos enquanto o usuário estiver ausente.
 - Senhas com Argon2id; sessões opacas em banco, não JWT
 - Configuração de canal (tokens de ntfy, Telegram) cifrada da mesma forma
 - Aviso de privacidade **persistente** — badge no cabeçalho e estado por carteira, não
