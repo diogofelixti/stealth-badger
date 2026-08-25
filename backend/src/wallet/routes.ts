@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { loadConfig } from '../config'
 import { seal } from '../crypto/secretbox'
 import { pool } from '../db/pool'
-import { parseExtendedKey, type Network } from './descriptor'
+import { parseExtendedKey, type KeyNetwork, type Network } from './descriptor'
 
 interface CreateWalletBody {
   label: string
@@ -38,12 +38,22 @@ export function registerWalletRoutes(app: FastifyInstance): void {
     }
 
     const cfg = loadConfig()
-    const network: Network =
-      parsed.keyNetwork === 'mainnet'
-        ? 'mainnet'
-        : cfg.network === 'mainnet'
-          ? 'testnet'
-          : cfg.network
+
+    // Um backend Esplora atende uma rede só. Aceitar a chave da outra rede
+    // faria o watchtower derivar endereços que o explorador recusa, e a
+    // carteira morreria em `error` sem dizer o motivo. Melhor recusar aqui,
+    // enquanto ainda dá para explicar. Signet e testnet compartilham as
+    // mesmas version bytes, por isso a comparação é com `testnet`.
+    const esperada: KeyNetwork = cfg.network === 'mainnet' ? 'mainnet' : 'testnet'
+    if (parsed.keyNetwork !== esperada) {
+      return reply.code(400).send({
+        error:
+          `esta chave é de ${parsed.keyNetwork}, mas este watchtower vigia ` +
+          `${cfg.network}. Use uma chave de ${cfg.network}.`,
+      })
+    }
+
+    const network: Network = cfg.network
 
     const backendId = await ensureBackend(network)
     const { rows } = await pool.query<{ id: string }>(

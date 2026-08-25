@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { open } from '../src/crypto/secretbox'
 import { buildApp } from '../src/app'
 import { pool } from '../src/db/pool'
@@ -22,7 +22,19 @@ async function loggedInApp() {
   return { app, cookie: login.cookies.find(c => c.name === 'sb_session')!.value }
 }
 
-beforeEach(resetDb)
+const REDE_ORIGINAL = process.env.NETWORK
+
+// O ZPUB acima é de mainnet. Os casos de sucesso só fazem sentido com o
+// watchtower configurado para a mesma rede da chave.
+beforeEach(async () => {
+  await resetDb()
+  process.env.NETWORK = 'mainnet'
+})
+
+afterEach(() => {
+  if (REDE_ORIGINAL === undefined) delete process.env.NETWORK
+  else process.env.NETWORK = REDE_ORIGINAL
+})
 
 describe('POST /api/wallets', () => {
   it('recusa sem autenticação', async () => {
@@ -78,6 +90,29 @@ describe('POST /api/wallets', () => {
     })
     expect(res.statusCode).toBe(400)
     expect(res.json().error).toMatch(/watch-only|privada/i)
+  })
+
+  // Um backend Esplora atende uma rede só. Aceitar a chave da outra rede
+  // gera endereços que o explorador recusa, e a carteira morre em `error`
+  // sem dizer o motivo — falha silenciosa, que é o que não pode acontecer.
+  it('recusa chave de rede diferente da que o watchtower vigia', async () => {
+    const { app, cookie } = await loggedInApp()
+    process.env.NETWORK = 'signet'
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre', key: ZPUB },
+    })
+
+    expect(res.statusCode).toBe(400)
+    // a mensagem nomeia as duas redes, senão não dá para agir sobre ela
+    expect(res.json().error).toMatch(/mainnet/i)
+    expect(res.json().error).toMatch(/signet/i)
+
+    const { rows } = await pool.query('SELECT id FROM wallets')
+    expect(rows).toHaveLength(0)
   })
 
   it('lista a carteira com o que a tela precisa mostrar', async () => {
