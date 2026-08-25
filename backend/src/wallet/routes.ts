@@ -85,7 +85,15 @@ export function registerWalletRoutes(app: FastifyInstance): void {
               COALESCE((
                 SELECT sum(value_sats) FROM utxos u
                 WHERE u.wallet_id = w.id AND u.spent_at_txid IS NULL
-              ), 0)::bigint AS "balanceSats"
+              ), 0)::bigint AS "balanceSats",
+              (
+                SELECT count(*) FROM utxos u
+                WHERE u.wallet_id = w.id AND u.spent_at_txid IS NULL
+              )::int AS "utxoCount",
+              (
+                SELECT count(*) FROM utxos u
+                WHERE u.wallet_id = w.id AND u.spent_at_txid IS NULL AND u.frozen
+              )::int AS "frozenCount"
          FROM wallets w
          JOIN backends b ON b.id = w.backend_id
         WHERE w.user_id = $1

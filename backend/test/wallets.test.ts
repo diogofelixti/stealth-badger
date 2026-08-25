@@ -80,6 +80,33 @@ describe('POST /api/wallets', () => {
     expect(res.json().error).toMatch(/watch-only|privada/i)
   })
 
+  it('lista a carteira com o que a tela precisa mostrar', async () => {
+    const { app, cookie } = await loggedInApp()
+    await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre', key: ZPUB },
+    })
+
+    const lista = await app.inject({
+      method: 'GET',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+    })
+    const [w] = lista.json()
+    expect(w).toMatchObject({
+      label: 'Cofre',
+      scriptType: 'p2wpkh',
+      syncState: 'pending',
+      balanceSats: '0',
+      utxoCount: 0,
+      backendIsPublic: true,
+    })
+    expect(w.backendUrl).toMatch(/^https?:\/\//)
+    expect(JSON.stringify(w)).not.toContain('pub6')
+  })
+
   it('lista apenas as carteiras do próprio usuário', async () => {
     const { app, cookie } = await loggedInApp()
     await app.inject({

@@ -33,6 +33,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'feed.title': 'Registro',
     'feed.live': 'ao vivo',
     'feed.empty': 'Nenhum alerta ainda. O watchtower avisa assim que algo se mexer.',
+    'feed.tip': 'altura {height}',
     'balance.total': 'Saldo total',
     'balance.wallets': '{n} carteiras',
     'balance.utxos': '{n} UTXOs',
@@ -40,7 +41,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallets.title': 'Carteiras',
     'wallets.add': '+ Vigiar carteira',
     'wallets.formTitle': 'Vigiar uma carteira',
-    'wallets.labelPlaceholder': 'Rótulo - por exemplo, Cold wallet',
+    'wallets.labelPlaceholder': 'Rótulo, por exemplo Cold wallet',
     'wallets.keyPlaceholder': 'xpub, ypub, zpub, tpub, upub ou vpub',
     'wallets.watchOnly':
       'Somente chaves públicas. O Stealth Badger é watch-only e recusa qualquer ' +
@@ -51,17 +52,16 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallet.frozen': 'congelado',
     'wallet.importing': 'Importando {progress}%',
     'wallet.importingNote':
-      'Varrendo a cadeia de troco. O saldo total acima ainda não inclui esta carteira.',
+      'Varrendo a cadeia de change. O saldo total acima ainda não inclui esta carteira.',
     'wallet.syncError': 'Falha na sincronização',
     'auth.tagline': 'Watchtower de privacidade para Bitcoin',
     'auth.email': 'e-mail',
     'auth.password': 'senha (mínimo 12 caracteres)',
     'auth.login': 'Entrar',
     'auth.register': 'Criar conta',
+    'auth.logout': 'Sair',
     'privacy.public': 'Explorador público',
-    'privacy.publicHint': '{host} enxerga quais endereços você consulta',
     'privacy.sovereign': 'Soberano',
-    'privacy.sovereignHint': 'Consultando {host} - infraestrutura própria',
   },
   en: {
     'alert.funds_received.title': 'Funds received',
@@ -89,6 +89,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'feed.title': 'Log',
     'feed.live': 'live',
     'feed.empty': 'No alerts yet. The watchtower speaks up the moment something moves.',
+    'feed.tip': 'height {height}',
     'balance.total': 'Total balance',
     'balance.wallets': '{n} wallets',
     'balance.utxos': '{n} UTXOs',
@@ -96,7 +97,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallets.title': 'Wallets',
     'wallets.add': '+ Watch a wallet',
     'wallets.formTitle': 'Watch a wallet',
-    'wallets.labelPlaceholder': 'Label - for example, Cold wallet',
+    'wallets.labelPlaceholder': 'Label, for example Cold wallet',
     'wallets.keyPlaceholder': 'xpub, ypub, zpub, tpub, upub or vpub',
     'wallets.watchOnly':
       'Public keys only. Stealth Badger is watch-only and refuses anything that ' +
@@ -114,9 +115,8 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'auth.password': 'password (at least 12 characters)',
     'auth.login': 'Sign in',
     'auth.register': 'Create account',
+    'auth.logout': 'Sign out',
     'privacy.public': 'Public explorer',
-    'privacy.publicHint': '{host} can see which addresses you look up',
     'privacy.sovereign': 'Sovereign',
-    'privacy.sovereignHint': 'Querying {host} - your own infrastructure',
   },
 }

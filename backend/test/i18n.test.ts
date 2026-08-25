@@ -24,18 +24,35 @@ describe('catálogo', () => {
     expect(CATALOG.pt['alert.dust_received.body']).toContain('UTXO')
   })
 
+  // Traduzir jargão custa reconhecimento: quem opera Bitcoin procura "dust" e
+  // "change", não a versão vertida para o português.
+  it('não traduz termo consagrado de Bitcoin no catálogo português', () => {
+    const traduzidos = /\b(poeira|troco|reutilização de endereço|carteira quente)\b/i
+    for (const [key, value] of Object.entries(CATALOG.pt)) {
+      expect(value, 'pt:' + key).not.toMatch(traduzidos)
+    }
+  })
+
+  it('não usa travessão em frase nenhuma', () => {
+    for (const lang of LANGS) {
+      for (const [key, value] of Object.entries(CATALOG[lang])) {
+        expect(value, lang + ':' + key).not.toMatch(/[—–]| - /)
+      }
+    }
+  })
+
   it('cobre as chaves de interface que a tela consome', () => {
     const daTela = [
-      'feed.title', 'feed.live', 'feed.empty',
+      'feed.title', 'feed.live', 'feed.empty', 'feed.tip',
       'balance.total', 'balance.wallets', 'balance.utxos', 'balance.frozen',
       'wallets.title', 'wallets.add', 'wallets.formTitle',
       'wallets.labelPlaceholder', 'wallets.keyPlaceholder', 'wallets.watchOnly',
       'wallets.submit', 'wallets.submitting',
       'wallet.coins', 'wallet.frozen', 'wallet.importing',
       'wallet.importingNote', 'wallet.syncError',
-      'auth.tagline', 'auth.email', 'auth.password', 'auth.login', 'auth.register',
-      'privacy.public', 'privacy.publicHint',
-      'privacy.sovereign', 'privacy.sovereignHint',
+      'auth.tagline', 'auth.email', 'auth.password',
+      'auth.login', 'auth.register', 'auth.logout',
+      'privacy.public', 'privacy.sovereign',
       'severity.info', 'severity.warning', 'severity.critical',
     ]
     for (const lang of LANGS) {
