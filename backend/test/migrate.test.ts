@@ -36,15 +36,20 @@ describe('migrações', () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'stealth-badger-migrate-'))
     const arquivo = '002_falha.sql'
     try {
-      // primeira instrução é válida e cria uma tabela que não existe em
-      // nenhuma outra migração; a segunda é deliberadamente inválida. Se a
-      // transação da migração funcionar, nem a tabela nem o registro em
-      // schema_migrations devem sobreviver à falha da segunda instrução.
+      // A própria migração já insere seu registro em schema_migrations —
+      // normalmente só o runner faz isso, depois que o arquivo roda. Isso
+      // faz o INSERT que o runner tenta a seguir (uma chamada SEPARADA,
+      // depois do SQL do arquivo) colidir com a chave primária e falhar.
+      // Só um ROLLBACK que cubra as duas chamadas — o SQL do arquivo e o
+      // INSERT do runner — na MESMA conexão desfaz os efeitos já
+      // bem-sucedidos do arquivo (a tabela e a linha manual). Um arquivo
+      // que só falhasse sozinho não provaria nada sobre rollback, porque
+      // não haveria nada de bem-sucedido para desfazer.
       await writeFile(
         path.join(dir, arquivo),
         `
           CREATE TABLE tabela_que_nao_deve_sobreviver (id INT);
-          ISTO NAO E SQL VALIDO;
+          INSERT INTO schema_migrations (name) VALUES ('${arquivo}');
         `,
       )
 
