@@ -1,0 +1,42 @@
+# segredos — nunca versionar
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+*.cookie
+
+# node
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# dados locais
+data/
+pgdata/
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+
+# editor / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# temporários
+tmp/
+.cache/
+
+# material de curso de terceiros — não redistribuir num repo público
+docs/*.pdf
