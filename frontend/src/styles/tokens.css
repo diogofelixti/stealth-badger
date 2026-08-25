@@ -1,0 +1,94 @@
+/**
+ * Stealth Badger — contrato de tokens.
+ *
+ * Os NOMES aqui são contrato: toda tela consome estes nomes. Os valores podem
+ * mudar sem quebrar nada. Fonte única da verdade: o Tailwind lê estas
+ * variáveis, e não o contrário.
+ *
+ * Duas camadas, de propósito:
+ *   1. matéria-prima — o vocabulário do texugo (sett, soil, bone, alarm…)
+ *   2. papel semântico — o que a interface usa (bg, surface, critical…)
+ * Trocar a paleta é mexer só na primeira camada.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ── TERRA · o sett do texugo, não o preto neutro de terminal.
+        Toda superfície é quente e sem croma. ─────────────────────────── */
+  --sb-sett:  #16110E; /* fundo da página */
+  --sb-soil:  #1F1813; /* superfície */
+  --sb-clay:  #2A211A; /* superfície elevada */
+  --sb-root:  #3B2F26; /* borda */
+
+  /* ── PELO · o branco do texugo é osso, não #fff ───────────────────── */
+  --sb-bone:  #EDE6DC;
+  --sb-muted: #9C8F80;
+  --sb-faint: #6B6055;
+
+  /* ── SINAL · croma só existe quando algo está errado.
+        A interface é monocromática até haver o que avisar. ───────────── */
+  --sb-caution: #E0A33C; /* atenção · explorador público */
+  --sb-alarm:   #C4472F; /* crítico */
+  --sb-moss:    #7E9E8E; /* soberano · nada a reportar */
+
+  /* ── PAPÉIS SEMÂNTICOS · o que as telas escrevem ──────────────────── */
+  --sb-bg:             var(--sb-sett);
+  --sb-surface:        var(--sb-soil);
+  --sb-surface-raised: var(--sb-clay);
+  --sb-border:         var(--sb-root);
+  --sb-text:           var(--sb-bone);
+  --sb-text-muted:     var(--sb-muted);
+  --sb-text-faint:     var(--sb-faint);
+
+  --sb-accent:    var(--sb-caution); /* ação primária e links */
+  --sb-info:      var(--sb-faint);   /* informativo não ganha cor */
+  --sb-warning:   var(--sb-caution);
+  --sb-critical:  var(--sb-alarm);
+  --sb-public:    var(--sb-caution); /* explorador público */
+  --sb-sovereign: var(--sb-moss);    /* infraestrutura própria */
+
+  /* ── TIPOGRAFIA · inversão deliberada: a monoespaçada é a face padrão
+        da interface, não a secundária. Um watchtower produz um log, e log
+        é artefato monoespaçado. A sans serve só para prosa corrida. ──── */
+  --sb-font-data:  'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --sb-font-prose: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --sb-font-ui:    var(--sb-font-data);
+  --sb-font-mono:  var(--sb-font-data);
+
+  --sb-text-xs:   0.6875rem;
+  --sb-text-sm:   0.8125rem;
+  --sb-text-base: 0.9375rem;
+  --sb-text-lg:   1.125rem;
+  --sb-text-xl:   1.5rem;
+  --sb-text-2xl:  2.5rem;
+
+  --sb-track-tight: -0.01em;
+  --sb-track-label:  0.14em; /* rótulos em caixa alta, espaçados */
+
+  /* espaçamento — escala de 4px */
+  --sb-space-1: 0.25rem;
+  --sb-space-2: 0.5rem;
+  --sb-space-3: 0.75rem;
+  --sb-space-4: 1rem;
+  --sb-space-6: 1.5rem;
+  --sb-space-8: 2rem;
+
+  --sb-radius:    3px; /* quase reto: instrumento, não cartão */
+  --sb-radius-lg: 5px;
+
+  /* ── A LISTRA · assinatura da interface ───────────────────────────────
+     A faixa preto-e-branca do texugo é coloração aposemática: existe para
+     avisar. Osso sobre terra, e não âmbar — se o alarme tem a cor da marca,
+     ele deixa de ler como alarme.
+
+     `--sb-stripe-warning` veste a aresta superior da página enquanto o
+     usuário consulta um explorador público. `--sb-stripe-critical` é a
+     mesma listra na régua esquerda do alerta crítico. A listra nunca
+     decora: crítico recebe a faixa completa, atenção recebe régua sólida,
+     informativo não recebe nenhuma. */
+  --sb-stripe-warning: repeating-linear-gradient(
+    90deg, var(--sb-bone) 0 13px, var(--sb-sett) 13px 26px);
+  --sb-stripe-critical: repeating-linear-gradient(
+    180deg, var(--sb-alarm) 0 7px, var(--sb-bone) 7px 14px);
+}
