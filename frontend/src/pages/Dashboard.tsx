@@ -7,9 +7,20 @@ import { LangToggle } from '../components/LangToggle'
 import { WalletCard } from '../components/WalletCard'
 import { render } from '../lib/i18n'
 
-/** Carteira ainda importando não entra no total: o dado dela está incompleto. */
+/**
+ * Só entra no total a carteira cujo saldo já é conhecido.
+ *
+ * O worker remarca cada carteira como `importing` a cada tick, e numa
+ * carteira com histórico grande isso é a maior parte do tempo. Zerar o total
+ * durante a reconferência faria o painel anunciar saldo zero para quem tem
+ * fundos — o estado é "reconferindo", não "não sei".
+ *
+ * `syncHeight` é o que separa os dois casos: só existe depois da primeira
+ * sincronização completa. Sem ele, o dado realmente não existe ainda, e aí
+ * somar zero é honesto.
+ */
 function contabilizadas(wallets: Wallet[]): Wallet[] {
-  return wallets.filter(w => w.syncState !== 'pending' && w.syncState !== 'importing')
+  return wallets.filter(w => w.syncHeight !== null)
 }
 
 function host(url: string): string {

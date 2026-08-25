@@ -28,6 +28,8 @@ const CATALOGO: Catalog = {
   'wallets.add': '+ Vigiar carteira',
   'wallets.keyPlaceholder': 'xpub, ypub, zpub, tpub, upub ou vpub',
   'balance.total': 'Saldo total',
+  'balance.wallets': '{n} carteiras',
+  'balance.utxos': '{n} UTXOs',
 }
 
 const ME: Me = { email: 'quem@exemplo.local', isAdmin: true, language: 'pt' }
@@ -119,5 +121,50 @@ describe('Dashboard — com carteira', () => {
 
     expect(screen.queryByPlaceholderText(/xpub, ypub, zpub/)).toBeNull()
     expect(screen.queryByText(/nenhuma carteira vigiada/i)).toBeNull()
+  })
+})
+
+describe('Dashboard — saldo durante a ressincronização', () => {
+  // O worker remarca a carteira como `importing` a cada tick. Numa carteira
+  // com histórico grande isso é a maior parte do tempo, e zerar o total
+  // enquanto se reconfere faz o painel mentir: o saldo é conhecido.
+  it('mantém o saldo de carteira que já sincronizou antes', async () => {
+    wallets.mockResolvedValue([
+      { ...CARTEIRA, syncState: 'importing', syncHeight: 319347, balanceSats: '7483514' },
+    ])
+    montar()
+
+    await waitFor(() => expect(screen.getByText('7.483.514')).toBeDefined())
+  })
+
+  it('conta os UTXOs dela também', async () => {
+    wallets.mockResolvedValue([
+      { ...CARTEIRA, syncState: 'importing', syncHeight: 319347, utxoCount: 30 },
+    ])
+    montar()
+
+    await waitFor(() => expect(screen.getByText(/30 UTXOs/)).toBeDefined())
+  })
+
+  // Primeira importação é outra coisa: aí o dado realmente não existe, e
+  // somar zero é honesto.
+  it('não conta carteira que nunca terminou uma sincronização', async () => {
+    wallets.mockResolvedValue([
+      { ...CARTEIRA, syncState: 'importing', syncHeight: null, balanceSats: '7483514' },
+    ])
+    montar()
+
+    await waitFor(() => expect(screen.getByText(/saldo total/i)).toBeDefined())
+    expect(screen.queryByText('7.483.514')).toBeNull()
+  })
+
+  it('nem carteira recém-cadastrada, ainda em pending', async () => {
+    wallets.mockResolvedValue([
+      { ...CARTEIRA, syncState: 'pending', syncHeight: null, balanceSats: '7483514' },
+    ])
+    montar()
+
+    await waitFor(() => expect(screen.getByText(/saldo total/i)).toBeDefined())
+    expect(screen.queryByText('7.483.514')).toBeNull()
   })
 })
