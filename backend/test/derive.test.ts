@@ -5,6 +5,12 @@ import { parseExtendedKey } from '../src/wallet/descriptor'
 const ZPUB =
   'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs'
 
+// A MESMA chave de conta da BIP-84 acima, reserializada com as version bytes
+// de vpub. Mesmo material, outra codificação — então os endereços derivados
+// dela têm de ter o mesmo witness program dos vetores de mainnet.
+const VPUB =
+  'vpub5YvMuJNjRSYon44z9QmCfdf8SqJRVNvz6m55Qy5iVjZQxDfUgtiQjnc7CC1fAbED2tAGCZRERUfvtn2DstZGU6HMns6dXXH2wujSc2wfi2x'
+
 describe('parseExtendedKey', () => {
   it('reconhece zpub como p2wpkh de mainnet', () => {
     const p = parseExtendedKey(ZPUB)
@@ -51,6 +57,33 @@ describe('deriveAddress', () => {
     const { canonicalXpub } = parseExtendedKey(ZPUB)
     const a = deriveAddress(canonicalXpub, 'p2wpkh', 'signet', 0, 0)
     expect(a.address.startsWith('tb1')).toBe(true)
+  })
+
+  // O caso acima parte de uma chave de mainnet, que vira xpub canônico — a
+  // codificação que a @scure/bip32 assume por padrão. Uma carteira de signet
+  // de verdade guarda tpub canônico, e era esse o caminho que ninguém
+  // exercitava: derivar dele lançava `Version mismatch` a cada tick do
+  // worker, e a carteira morria em `error` sem nunca sincronizar.
+  it('deriva a partir de tpub canônico, que é o que uma carteira de signet guarda', () => {
+    const { canonicalXpub } = parseExtendedKey(VPUB)
+    expect(canonicalXpub.startsWith('tpub')).toBe(true)
+
+    const a = deriveAddress(canonicalXpub, 'p2wpkh', 'signet', 0, 0)
+    expect(a.address.startsWith('tb1')).toBe(true)
+    expect(a.path).toBe('0/0')
+  })
+
+  it('tpub e xpub da mesma conta derivam o mesmo script', () => {
+    const viaTestnet = deriveAddress(
+      parseExtendedKey(VPUB).canonicalXpub, 'p2wpkh', 'signet', 0, 0,
+    )
+    const viaMainnet = deriveAddress(
+      parseExtendedKey(ZPUB).canonicalXpub, 'p2wpkh', 'mainnet', 0, 0,
+    )
+    // version bytes são só serialização: o material da chave é o mesmo, então
+    // o scriptPubKey tem de bater byte a byte. Só o HRP do endereço muda.
+    expect(viaTestnet.scriptPubKey).toEqual(viaMainnet.scriptPubKey)
+    expect(viaMainnet.address).toBe('bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu')
   })
 
   it('endereços diferentes produzem scripthashes diferentes', () => {

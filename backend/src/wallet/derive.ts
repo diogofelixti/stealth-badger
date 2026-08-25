@@ -2,6 +2,7 @@ import { HDKey } from '@scure/bip32'
 import { sha256 } from '@noble/hashes/sha256'
 import { bytesToHex } from '@noble/hashes/utils'
 import * as btc from '@scure/btc-signer'
+import { BIP32_VERSIONS, keyNetworkOf } from './descriptor'
 import type { Network, ScriptType } from './descriptor'
 
 export interface DerivedAddress {
@@ -30,7 +31,10 @@ export function deriveAddress(
     throw new Error('índice de derivação inválido: ' + index)
   }
 
-  const node = HDKey.fromExtendedKey(canonicalXpub)
+  const node = HDKey.fromExtendedKey(
+    canonicalXpub,
+    BIP32_VERSIONS[keyNetworkOf(canonicalXpub)],
+  )
     .deriveChild(chain)
     .deriveChild(index)
   if (!node.publicKey) throw new Error('nó derivado sem chave pública')

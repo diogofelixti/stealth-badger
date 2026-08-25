@@ -41,6 +41,32 @@ const CANONICAL: Record<KeyNetwork, string> = {
   testnet: '043587cf',
 }
 
+/**
+ * Version bytes que a `@scure/bip32` precisa para aceitar a chave. Sem
+ * recebê-las ela assume mainnet e recusa um tpub com `Version mismatch` —
+ * falha que só aparece na hora de derivar, longe do cadastro.
+ */
+export const BIP32_VERSIONS: Record<
+  KeyNetwork,
+  { public: number; private: number }
+> = {
+  mainnet: { public: 0x0488b21e, private: 0x0488ade4 },
+  testnet: { public: 0x043587cf, private: 0x04358394 },
+}
+
+/**
+ * Rede de uma chave já canônica, lida das próprias version bytes. É a
+ * codificação da chave que manda aqui, não a rede que o watchtower vigia:
+ * são coisas separadas — uma governa como a chave é lida, a outra como o
+ * endereço é escrito.
+ */
+export function keyNetworkOf(canonicalKey: string): KeyNetwork {
+  const version = bytesToHex(b58.decode(canonicalKey).slice(0, 4))
+  const info = PUBLIC_VERSIONS[version]
+  if (!info) throw new Error('bytes de versão desconhecidos: ' + version)
+  return info.keyNetwork
+}
+
 export function parseExtendedKey(key: string): ParsedKey {
   let raw: Uint8Array
   try {
