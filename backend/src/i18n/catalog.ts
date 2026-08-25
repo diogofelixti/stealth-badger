@@ -39,6 +39,11 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'balance.utxos': '{n} UTXOs',
     'balance.frozen': '{n} congelado',
     'wallets.title': 'Carteiras',
+    'wallets.empty': 'Nenhuma carteira vigiada ainda.',
+    'wallets.emptyHint':
+      'Cole a chave pública estendida da carteira que você quer vigiar. ' +
+      'O Stealth Badger passa a avisar sobre movimentação e, principalmente, ' +
+      'sobre vazamento de privacidade.',
     'wallets.add': '+ Vigiar carteira',
     'wallets.formTitle': 'Vigiar uma carteira',
     'wallets.labelPlaceholder': 'Rótulo, por exemplo Cold wallet',
@@ -95,6 +100,11 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'balance.utxos': '{n} UTXOs',
     'balance.frozen': '{n} frozen',
     'wallets.title': 'Wallets',
+    'wallets.empty': 'No wallet watched yet.',
+    'wallets.emptyHint':
+      'Paste the extended public key of the wallet you want to watch. ' +
+      'Stealth Badger will alert you about movement and, above all, about ' +
+      'privacy leaks.',
     'wallets.add': '+ Watch a wallet',
     'wallets.formTitle': 'Watch a wallet',
     'wallets.labelPlaceholder': 'Label, for example Cold wallet',

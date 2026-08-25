@@ -36,11 +36,13 @@ export function Dashboard({
   const [wallets, setWallets] = useState<Wallet[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [abrindoForm, setAbrindoForm] = useState(false)
+  const [carregado, setCarregado] = useState(false)
 
   const recarregar = useCallback(async () => {
     const [w, a] = await Promise.all([api.wallets(), api.alerts()])
     setWallets(w)
     setAlerts(a)
+    setCarregado(true)
   }, [])
 
   useEffect(() => {
@@ -63,6 +65,10 @@ export function Dashboard({
     null,
   )
   const primeira = wallets[0]
+
+  // Só depois de carregar: enquanto o fetch corre, `wallets` também está
+  // vazio, e piscar o formulário seria pior que não tê-lo.
+  const semCarteira = carregado && wallets.length === 0
 
   const separador = <span style={{ color: 'var(--sb-border)' }}>|</span>
 
@@ -99,6 +105,19 @@ export function Dashboard({
       <div className="grid lg:grid-cols-[460px_minmax(0,1fr)]">
         {/* o que você vigia */}
         <aside className="flex flex-col gap-5 border-b border-line px-4 py-6 sm:px-7 lg:border-b-0 lg:border-r">
+          {semCarteira && (
+            <section>
+              <h2 className="mb-[10px] text-xs font-semibold uppercase tracking-label text-faint">
+                {render(catalog, 'wallets.title', {}, lang)}
+              </h2>
+              <p className="mb-2 text-sm">{render(catalog, 'wallets.empty', {}, lang)}</p>
+              <p className="font-prose text-xs leading-relaxed text-muted">
+                {render(catalog, 'wallets.emptyHint', {}, lang)}
+              </p>
+            </section>
+          )}
+
+          {!semCarteira && (
           <section>
             <h2 className="mb-[10px] text-xs font-semibold uppercase tracking-label text-faint">
               {render(catalog, 'balance.total', {}, lang)}
@@ -123,25 +142,30 @@ export function Dashboard({
               )}
             </p>
           </section>
+          )}
 
-          <div className="h-px bg-line" />
+          {!semCarteira && (
+            <>
+              <div className="h-px bg-line" />
 
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-label text-faint">
-              {render(catalog, 'wallets.title', {}, lang)}
-            </h2>
-            <button
-              type="button"
-              onClick={() => setAbrindoForm(v => !v)}
-              aria-expanded={abrindoForm}
-              className="text-xs uppercase tracking-label"
-              style={{ color: 'var(--sb-accent)' }}
-            >
-              {render(catalog, 'wallets.add', {}, lang)}
-            </button>
-          </div>
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-xs font-semibold uppercase tracking-label text-faint">
+                  {render(catalog, 'wallets.title', {}, lang)}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setAbrindoForm(v => !v)}
+                  aria-expanded={abrindoForm}
+                  className="text-xs uppercase tracking-label"
+                  style={{ color: 'var(--sb-accent)' }}
+                >
+                  {render(catalog, 'wallets.add', {}, lang)}
+                </button>
+              </div>
+            </>
+          )}
 
-          {abrindoForm && (
+          {(abrindoForm || semCarteira) && (
             <AddWallet
               catalog={catalog}
               lang={lang}
