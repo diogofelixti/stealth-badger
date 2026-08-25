@@ -26,13 +26,13 @@ export async function migrate(dir: string = DEFAULT_DIR): Promise<void> {
     const sql = await readFile(path.join(dir, file), 'utf8')
     const client = await pool.connect()
     try {
-      await client.query('BEGIN')
-      await client.query(sql)
-      await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [file])
-      await client.query('COMMIT')
+      await pool.query('BEGIN')
+      await pool.query(sql)
+      await pool.query('INSERT INTO schema_migrations (name) VALUES ($1)', [file])
+      await pool.query('COMMIT')
       console.log(`migração aplicada: ${file}`)
     } catch (err) {
-      await client.query('ROLLBACK')
+      await pool.query('ROLLBACK')
       throw new Error(`falha na migração ${file}: ${(err as Error).message}`)
     } finally {
       client.release()
