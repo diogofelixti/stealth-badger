@@ -552,6 +552,48 @@ entra selecionado, com o aviso apagando.
 as duas posturas, mas ambas na mesma rede — o roteiro original usava mainnet e signet
 lado a lado, e isso continua impossível.
 
+## Sexta rodada — 26/08, integração do `am-i-exposed`
+
+O spike que estava marcado para terça e nunca aconteceu. Resultado: **funciona**, mas
+três premissas do design estavam erradas.
+
+**Não é biblioteca.** O pacote publica só `bin` — sem `main`, `types` ou `exports`. A
+§9.1 dizia "consumido como biblioteca npm (não subprocess)" e isso é impossível. Vale
+o plano B que a própria §13 registrou. A CLI tem `--json`, `--network` e `--api`, que
+basta.
+
+**Passar a chave crua faz ele mentir em silêncio.** Primeira tentativa, com o `tpub`
+canônico: `score 70 · activeAddresses 0 · totalTxs 0 · totalBalance 0` — numa carteira
+com 32 UTXOs. É o mesmo defeito que o projeto já corrigiu para si em `987e37f`: `tpub`
+não declara tipo de script e ele assumiu legado. Com `wpkh(tpub...)`:
+
+```
+score 66 · grade C · 31 endereços ativos · 30 transações
+32 UTXOs · 7.552.468 sats · 2 reutilizados · 1 dust
+```
+
+O saldo e a contagem de UTXO **batem exatamente** com a projeção do nosso próprio log
+de eventos. Duas implementações independentes no mesmo número é material de pitch.
+
+**Custa 78 segundos**, porque ele faz a própria varredura por gap limit. Daí a rota
+responder `202` e o trabalho seguir em segundo plano.
+
+Duas coisas que o design não previa e que a integração trata:
+
+- `--api` aponta para o mesmo backend da carteira. Sem isso o scanner consultaria o
+  explorador público dele e exporia os endereços a um segundo observador — furando o
+  Princípio 1 dentro da ferramenta que existe para avisar sobre isso
+- a saída traz `links.analysis`, uma URL do `am-i.exposed` com o xpub embutido. É
+  descartada antes de guardar ou exibir
+
+**Empacotamento:** `better-sqlite3` não tem prebuild para musl e não compila no
+`node:20-alpine` — o erro é "Could not find any Python installation", que não menciona
+nem o scanner nem o sqlite. `node:20-slim` falha igual. A solução foi um estágio de
+build com `python3 make g++`; o compilador não vai para a imagem final. Conferido:
+a CLI roda dentro do contêiner.
+
+Achado que o scanner tem e nós não: `wallet-uniform-script`, positivo, +3 no score.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
@@ -560,7 +602,7 @@ O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
 |---|---|
 | 1. Login, painel vazio | **funciona** — conferido em navegador em 26/08 |
 | 2. xpub → modo público, badge de aviso aceso | **funciona** |
-| 3. `am-i-exposed`: score e achados | **não existe** — integração não feita |
+| 3. `am-i-exposed`: score e achados | **funciona desde 26/08** — botão no cartão, 78 s, score e achados persistidos |
 | 4. Tabela de UTXO com tags de proveniência, dust congelado | **não existe** — `utxos.frozen` está no schema e nada o escreve |
 | 5. Segunda carteira em modo soberano, lado a lado com a pública | **possível desde 26/08**, na mesma rede — falta um servidor Electrum de verdade rodando. `NETWORK` único ainda impede mainnet e signet juntas |
 | 6. Transação real no signet → alerta no celular | **funciona** — é o que foi validado ponta a ponta |
@@ -583,10 +625,10 @@ sobre privacidade, não sobre saldo.
 
 ### Em execução
 
-- **Integração do `am-i-exposed`** — risco nomeado nº 1 do design, com spike previsto
-  para terça de manhã e não executado. Timebox de duas horas: se não rodar sob Node 20
-  nesse prazo, corta e o roteiro alternativo assume. Habilita `score_dropped` e
-  `kyc_origin`, este último a resposta ao pedido de alertar sobre fundos de corretora
+- **`score_dropped` e `kyc_origin` como alertas.** A análise já roda e é persistida em
+  `privacy_scans`; falta transformar a variação de score entre duas análises, e os
+  achados de origem, em alerta com dedupe. `kyc_origin` é a resposta ao pedido de
+  avisar sobre fundos de corretora
 
 ### Reconhecidas e adiadas, com razão registrada
 
