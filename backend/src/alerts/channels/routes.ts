@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { loadConfig } from '../../config'
 import { open, seal } from '../../crypto/secretbox'
 import { pool } from '../../db/pool'
+import { erro, type ErroDaApi } from '../../http/erro'
 import { sendToNtfy, type DeliveryResult, type NtfyConfig } from './ntfy'
 import { sendToWebhook, type WebhookConfig } from './webhook'
 
@@ -32,18 +33,26 @@ export interface ChannelRouteOptions {
  * Devolve a mensagem de erro em vez de lançar, porque cada recusa precisa
  * chegar ao usuário dizendo o que fazer.
  */
-function configurar(body: CriarCanalBody): { config: object } | { erro: string } {
+function configurar(body: CriarCanalBody): { config: object } | { falha: ErroDaApi } {
   if (!ACEITOS.includes(body.kind as Kind)) {
-    return { erro: `tipo de canal "${body.kind}" não existe. Aceitos: ntfy, webhook` }
+    return {
+      falha: erro(
+        'channel.unknownKind',
+        `tipo de canal "${body.kind}" não existe. Aceitos: ntfy, webhook`,
+        { tipo: String(body.kind) },
+      ),
+    }
   }
 
   if (body.kind === 'ntfy') {
     const topic = body.topic?.trim()
     if (!topic) {
       return {
-        erro:
+        falha: erro(
+          'channel.topicRequired',
           'tópico obrigatório. É ele que separa as suas notificações das dos outros: ' +
-          'escolha algo longo e difícil de adivinhar.',
+            'escolha algo longo e difícil de adivinhar.',
+        ),
       }
     }
     const config: NtfyConfig = {
@@ -55,9 +64,16 @@ function configurar(body: CriarCanalBody): { config: object } | { erro: string }
   }
 
   const url = body.url?.trim()
-  if (!url) return { erro: 'url do webhook obrigatória' }
+  if (!url) {
+    return { falha: erro('channel.urlRequired', 'url do webhook obrigatória') }
+  }
   if (!/^https?:\/\//i.test(url)) {
-    return { erro: 'a url do webhook precisa começar com http:// ou https://' }
+    return {
+      falha: erro(
+        'channel.urlScheme',
+        'a url do webhook precisa começar com http:// ou https://',
+      ),
+    }
   }
   const config: WebhookConfig = {
     url,
@@ -91,7 +107,7 @@ export function registerChannelRoutes(
     if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
 
     const resultado = configurar(req.body ?? ({} as CriarCanalBody))
-    if ('erro' in resultado) return reply.code(400).send({ error: resultado.erro })
+    if ('falha' in resultado) return reply.code(400).send(resultado.falha)
 
     const { rows } = await pool.query<{ id: string }>(
       `INSERT INTO channels (user_id, kind, config_encrypted)
@@ -122,7 +138,9 @@ export function registerChannelRoutes(
       [Number(req.params.id), req.userId],
     )
     const canal = rows[0]
-    if (!canal) return reply.code(404).send({ error: 'canal não encontrado' })
+    if (!canal) {
+      return reply.code(404).send(erro('channel.notFound', 'canal não encontrado'))
+    }
 
     const config = JSON.parse(open(canal.config_encrypted, loadConfig().masterKeyHex))
     const teste = {
@@ -149,7 +167,9 @@ export function registerChannelRoutes(
       'DELETE FROM channels WHERE id = $1 AND user_id = $2',
       [Number(req.params.id), req.userId],
     )
-    if (!rowCount) return reply.code(404).send({ error: 'canal não encontrado' })
+    if (!rowCount) {
+      return reply.code(404).send(erro('channel.notFound', 'canal não encontrado'))
+    }
     return reply.code(204).send()
   })
 }

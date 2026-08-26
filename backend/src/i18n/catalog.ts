@@ -100,6 +100,30 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'privacy.scanning': 'analisando...',
     'privacy.never': 'privacidade ainda não analisada',
     'privacy.findings': 'O que o scanner viu',
+    'error.auth.invalidInput': 'E-mail inválido, ou senha com menos de 12 caracteres.',
+    'error.auth.emailTaken': 'Este e-mail já tem conta.',
+    'error.auth.invalidCredentials': 'E-mail ou senha não conferem.',
+    'error.wallet.labelRequired': 'Dê um rótulo à carteira.',
+    'error.wallet.keyOrAddress': 'Informe uma chave estendida ou um endereço, não os dois.',
+    'error.wallet.keyOrAddressRequired':
+      'Informe a chave estendida da carteira, ou um endereço avulso a vigiar.',
+    'error.wallet.wrongNetwork':
+      'Esta chave é de {chave}, e este watchtower vigia {rede}. Use uma chave de {rede}.',
+    'error.wallet.backendNotFound': 'O backend escolhido não existe, ou não é seu.',
+    'error.channel.unknownKind': 'Não sei entregar por "{tipo}". Aceito ntfy e webhook.',
+    'error.channel.topicRequired':
+      'Escolha um tópico. É ele que separa as suas notificações das dos outros, então use algo longo e difícil de adivinhar.',
+    'error.channel.urlRequired': 'Informe a url do webhook.',
+    'error.channel.urlScheme': 'A url do webhook precisa começar com http:// ou https://.',
+    'error.channel.notFound': 'Canal não encontrado.',
+    'error.backend.unknownKind': 'Não sei falar com "{tipo}". Aceito esplora e electrum.',
+    'error.backend.urlRequired': 'Informe o endereço do backend.',
+    'error.backend.esploraScheme':
+      'O Esplora fala HTTP: o endereço precisa começar com http:// ou https://.',
+    'error.backend.electrumScheme':
+      'O endereço do Electrum precisa começar com electrum://, por exemplo electrum://127.0.0.1:50001.',
+    'error.backend.invalidUrl': 'Este endereço de backend não é uma url válida.',
+    'error.backend.noHost': 'Este endereço de backend não tem host.',
     'search.placeholder': 'buscar endereço ou carteira',
     'search.empty': 'Nada encontrado entre o que você vigia.',
     'search.used': 'usado',
@@ -228,6 +252,30 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'privacy.scanning': 'analyzing...',
     'privacy.never': 'privacy not analyzed yet',
     'privacy.findings': 'What the scanner saw',
+    'error.auth.invalidInput': 'Invalid email, or password shorter than 12 characters.',
+    'error.auth.emailTaken': 'That email already has an account.',
+    'error.auth.invalidCredentials': 'Email and password do not match.',
+    'error.wallet.labelRequired': 'Give the wallet a label.',
+    'error.wallet.keyOrAddress': 'Give an extended key or an address, not both.',
+    'error.wallet.keyOrAddressRequired':
+      "Give the wallet's extended key, or a single address to watch.",
+    'error.wallet.wrongNetwork':
+      'This key is for {chave}, and this watchtower watches {rede}. Use a {rede} key.',
+    'error.wallet.backendNotFound': 'That backend does not exist, or is not yours.',
+    'error.channel.unknownKind': 'I cannot deliver through "{tipo}". I accept ntfy and webhook.',
+    'error.channel.topicRequired':
+      'Pick a topic. It is what separates your notifications from everyone else\'s, so make it long and hard to guess.',
+    'error.channel.urlRequired': 'Give the webhook url.',
+    'error.channel.urlScheme': 'The webhook url must start with http:// or https://.',
+    'error.channel.notFound': 'Channel not found.',
+    'error.backend.unknownKind': 'I cannot talk to "{tipo}". I accept esplora and electrum.',
+    'error.backend.urlRequired': 'Give the backend address.',
+    'error.backend.esploraScheme':
+      'Esplora speaks HTTP: the address must start with http:// or https://.',
+    'error.backend.electrumScheme':
+      'The Electrum address must start with electrum://, for example electrum://127.0.0.1:50001.',
+    'error.backend.invalidUrl': 'That backend address is not a valid url.',
+    'error.backend.noHost': 'That backend address has no host.',
     'search.placeholder': 'search address or wallet',
     'search.empty': 'Nothing found among what you watch.',
     'search.used': 'used',

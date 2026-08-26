@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api, type Catalog, type Lang } from '../lib/api'
+import { api, mensagemDoErro, type Catalog, type Lang } from '../lib/api'
 import { LangToggle } from '../components/LangToggle'
 import { render } from '../lib/i18n'
 
@@ -27,7 +27,7 @@ export function Login({
       await api.login(email, senha)
       onEntrou()
     } catch (err) {
-      setErro((err as Error).message)
+      setErro(mensagemDoErro(catalog, err, lang))
     } finally {
       setEnviando(false)
     }

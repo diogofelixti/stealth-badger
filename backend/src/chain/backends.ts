@@ -1,5 +1,6 @@
 import { loadConfig, type BackendKind } from '../config'
 import { pool } from '../db/pool'
+import { erro, type ErroDaApi } from '../http/erro'
 import type { Network } from '../wallet/descriptor'
 
 export interface BackendResumo {
@@ -21,29 +22,43 @@ const ACEITOS: BackendKind[] = ['esplora', 'electrum']
  * cadastrado com `electrum://` só falha quando a primeira carteira tenta
  * sincronizar, longe do formulário que causou o problema.
  */
-export function validarBackend(kind: string, url: string): string | null {
+export function validarBackend(kind: string, url: string): ErroDaApi | null {
   if (!ACEITOS.includes(kind as BackendKind)) {
-    return `tipo de backend "${kind}" não tem adapter. Aceitos: esplora, electrum`
+    return erro(
+      'backend.unknownKind',
+      `tipo de backend "${kind}" não tem adapter. Aceitos: esplora, electrum`,
+      { tipo: String(kind) },
+    )
   }
-  if (!url?.trim()) return 'endereço do backend obrigatório'
+  if (!url?.trim()) {
+    return erro('backend.urlRequired', 'endereço do backend obrigatório')
+  }
 
   // O esquema é conferido antes de tentar interpretar a URL: quem escreve
   // `127.0.0.1:50001` não recebe "endereço inválido", que não diz o que fazer,
   // e sim a frase que mostra o formato esperado.
   if (kind === 'esplora' && !/^https?:\/\//i.test(url)) {
-    return 'o Esplora fala HTTP: o endereço precisa começar com http:// ou https://'
+    return erro(
+      'backend.esploraScheme',
+      'o Esplora fala HTTP: o endereço precisa começar com http:// ou https://',
+    )
   }
   if (kind === 'electrum' && !/^electrum:\/\//i.test(url)) {
-    return 'o endereço do Electrum precisa começar com electrum:// (por exemplo electrum://127.0.0.1:50001)'
+    return erro(
+      'backend.electrumScheme',
+      'o endereço do Electrum precisa começar com electrum:// (por exemplo electrum://127.0.0.1:50001)',
+    )
   }
 
   let parsed: URL
   try {
     parsed = new URL(url)
   } catch {
-    return `endereço do backend inválido: ${url}`
+    return erro('backend.invalidUrl', `endereço do backend inválido: ${url}`)
   }
-  if (!parsed.hostname) return `endereço do backend sem host: ${url}`
+  if (!parsed.hostname) {
+    return erro('backend.noHost', `endereço do backend sem host: ${url}`)
+  }
 
   return null
 }

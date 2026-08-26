@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type Catalog, type Channel, type Lang } from '../lib/api'
+import { api, mensagemDoErro, type Catalog, type Channel, type Lang } from '../lib/api'
 import { render } from '../lib/i18n'
 
 type Resultado = { id: number; ok: boolean; error?: string }
@@ -15,7 +15,7 @@ export function Channels({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
     try {
       setCanais(await api.channels())
     } catch (err) {
-      setErro((err as Error).message)
+      setErro(mensagemDoErro(catalog, err, lang))
     }
   }
 
@@ -31,7 +31,7 @@ export function Channels({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
       setTopico('')
       await recarregar()
     } catch (err) {
-      setErro((err as Error).message)
+      setErro(mensagemDoErro(catalog, err, lang))
     } finally {
       setOcupado(false)
     }
@@ -44,7 +44,7 @@ export function Channels({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
       const r = await api.testChannel(id)
       setResultado({ id, ...r })
     } catch (err) {
-      setResultado({ id, ok: false, error: (err as Error).message })
+      setResultado({ id, ok: false, error: mensagemDoErro(catalog, err, lang) })
     } finally {
       setOcupado(false)
     }

@@ -1,3 +1,4 @@
+import { erro } from '../http/erro'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { pool } from '../db/pool'
 import { hashPassword, verifyPassword } from './password'
@@ -26,7 +27,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     if (!email?.includes('@') || !password || password.length < 12) {
       return reply
         .code(400)
-        .send({ error: 'e-mail inválido ou senha com menos de 12 caracteres' })
+        .send(erro('auth.invalidInput', 'e-mail inválido ou senha com menos de 12 caracteres'))
     }
 
     const { rows: existing } = await pool.query<{ n: string }>(
@@ -42,7 +43,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
         [email, await hashPassword(password), isFirst, language],
       )
     } catch {
-      return reply.code(409).send({ error: 'e-mail já cadastrado' })
+      return reply.code(409).send(erro('auth.emailTaken', 'e-mail já cadastrado'))
     }
 
     return reply.code(201).send({ ok: true, isAdmin: isFirst })
@@ -56,7 +57,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     )
     const user = rows[0]
     if (!user || !(await verifyPassword(user.password_hash, password))) {
-      return reply.code(401).send({ error: 'credenciais inválidas' })
+      return reply.code(401).send(erro('auth.invalidCredentials', 'credenciais inválidas'))
     }
 
     const token = await createSession(Number(user.id))

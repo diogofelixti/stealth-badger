@@ -19,7 +19,7 @@ export function registerBackendRoutes(app: FastifyInstance): void {
 
     const { kind, url } = req.body ?? ({} as CriarBackendBody)
     const problema = validarBackend(kind, url)
-    if (problema) return reply.code(400).send({ error: problema })
+    if (problema) return reply.code(400).send(problema)
 
     const criado = await criarBackend(
       req.userId,

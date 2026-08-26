@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api, type Catalog, type Lang, type PrivacyReport } from '../lib/api'
+import { api, mensagemDoErro, type Catalog, type Lang, type PrivacyReport } from '../lib/api'
 import { render } from '../lib/i18n'
 
 /**
@@ -38,7 +38,7 @@ export function PrivacyPanel({
         latest: null,
         history: [],
         running: false,
-        error: (err as Error).message,
+        error: mensagemDoErro(catalog, err, lang),
       })
     } finally {
       setCarregando(false)

@@ -1,3 +1,5 @@
+import { render } from './i18n'
+
 export type Severity = 'info' | 'warning' | 'critical'
 
 export type Lang = 'pt' | 'en'
@@ -129,10 +131,36 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   })
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string }
-    throw new Error(body.error ?? `erro ${res.status}`)
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string
+      code?: string
+      params?: Record<string, unknown>
+    }
+    throw Object.assign(new Error(body.error ?? `erro ${res.status}`), {
+      code: body.code,
+      params: body.params,
+    })
   }
   return res.json() as Promise<T>
+}
+
+/**
+ * Erro da API, com o código que permite traduzir a frase na tela.
+ *
+ * A mensagem do servidor viaja junto como reserva: código novo no servidor e
+ * catálogo antigo na tela é situação normal num deploy, e cair no texto em
+ * português é pior que traduzido, mas muito melhor que mostrar a chave crua.
+ */
+export interface ErroDaApi extends Error {
+  code?: string
+  params?: Record<string, unknown>
+}
+
+export function mensagemDoErro(catalog: Catalog, err: unknown, lang: Lang): string {
+  const e = err as ErroDaApi
+  const chave = e?.code ? 'error.' + e.code : null
+  if (chave && catalog[chave]) return render(catalog, chave, e.params ?? {}, lang)
+  return e?.message ?? String(err)
 }
 
 export const api = {

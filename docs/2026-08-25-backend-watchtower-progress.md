@@ -983,6 +983,27 @@ versionada em `backend/scripts/regressao-navegador.mjs`, porque metade dos defei
 desta semana só apareceu na tela: o aviso que a rolagem levava embora, a unidade
 duplicada, o botão de sair quebrado por um cabeçalho.
 
+## Décima quinta rodada — 26/08, erro em duas línguas
+
+A interface era bilíngue e as mensagens de erro saíam só em português — um avaliador que
+trocasse para inglês e errasse a senha lia português.
+
+A resposta de erro passa a trazer `code` e, quando a frase precisa, `params`. A tela
+renderiza `error.<code>` do catálogo; a mensagem em português continua na resposta como
+reserva, para quem consome a API direto e para o caso de o servidor emitir um código que
+o catálogo da tela ainda não conhece — situação normal entre dois deploys.
+
+Os parâmetros viajam separados de propósito. "Esta chave é de {chave}, e este watchtower
+vigia {rede}" só é útil com os dois valores; sem eles a tradução vira um aviso genérico
+que não ajuda ninguém a corrigir.
+
+Um teste percorre os erros emitidos e **falha se algum código não tiver frase nos dois
+idiomas** — senão o código novo cairia calado na reserva em português, que é exatamente
+o defeito que estamos consertando.
+
+Conferido em navegador: *"Email and password do not match."* e *"This key is for
+mainnet, and this watchtower watches signet. Use a signet key."*
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.

@@ -1,5 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { api, type Backend, type BackendKind, type Catalog, type Lang } from '../lib/api'
+import {
+  api,
+  mensagemDoErro,
+  type Backend,
+  type BackendKind,
+  type Catalog,
+  type Lang,
+} from '../lib/api'
 import { render } from '../lib/i18n'
 
 function host(url: string): string {
@@ -62,7 +69,7 @@ export function AddWallet({
       setEndereco('')
       onAdded()
     } catch (err) {
-      setErro((err as Error).message)
+      setErro(mensagemDoErro(catalog, err, lang))
     } finally {
       setEnviando(false)
     }
@@ -78,7 +85,7 @@ export function AddWallet({
       setAbrindoBackend(false)
       setNovaUrl('')
     } catch (err) {
-      setErro((err as Error).message)
+      setErro(mensagemDoErro(catalog, err, lang))
     }
   }
 

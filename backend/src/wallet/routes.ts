@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { erro } from '../http/erro'
 import type { ChainAdapter } from '../chain/types'
 import { createAdapter, type BackendRow } from '../chain/adapter'
 import { backendDoUsuario, ensureBackendGlobal } from '../chain/backends'
@@ -49,19 +50,31 @@ export function registerWalletRoutes(
     if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
 
     const { label, key, address, gapLimit } = req.body
-    if (!label?.trim()) return reply.code(400).send({ error: 'rótulo obrigatório' })
+    if (!label?.trim()) {
+      return reply.code(400).send(erro('wallet.labelRequired', 'rótulo obrigatório'))
+    }
 
     // Exclusivos de propósito: aceitar os dois obrigaria a escolher um em
     // silêncio, e o usuário descobriria depois que vigiou o que não pediu.
     if (key?.trim() && address?.trim()) {
-      return reply.code(400).send({
-        error: 'informe uma chave estendida ou um endereço, não os dois',
-      })
+      return reply
+        .code(400)
+        .send(
+          erro(
+            'wallet.keyOrAddress',
+            'informe uma chave estendida ou um endereço, não os dois',
+          ),
+        )
     }
     if (!key?.trim() && !address?.trim()) {
       return reply
         .code(400)
-        .send({ error: 'informe a chave estendida da carteira ou um endereço a vigiar' })
+        .send(
+          erro(
+            'wallet.keyOrAddressRequired',
+            'informe a chave estendida da carteira ou um endereço a vigiar',
+          ),
+        )
     }
 
     const cfg = loadConfig()
@@ -80,11 +93,13 @@ export function registerWalletRoutes(
         network,
       )
       if (!escolhido) {
-        return reply.code(400).send({
-          error:
+        return reply.code(400).send(
+          erro(
+            'wallet.backendNotFound',
             `backend ${req.body.backendId} não existe ou não é seu. ` +
-            'Consulte GET /api/backends para os disponíveis.',
-        })
+              'Consulte GET /api/backends para os disponíveis.',
+          ),
+        )
       }
       backend = { ...escolhido, network }
     } else {
@@ -128,11 +143,14 @@ export function registerWalletRoutes(
       // mesmas version bytes, por isso a comparação é com `testnet`.
       const esperada: KeyNetwork = cfg.network === 'mainnet' ? 'mainnet' : 'testnet'
       if (parsed.keyNetwork !== esperada) {
-        return reply.code(400).send({
-          error:
+        return reply.code(400).send(
+          erro(
+            'wallet.wrongNetwork',
             `esta chave é de ${parsed.keyNetwork}, mas este watchtower vigia ` +
-            `${cfg.network}. Use uma chave de ${cfg.network}.`,
-        })
+              `${cfg.network}. Use uma chave de ${cfg.network}.`,
+            { chave: parsed.keyNetwork, rede: cfg.network },
+          ),
+        )
       }
 
       // `xpub`/`tpub` não dizem o tipo de script: quem exporta por descriptor

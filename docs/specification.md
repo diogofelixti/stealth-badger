@@ -357,6 +357,20 @@ Catálogo bilíngue PT/EN servido por `GET /api/i18n/:lang`, com substituição 
 formatação numérica por idioma (`10.000` em pt, `10,000` em en) e parâmetros que
 referenciam outra chave do catálogo via `@chave`.
 
+**Erro de API também é bilíngue.** A resposta traz `code` e, quando a frase precisa
+deles, `params`:
+
+```json
+{ "error": "esta chave é de mainnet, mas este watchtower vigia signet.",
+  "code": "wallet.wrongNetwork",
+  "params": { "chave": "mainnet", "rede": "signet" } }
+```
+
+A tela renderiza `error.<code>` do catálogo; a mensagem em português viaja junto como
+reserva, para quem consome a API direto e para o caso de o servidor emitir um código que
+o catálogo da tela ainda não conhece — situação normal entre dois deploys. Um teste
+garante que **todo código emitido tem frase nos dois idiomas**.
+
 ---
 
 ## 11. Configuração
@@ -501,7 +515,6 @@ Escrito para ser lido antes que alguém pergunte.
 - **A varredura continua sequencial.** Um ciclo pergunta por um endereço de cada vez,
   e o tempo é dominado pela latência do explorador público. Paralelizar cortaria o
   tempo, mas concentraria a rajada — e o adapter ainda não tem backoff para o `429`.
-- **Mensagens de erro da API saem só em português**, embora a interface seja bilíngue.
 - **A interface é de duas telas** — login e um dashboard único. Não há navegação nem
   menus; não há uma terceira tela para onde ir.
 

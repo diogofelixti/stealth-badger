@@ -51,4 +51,65 @@ describe('cliente de API', () => {
     const headers = (chamadas[0]!.init.headers ?? {}) as Record<string, string>
     expect(headers['Content-Type']).toBeUndefined()
   })
+
+  // A interface é bilíngue e as mensagens de erro chegavam só em português. O
+  // código é o que permite a tela escolher a frase; a mensagem do servidor
+  // continua como reserva para código que o catálogo ainda não conhece.
+  it('carrega o código e os parâmetros do erro até quem for exibi-lo', async () => {
+    vi.stubGlobal('fetch', async () =>
+      new Response(
+        JSON.stringify({
+          error: 'esta chave é de mainnet',
+          code: 'wallet.wrongNetwork',
+          params: { chave: 'mainnet', rede: 'signet' },
+        }),
+        { status: 400, headers: { 'content-type': 'application/json' } },
+      ),
+    )
+    await expect(api.wallets()).rejects.toMatchObject({
+      code: 'wallet.wrongNetwork',
+      params: { chave: 'mainnet', rede: 'signet' },
+    })
+  })
+
+  it('mantém a mensagem do servidor quando não há código', async () => {
+    vi.stubGlobal('fetch', async () =>
+      new Response(JSON.stringify({ error: 'algo específico deu errado' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+    await expect(api.wallets()).rejects.toThrow(/algo específico/)
+  })
+})
+
+describe('mensagemDoErro', () => {
+  const catalogo = {
+    'error.wallet.wrongNetwork': 'Esta chave é de {chave}, e vigiamos {rede}.',
+  }
+
+  it('traduz pelo código, preenchendo os parâmetros', async () => {
+    const { mensagemDoErro } = await import('../src/lib/api')
+    const err = Object.assign(new Error('texto do servidor'), {
+      code: 'wallet.wrongNetwork',
+      params: { chave: 'mainnet', rede: 'signet' },
+    })
+    expect(mensagemDoErro(catalogo, err, 'pt')).toBe(
+      'Esta chave é de mainnet, e vigiamos signet.',
+    )
+  })
+
+  // Código novo no servidor e catálogo antigo na tela é situação normal num
+  // deploy. Cair no texto do servidor é pior que traduzido, e muito melhor que
+  // mostrar a chave crua.
+  it('cai na mensagem do servidor quando o catálogo não conhece o código', async () => {
+    const { mensagemDoErro } = await import('../src/lib/api')
+    const err = Object.assign(new Error('texto do servidor'), { code: 'algo.novo' })
+    expect(mensagemDoErro(catalogo, err, 'pt')).toBe('texto do servidor')
+  })
+
+  it('se vira com erro que não veio da API', async () => {
+    const { mensagemDoErro } = await import('../src/lib/api')
+    expect(mensagemDoErro(catalogo, new Error('rede caiu'), 'pt')).toBe('rede caiu')
+  })
 })

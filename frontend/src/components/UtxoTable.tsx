@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type Catalog, type Lang, type Utxo } from '../lib/api'
+import { api, mensagemDoErro, type Catalog, type Lang, type Utxo } from '../lib/api'
 import { formatSats } from '../lib/format'
 import { render } from '../lib/i18n'
 
@@ -29,7 +29,7 @@ export function UtxoTable({
     try {
       setUtxos(await api.utxos(walletId))
     } catch (err) {
-      setErro((err as Error).message)
+      setErro(mensagemDoErro(catalog, err, lang))
     }
   }
 
@@ -52,7 +52,7 @@ export function UtxoTable({
     try {
       await api.markUtxo(walletId, u.txid, u.vout, mudanca)
     } catch (err) {
-      setErro((err as Error).message)
+      setErro(mensagemDoErro(catalog, err, lang))
       await recarregar()
     }
   }
@@ -97,7 +97,7 @@ export function UtxoTable({
                   await api.importLabels(walletId, await arquivo.text())
                   await recarregar()
                 } catch (err) {
-                  setErro((err as Error).message)
+                  setErro(mensagemDoErro(catalog, err, lang))
                 }
               }}
             />
