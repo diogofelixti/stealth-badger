@@ -237,6 +237,47 @@ Saldo é a soma dos UTXOs não gastos.
 | `dust_received` | `critical` | UTXO recebido com valor **abaixo de 1000 sats** |
 | `address_reused` | `warning` | chega valor em endereço que já tinha sido usado |
 | `reorg_detected` | `warning` | divergência de hash de bloco |
+| `score_dropped` | `warning` | privacy score caiu **5 pontos ou mais** entre duas análises |
+| `kyc_origin` | `warning` | a transação que trouxe fundos aponta origem em entidade conhecida |
+
+Os dois últimos **não nascem de evento de cadeia**, e isso muda o que eles podem
+afirmar.
+
+`score_dropped` nasce de o scanner ter olhado a carteira duas vezes e visto piora, e
+por isso grava `event_id` nulo: amarrá-lo a um evento seria inventar uma causa que
+ninguém verificou. O limiar de cinco pontos existe porque o scanner reavalia a carteira
+inteira a cada execução, e variação de um ou dois pontos é ruído de heurística —
+alertar sobre ruído ensina o usuário a ignorar o alerta. A primeira análise nunca gera
+queda: tratar a ausência de anterior como "era 100" produziria alerta em toda carteira
+recém-cadastrada.
+
+`kyc_origin` nasce de analisar **a transação**, não a carteira: `scan xpub` só emite
+achados sobre a forma da carteira, e quem mandou os fundos só aparece em `scan tx`. Ele
+aponta para o `utxo_created` que trouxe os fundos, porque ali existe causa concreta.
+
+#### O que o alerta de origem pode e não pode afirmar
+
+O scanner separa **correspondência na base de entidades** de **heurística sobre a forma
+da transação**, e declara a própria confiança em cada achado. Achatar essa diferença
+faria o watchtower afirmar o que ninguém verificou, então ela viaja até o texto:
+
+| Base | Frase | Exemplo de achado |
+|---|---|---|
+| `database` | "foi reconhecida pela base de entidades do scanner como" | `entity-known-input`, `entity-ofac-match` |
+| `behavior` | "tem forma compatível com" | `entity-behavior-exchange`, `exchange-withdrawal-pattern` |
+
+A confiança declarada pelo scanner aparece na frase, sem retoque. Correspondência em
+base vence heurística quando as duas apontam para a mesma espécie: dizer "possível
+padrão de exchange" quando o scanner reconheceu a entidade subestimaria o que ele sabe.
+
+Isso inclui correspondência com lista de sanções. A decisão é surfacear, **com
+atribuição explícita ao scanner**, um achado que a biblioteca já computa — o que é
+diferente de este projeto construir um produto de sanções e decidir por conta própria
+procedência de lista, jurisdição e tratamento de falso positivo.
+
+Cada `scan tx` custa segundos contra a cadeia, então `tx_scans` deduplica por
+`(carteira, txid)` — o que uma transação confirmada revela não muda — e cada análise
+manual processa no máximo **cinco** transações, da mais recente para a mais antiga.
 
 **Por que poeira é crítica e reuso é atenção:** crítico se reserva ao que ainda dá para
 evitar. Poeira plantada pede ação imediata — não gastar aquele UTXO. Reuso de endereço
@@ -436,7 +477,6 @@ Escrito para ser lido antes que alguém pergunte.
 | **Vigiar endereço avulso**, fora de carteira | `addresses`, `chain_events`, `utxos` e `alerts` são todos ancorados em `wallet_id` |
 | **Busca de endereços** | não há rota nem tela |
 | **Alertas sobre endereços sancionados** | fora de escopo por decisão; ver §4 do design |
-| **Alertas `score_dropped` e `kyc_origin`** | a análise já roda e é persistida; falta transformar a variação de score e os achados de origem em alerta |
 | **Coin control** (rótulos, tags, regras de gasto, BIP-329) | modelado, não construído |
 | **Fingerprints de transação** | não construído |
 | **Limiar de poeira configurável** | fixo em 1000 sats; não há tabela `alert_rules` |
@@ -468,7 +508,7 @@ deduplicação de alerta, detecção de reorg, gap limit, projeção de UTXO, de
 cifra em repouso e reconexão do listener SSE.
 
 ```bash
-cd backend && npm test     # 22 arquivos, 184 testes
+cd backend && npm test     # 30 arquivos, 273 testes
 npx tsc --noEmit           # sem erros
 ```
 

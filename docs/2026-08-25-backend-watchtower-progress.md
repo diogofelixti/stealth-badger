@@ -757,10 +757,7 @@ sobre privacidade, não sobre saldo.
 
 ### Em execução
 
-- **`score_dropped` e `kyc_origin` como alertas.** A análise já roda e é persistida em
-  `privacy_scans`; falta transformar a variação de score entre duas análises, e os
-  achados de origem, em alerta com dedupe. `kyc_origin` é a resposta ao pedido de
-  avisar sobre fundos de corretora
+- **Nada.** Os sete tipos da taxonomia da §8.1 estão implementados.
 
 ### Reconhecidas e adiadas, com razão registrada
 
@@ -768,9 +765,9 @@ sobre privacidade, não sobre saldo.
   "endereços *e* carteiras" e só carteira foi entregue. Caminho barato mapeado
   (carteira de um endereço só), mas exige um ramo em `syncWallet` para carteira sem
   xpub
-- **Alertar sobre endereços sancionados** — fora de escopo por decisão, não por
-  esquecimento: é afirmação de peso diferente do `kyc_origin` e exige decidir
-  procedência de lista, jurisdição e falso positivo
+- **Análise de origem disparada pelo worker**, e não só pelo botão. O gatilho da §9.1
+  prevê "transação nova detectada"; hoje só o clique dispara. Precisa de fila própria,
+  senão um `scan tx` de cinco segundos por depósito estica o ciclo de sincronização
 - **Campo de busca de endereços** — barato, mas não muda a avaliação
 
 ### Técnicas
