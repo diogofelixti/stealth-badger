@@ -84,6 +84,9 @@ Fulcrum e Floresta de uma vez)
 ✅ **Aviso de privacidade permanente** — enquanto qualquer carteira consultar por
 explorador público, a advertência fica presa no topo da tela
 
+✅ **Busca** — cole um endereço e descubra se está sendo vigiado, por qual carteira e em
+que caminho de derivação
+
 ✅ **Bilíngue** pt/en, inclusive no histórico de alertas já gravado
 
 ✅ **Multi-usuário**, com xpub cifrado em repouso

@@ -6,6 +6,7 @@ import { AddWallet } from '../components/AddWallet'
 import { LangToggle } from '../components/LangToggle'
 import { WalletCard } from '../components/WalletCard'
 import { Channels } from '../components/Channels'
+import { Search } from '../components/Search'
 import { render } from '../lib/i18n'
 
 /**
@@ -218,6 +219,8 @@ export function Dashboard({
 
           {!semCarteira && (
             <>
+              <div className="h-px bg-line" />
+              <Search catalog={catalog} lang={lang} />
               <div className="h-px bg-line" />
               <Channels catalog={catalog} lang={lang} />
             </>

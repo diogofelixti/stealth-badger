@@ -8,6 +8,7 @@ const alerts = vi.fn<() => Promise<Alert[]>>()
 // fetch real falha em jsdom e a atualização de estado chega depois das
 // asserções — que foi a origem de falhas intermitentes neste arquivo.
 const channels = vi.fn<() => Promise<never[]>>()
+const search = vi.fn<() => Promise<never[]>>()
 
 vi.mock('../src/lib/api', async importOriginal => {
   const real = await importOriginal<typeof import('../src/lib/api')>()
@@ -18,6 +19,7 @@ vi.mock('../src/lib/api', async importOriginal => {
       wallets: () => wallets(),
       alerts: () => alerts(),
       channels: () => channels(),
+      search: () => search(),
     },
   }
 })
@@ -79,6 +81,7 @@ function montar() {
 beforeEach(() => {
   alerts.mockResolvedValue([])
   channels.mockResolvedValue([])
+  search.mockResolvedValue([])
 })
 
 describe('Dashboard — primeiro acesso', () => {

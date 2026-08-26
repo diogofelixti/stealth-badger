@@ -956,6 +956,33 @@ O endereço de 33.446 transações falha também dentro do scanner — `HTTP 400
 limite do explorador. Num endereço normal: **score 100, nota A+**, com
 `h8-no-reuse`, `h9-clean`, `spending-never-spent` e `h10-p2wpkh`.
 
+## Décima quarta rodada — 26/08, busca de endereço
+
+Adiada no recorte por não mudar a avaliação. A razão deixou de valer quando sobrou
+tempo, e o caso de uso é concreto: você tem um endereço na mão e quer saber se está
+sendo vigiado, por qual carteira e em que caminho de derivação.
+
+Quatro decisões pequenas, todas sobre não responder o que não foi perguntado:
+
+- **busca vazia devolve vazio**, e não tudo. Quem não digitou nada não pediu a carteira
+  inteira;
+- **teto de cinquenta resultados**, senão um prefixo comum transforma o campo num
+  despejo de endereços;
+- **"nada encontrado" só depois de buscar.** Antes disso a resposta não existe, e
+  mostrá-la seria responder pergunta que ninguém fez;
+- **espera de 350 ms antes de consultar.** Buscar a cada tecla faria um endereço de 42
+  caracteres colado virar 42 consultas ao banco.
+
+O filtro por dono vem antes de tudo na consulta: buscar endereço de outra pessoa não
+pode revelar que alguém o vigia.
+
+### Passagem de regressão pela interface
+
+Onze verificações, todas verdes, sem nenhuma resposta 4xx e sem erro de página. Ficou
+versionada em `backend/scripts/regressao-navegador.mjs`, porque metade dos defeitos
+desta semana só apareceu na tela: o aviso que a rolagem levava embora, a unidade
+duplicada, o botão de sair quebrado por um cabeçalho.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
@@ -991,7 +1018,6 @@ sobre privacidade, não sobre saldo.
 
 ### Reconhecidas e adiadas, com razão registrada
 
-- **Campo de busca de endereços** — barato, mas não muda a avaliação
 
 ### Técnicas
 

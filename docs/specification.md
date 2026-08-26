@@ -484,7 +484,6 @@ Escrito para ser lido antes que alguém pergunte.
 | Item | Situação |
 |---|---|
 | **`registerDescriptor` / `rescanFrom`** | caminho de Bitcoin Core e Floresta; previstos na interface, sem implementação |
-| **Busca de endereços** | não há rota nem tela |
 | **Alertas sobre endereços sancionados** | fora de escopo por decisão; ver §4 do design |
 | **Coin control** (rótulos, tags, regras de gasto, BIP-329) | modelado, não construído |
 | **Fingerprints de transação** | não construído |

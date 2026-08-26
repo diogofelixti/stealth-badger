@@ -101,6 +101,15 @@ export interface Channel {
   enabled: boolean
 }
 
+export interface Achado {
+  walletId: number
+  walletLabel: string
+  address: string
+  derivationPath: string
+  used: boolean
+  balanceSats: number
+}
+
 export interface Me {
   email: string
   isAdmin: boolean
@@ -156,6 +165,7 @@ export const api = {
       body: JSON.stringify({ kind, url, isPublic }),
     }),
   alerts: () => request<Alert[]>('/api/alerts'),
+  search: (q: string) => request<Achado[]>(`/api/search?q=${encodeURIComponent(q)}`),
   channels: () => request<Channel[]>('/api/channels'),
   addChannel: (config: { kind: ChannelKind; topic?: string; server?: string; url?: string }) =>
     request<Channel>('/api/channels', { method: 'POST', body: JSON.stringify(config) }),

@@ -9,6 +9,7 @@ import { registerPrivacyRoutes } from './privacy/routes'
 import { registerCoinControlRoutes } from './coincontrol/routes'
 import { registerAuthRoutes } from './auth/routes'
 import { registerWalletRoutes } from './wallet/routes'
+import { registerSearchRoutes } from './wallet/search'
 import { registerI18nRoutes } from './i18n/routes'
 
 export type AppOptions = WalletRouteOptions & PrivacyRouteOptions & ChannelRouteOptions
@@ -22,6 +23,7 @@ export function buildApp(opts: AppOptions = {}): FastifyInstance {
   registerAuthRoutes(app)
   registerBackendRoutes(app)
   registerWalletRoutes(app, opts)
+  registerSearchRoutes(app)
   registerPrivacyRoutes(app, opts)
   registerCoinControlRoutes(app)
   registerI18nRoutes(app)
