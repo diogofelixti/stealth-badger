@@ -221,4 +221,54 @@ describe('GET /api/wallets com privacidade', () => {
     })
     expect(depois.json()[0].privacyScanning).toBe(false)
   })
+
+  // A queda de privacidade é a única forma de o watchtower avisar que a
+  // carteira piorou sem que nada tenha se movimentado na visão do usuário.
+  it('alerta quando a segunda análise vem com score bem menor', async () => {
+    let vez = 0
+    const piorando = async () => {
+      vez += 1
+      return { ...RESULTADO, score: vez === 1 ? 88 : 60, grade: vez === 1 ? 'B' : 'D' }
+    }
+    const { app, cookie, walletId } = await comCarteira(piorando)
+
+    for (const _ of [1, 2]) {
+      await app.inject({
+        method: 'POST',
+        url: `/api/wallets/${walletId}/scan`,
+        cookies: { sb_session: cookie },
+      })
+      await aguardarScan(walletId)
+    }
+
+    const alertas = await app.inject({
+      method: 'GET',
+      url: '/api/alerts',
+      cookies: { sb_session: cookie },
+    })
+    const queda = alertas.json().find((a: { type: string }) => a.type === 'score_dropped')
+    expect(queda).toBeDefined()
+    expect(queda.params).toMatchObject({ from: 88, to: 60, drop: 28 })
+    expect(queda.severity).toBe('warning')
+  })
+
+  it('não alerta quando a análise repete o mesmo score', async () => {
+    const { app, cookie, walletId } = await comCarteira(async () => RESULTADO)
+    for (const _ of [1, 2]) {
+      await app.inject({
+        method: 'POST',
+        url: `/api/wallets/${walletId}/scan`,
+        cookies: { sb_session: cookie },
+      })
+      await aguardarScan(walletId)
+    }
+    const alertas = await app.inject({
+      method: 'GET',
+      url: '/api/alerts',
+      cookies: { sb_session: cookie },
+    })
+    expect(
+      alertas.json().filter((a: { type: string }) => a.type === 'score_dropped'),
+    ).toHaveLength(0)
+  })
 })

@@ -86,3 +86,58 @@ export function alertsForEvent(event: StoredEvent, ctx: AlertContext): AlertCand
 
   return out
 }
+
+export interface ScanAlertContext {
+  userId: number
+  walletId: number
+  /** id da análise que produziu o score atual; é o que ancora a deduplicação */
+  scanId: number
+  /**
+   * Quantos pontos de queda valem um aviso.
+   *
+   * O scanner reavalia a carteira inteira a cada execução, e um ou dois pontos
+   * de diferença são ruído de heurística. Alertar sobre ruído ensina o usuário
+   * a ignorar o alerta, que é o pior resultado possível para um watchtower.
+   */
+  dropThreshold: number
+}
+
+/**
+ * Alerta de queda de privacidade, comparando uma análise com a anterior.
+ *
+ * Não nasce de evento de cadeia — nasce de o scanner ter olhado a carteira
+ * duas vezes e visto piora. Por isso `eventId` é nulo: amarrar a um evento
+ * seria inventar uma causa que ninguém verificou.
+ */
+export function alertsForScan(
+  anterior: { score: number; grade: string } | null,
+  atual: { id: number; score: number; grade: string },
+  ctx: ScanAlertContext,
+): AlertCandidate[] {
+  // Primeira análise não tem com o que comparar. Tratar a ausência como
+  // "score anterior era 100" produziria um alerta de queda em toda carteira
+  // recém-cadastrada.
+  if (!anterior) return []
+
+  const drop = anterior.score - atual.score
+  if (drop < ctx.dropThreshold) return []
+
+  return [
+    {
+      userId: ctx.userId,
+      walletId: ctx.walletId,
+      type: 'score_dropped',
+      severity: 'warning',
+      params: {
+        from: anterior.score,
+        to: atual.score,
+        drop,
+        grade: atual.grade,
+      },
+      // Uma análise gera no máximo um alerta de queda: sem isso, reanalisar a
+      // mesma carteira repetiria o aviso a cada clique.
+      dedupeKey: 'wallet:' + ctx.walletId + ':score:' + ctx.scanId,
+      eventId: null,
+    },
+  ]
+}

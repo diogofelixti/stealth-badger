@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { confirmationState, dedupeKey } from '../src/alerts/dedupe'
-import { alertsForEvent } from '../src/alerts/rules'
+import { alertsForEvent, alertsForScan } from '../src/alerts/rules'
 import { saveAlert } from '../src/alerts/store'
 import { pool } from '../src/db/pool'
 import type { StoredEvent } from '../src/events/log'
@@ -151,5 +151,50 @@ describe('saveAlert', () => {
     await saveAlert(candidate('k1'))
     const { rows } = await pool.query<{ params: Record<string, unknown> }>('SELECT params FROM alerts')
     expect(rows[0]!.params).toMatchObject({ value: 50_000, state: '@state.conf1' })
+  })
+})
+
+describe('alertsForScan — queda de privacy score', () => {
+  const ctx = { userId: 7, walletId: 3, scanId: 42, dropThreshold: 5 }
+  const atual = { id: 42, score: 60, grade: 'D' }
+
+  it('não alerta na primeira análise, que não tem com o que comparar', () => {
+    expect(alertsForScan(null, atual, ctx)).toEqual([])
+  })
+
+  it('não alerta quando o score sobe', () => {
+    expect(alertsForScan({ score: 50, grade: 'D' }, { ...atual, score: 70 }, ctx)).toEqual([])
+  })
+
+  // O scanner reavalia a carteira inteira a cada execução, e um ponto de
+  // diferença é ruído de heurística. Alertar sobre isso ensinaria o usuário a
+  // ignorar o alerta, que é o pior resultado possível.
+  it('não alerta por variação menor que o limiar', () => {
+    expect(alertsForScan({ score: 63, grade: 'C' }, atual, ctx)).toEqual([])
+  })
+
+  it('alerta quando a queda passa do limiar, dizendo de quanto para quanto', () => {
+    const [alerta] = alertsForScan({ score: 80, grade: 'B' }, atual, ctx)
+    expect(alerta).toMatchObject({
+      type: 'score_dropped',
+      severity: 'warning',
+      userId: 7,
+      walletId: 3,
+    })
+    expect(alerta!.params).toMatchObject({ from: 80, to: 60, drop: 20, grade: 'D' })
+  })
+
+  // Uma análise gera no máximo um alerta de queda. Sem isso, reanalisar a
+  // mesma carteira repetiria o aviso a cada clique.
+  it('amarra a deduplicação à análise, e não ao par de scores', () => {
+    const [a] = alertsForScan({ score: 80, grade: 'B' }, atual, ctx)
+    const [b] = alertsForScan({ score: 80, grade: 'B' }, atual, ctx)
+    expect(a!.dedupeKey).toBe(b!.dedupeKey)
+    expect(a!.dedupeKey).toContain('42')
+  })
+
+  it('não amarra o alerta a evento de cadeia, porque não nasceu de um', () => {
+    const [a] = alertsForScan({ score: 80, grade: 'B' }, atual, ctx)
+    expect(a!.eventId).toBeNull()
   })
 })

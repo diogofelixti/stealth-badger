@@ -12,6 +12,10 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'alert.funds_received.body': '{value} sats, {state}.',
     'alert.funds_spent.title': 'Fundos gastos',
     'alert.funds_spent.body': 'O UTXO {txid}:{vout} foi consumido.',
+    'alert.score_dropped.title': 'Privacidade piorou',
+    'alert.score_dropped.body':
+      'O score desta carteira caiu de {from} para {to}, {drop} pontos, e a nota ' +
+      'passou a {grade}. Abra a análise para ver o que mudou antes de gastar.',
     'alert.dust_received.title': 'Possível dust attack',
     'alert.dust_received.body':
       'Chegaram {value} sats de origem desconhecida em {address}, abaixo do limiar ' +
@@ -99,6 +103,10 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'alert.funds_received.body': '{value} sats, {state}.',
     'alert.funds_spent.title': 'Funds spent',
     'alert.funds_spent.body': 'UTXO {txid}:{vout} was consumed.',
+    'alert.score_dropped.title': 'Privacy got worse',
+    'alert.score_dropped.body':
+      "This wallet's score fell from {from} to {to}, {drop} points, and the grade " +
+      'is now {grade}. Open the analysis to see what changed before you spend.',
     'alert.dust_received.title': 'Possible dust attack',
     'alert.dust_received.body':
       '{value} sats arrived from an unknown source at {address}, below the ' +
