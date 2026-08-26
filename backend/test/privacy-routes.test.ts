@@ -3,6 +3,7 @@ import { buildApp } from '../src/app'
 import { pool } from '../src/db/pool'
 import type { PrivacyScan } from '../src/privacy/scan'
 import { aguardarScan } from '../src/privacy/andamento'
+import { aguardarOrigens } from '../src/privacy/origem-service'
 import { appendEvent } from '../src/events/log'
 import { projectWallet } from '../src/events/project'
 import { resetDb } from './helpers/db'
@@ -327,6 +328,7 @@ describe('kyc_origin — origem dos fundos', () => {
       cookies: { sb_session: cookie },
     })
     await aguardarScan(walletId)
+    await aguardarOrigens(walletId)
 
     const alertas = await app.inject({
       method: 'GET',
@@ -352,6 +354,7 @@ describe('kyc_origin — origem dos fundos', () => {
       cookies: { sb_session: cookie },
     })
     await aguardarScan(walletId)
+    await aguardarOrigens(walletId)
 
     const alertas = await app.inject({
       method: 'GET',
@@ -380,6 +383,7 @@ describe('kyc_origin — origem dos fundos', () => {
         cookies: { sb_session: cookie },
       })
       await aguardarScan(walletId)
+    await aguardarOrigens(walletId)
     }
     expect(chamadas).toBe(1)
   })
@@ -417,6 +421,7 @@ describe('kyc_origin — origem dos fundos', () => {
       cookies: { sb_session: cookie },
     })
     await aguardarScan(walletId)
+    await aguardarOrigens(walletId)
     expect(chamadas).toBeLessThanOrEqual(5)
     expect(chamadas).toBeGreaterThan(0)
   })
@@ -459,6 +464,7 @@ describe('kyc_origin — origem dos fundos', () => {
         cookies: { sb_session: cookie },
       })
       await aguardarScan(walletId)
+    await aguardarOrigens(walletId)
     }
 
     // sete transações, teto de cinco por vez: a segunda rodada tem de alcançar

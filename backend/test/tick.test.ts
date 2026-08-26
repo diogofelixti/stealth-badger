@@ -3,6 +3,7 @@ import type { ChainAdapter } from '../src/chain/types'
 import { seal } from '../src/crypto/secretbox'
 import { pool } from '../src/db/pool'
 import { tick } from '../src/worker/tick'
+import { aguardarOrigens } from '../src/privacy/origem-service'
 import { deriveAddress } from '../src/wallet/derive'
 import { parseExtendedKey } from '../src/wallet/descriptor'
 import { resetDb } from './helpers/db'
@@ -121,5 +122,84 @@ describe('tick', () => {
     const adapter: ChainAdapter = { ...adapterWithDust(), close: () => { fechados += 1 } }
     await tick({ adapterFactory: () => adapter })
     expect(fechados).toBe(1)
+  })
+})
+
+describe('tick — origem dos fundos', () => {
+  const achadoDeCorretora = {
+    id: 'entity-behavior-exchange',
+    severity: 'low',
+    confidence: 'medium',
+    title: 'Exchange batch withdrawal pattern detected',
+    description: 'd',
+    recommendation: 'r',
+    scoreImpact: 0,
+    params: {},
+  }
+
+  // O design prevê a análise de origem disparada por "transação nova
+  // detectada", e não só por clique. É o worker que detecta a transação nova,
+  // então é dele que o gatilho precisa sair — senão a origem de um depósito só
+  // é conhecida se alguém estiver olhando a tela.
+  it('analisa a origem do depósito que acabou de chegar', async () => {
+    const analisadas: string[] = []
+    await tick({
+      adapterFactory: () => adapterWithDust(),
+      txScanner: async ctx => {
+        analisadas.push(ctx.txid)
+        return { findings: [achadoDeCorretora], scannerVersion: '0.34.2' }
+      },
+    })
+    await aguardarOrigens(1)
+    expect(analisadas).toEqual(['aa'])
+  })
+
+  it('cria o alerta de origem a partir do que a análise achou', async () => {
+    await tick({
+      adapterFactory: () => adapterWithDust(),
+      txScanner: async () => ({
+        findings: [achadoDeCorretora],
+        scannerVersion: '0.34.2',
+      }),
+    })
+    await aguardarOrigens(1)
+
+    const { rows } = await pool.query<{ type: string; params: Record<string, unknown> }>(
+      `SELECT type, params FROM alerts WHERE type = 'kyc_origin'`,
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.params).toMatchObject({ kind: '@entity.exchange' })
+  })
+
+  // A análise custa segundos contra a cadeia. Se o ciclo esperasse por ela, o
+  // worker deixaria de sincronizar as outras carteiras enquanto isso.
+  it('não faz o ciclo esperar pela análise', async () => {
+    let terminou = false
+    const t0 = Date.now()
+    await tick({
+      adapterFactory: () => adapterWithDust(),
+      txScanner: async () => {
+        await new Promise(pronto => setTimeout(pronto, 400))
+        terminou = true
+        return { findings: [], scannerVersion: '0.34.2' }
+      },
+    })
+    expect(Date.now() - t0).toBeLessThan(300)
+    expect(terminou).toBe(false)
+    await aguardarOrigens(1)
+    expect(terminou).toBe(true)
+  })
+
+  it('não analisa nada quando o ciclo não trouxe transação nova', async () => {
+    let chamadas = 0
+    const contar = async () => {
+      chamadas += 1
+      return { findings: [], scannerVersion: '0.34.2' }
+    }
+    await tick({ adapterFactory: () => adapterWithDust(), txScanner: contar })
+    await aguardarOrigens(1)
+    await tick({ adapterFactory: () => adapterWithDust(), txScanner: contar })
+    await aguardarOrigens(1)
+    expect(chamadas).toBe(1)
   })
 })

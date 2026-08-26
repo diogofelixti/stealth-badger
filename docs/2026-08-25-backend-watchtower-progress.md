@@ -885,6 +885,21 @@ prometeria um número que não vai chegar.
 Saldo parcial continua aparecendo, porque é verdade: é o que existe nos endereços que
 deu para ler, e o aviso ao lado já diz que não é tudo.
 
+## Décima segunda rodada — 26/08, origem disparada por quem detecta
+
+A análise de origem só saía do clique. O design prevê o gatilho em "transação nova
+detectada", e quem detecta é o worker — sem isso, a origem de um depósito só seria
+conhecida se alguém estivesse com a tela aberta na hora.
+
+A lógica saiu da rota para um serviço, e agora tem **dois gatilhos e um caminho só**.
+Roda em segundo plano nos dois: se o ciclo esperasse, deixaria de sincronizar as outras
+carteiras durante os segundos que cada transação custa. E duas análises da mesma
+carteira ao mesmo tempo são impedidas, porque o clique e o worker percorreriam a mesma
+fila em paralelo para chegar ao mesmo lugar gastando o dobro do explorador.
+
+Vale para a demonstração de sexta: o depósito do faucet passa a disparar sozinho o
+alerta de movimentação **e** o de origem.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
@@ -920,9 +935,6 @@ sobre privacidade, não sobre saldo.
 
 ### Reconhecidas e adiadas, com razão registrada
 
-- **Análise de origem disparada pelo worker**, e não só pelo botão. O gatilho da §9.1
-  prevê "transação nova detectada"; hoje só o clique dispara. Precisa de fila própria,
-  senão um `scan tx` de cinco segundos por depósito estica o ciclo de sincronização
 - **Campo de busca de endereços** — barato, mas não muda a avaliação
 
 ### Técnicas

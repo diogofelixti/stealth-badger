@@ -7,10 +7,12 @@ import { deliver } from '../alerts/channels'
 import { alertsForOrigin, alertsForScan } from '../alerts/rules'
 import { saveAlert } from '../alerts/store'
 import { aguardarScan, erroDoUltimoScan, registrarScan, scanEmAndamento } from './andamento'
-import { origensEm } from './origem'
-import { salvarTxScan, transacoesSemAnalise } from './origem-store'
-import { scanTransaction, type PrivacyScan, type TxScan } from './scan'
-import { scanWallet } from './scan'
+import {
+  aguardarOrigens,
+  analisarOrigens,
+  type TxScanner,
+} from './origem-service'
+import { scanWallet, type PrivacyScan } from './scan'
 import { historicoDeScans, salvarScan, ultimoScan } from './store'
 
 /**
@@ -22,16 +24,6 @@ import { historicoDeScans, salvarScan, ultimoScan } from './store'
  */
 const LIMIAR_DE_QUEDA = 5
 
-/**
- * Quantas transações analisar por clique.
- *
- * Cada `scan tx` custa segundos contra a cadeia. Sem teto, uma carteira com
- * trinta depósitos gastaria minutos no primeiro clique e o usuário concluiria
- * que travou. Com teto, a primeira análise termina e as seguintes avançam a
- * fila, da mais recente para a mais antiga.
- */
-const TETO_DE_TRANSACOES = 5
-
 export interface ScanContext {
   canonicalXpub: string
   scriptType: ScriptType
@@ -41,14 +33,6 @@ export interface ScanContext {
 }
 
 export type WalletScanner = (ctx: ScanContext) => Promise<PrivacyScan>
-
-export interface TxScanContext {
-  txid: string
-  network: Network
-  backendUrl: string
-}
-
-export type TxScanner = (ctx: TxScanContext) => Promise<TxScan>
 
 export interface PrivacyRouteOptions {
   scanner?: WalletScanner
@@ -83,8 +67,6 @@ export function registerPrivacyRoutes(
   opts: PrivacyRouteOptions = {},
 ): void {
   const scanner = opts.scanner ?? ((ctx: ScanContext) => scanWallet(ctx))
-  const txScanner = opts.txScanner ?? ((ctx: TxScanContext) => scanTransaction(ctx))
-
   /** Publica um alerta e o entrega pelos canais do usuário. */
   async function publicar(
     candidatos: ReturnType<typeof alertsForScan>,
@@ -104,48 +86,6 @@ export function registerPrivacyRoutes(
         },
         userId,
       )
-    }
-  }
-
-  /**
-   * Analisa a origem das transações que trouxeram fundos e ainda não foram
-   * olhadas. Uma falha numa transação não pode custar as outras: o explorador
-   * pode não conhecer aquele txid, e isso não é motivo para abortar a fila.
-   */
-  async function analisarOrigens(
-    walletId: number,
-    userId: number,
-    ctx: { network: Network; backendUrl: string },
-  ): Promise<void> {
-    for (const pendente of await transacoesSemAnalise(walletId, TETO_DE_TRANSACOES)) {
-      try {
-        const resultado = await txScanner({ txid: pendente.txid, ...ctx })
-        await salvarTxScan(
-          walletId,
-          pendente.txid,
-          resultado.findings,
-          resultado.scannerVersion,
-        )
-        await publicar(
-          alertsForOrigin(origensEm(resultado.findings), {
-            userId,
-            walletId,
-            eventId: pendente.eventId,
-            txid: pendente.txid,
-          }),
-          userId,
-          walletId,
-        )
-      } catch (err) {
-        // A tentativa fica registrada mesmo tendo falhado, senão a transação
-        // que falha sempre consome a cota a cada clique e as outras nunca
-        // chegam a ser analisadas.
-        const motivo = (err as Error).message
-        await salvarTxScan(walletId, pendente.txid, [], 'desconhecida', motivo)
-        console.error(
-          'falha ao analisar a origem de ' + pendente.txid + ': ' + motivo,
-        )
-      }
     }
   }
 
@@ -184,9 +124,14 @@ export function registerPrivacyRoutes(
         walletId,
       )
 
-      await analisarOrigens(walletId, userId, {
+      // Mesmo caminho que o worker usa quando detecta transação nova: uma
+      // função só, dois gatilhos.
+      analisarOrigens({
+        walletId,
+        userId,
         network: carteira.network,
         backendUrl: carteira.url,
+        ...(opts.txScanner ? { txScanner: opts.txScanner } : {}),
       })
     })
 
@@ -214,4 +159,4 @@ export function registerPrivacyRoutes(
   })
 }
 
-export { aguardarScan }
+export { aguardarScan, aguardarOrigens }

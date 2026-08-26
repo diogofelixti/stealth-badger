@@ -7,6 +7,7 @@ import { alertsForEvent } from '../alerts/rules'
 import { saveAlert } from '../alerts/store'
 import { deliver } from '../alerts/channels'
 import { syncWallet } from '../sync/engine'
+import { analisarOrigens, type TxScanner } from '../privacy/origem-service'
 
 export interface TickReport {
   walletsSynced: number
@@ -17,6 +18,7 @@ const DUST_THRESHOLD = 1000
 
 interface TickOptions {
   adapterFactory?: (backend: BackendRow) => ChainAdapter
+  txScanner?: TxScanner
 }
 
 export async function tick(opts: TickOptions = {}): Promise<TickReport> {
@@ -64,6 +66,19 @@ export async function tick(opts: TickOptions = {}): Promise<TickReport> {
     walletsSynced += 1
 
     if (result.newEvents.length === 0) continue
+
+    // Transação nova detectada é o gatilho que o design prevê para a análise
+    // de origem. Sai daqui, e não do clique, porque é o worker que detecta —
+    // senão a origem de um depósito só seria conhecida se alguém estivesse
+    // olhando a tela. Em segundo plano: cada transação custa segundos, e o
+    // ciclo ainda tem outras carteiras para sincronizar.
+    analisarOrigens({
+      walletId,
+      userId,
+      network: w.network,
+      backendUrl: w.url,
+      ...(opts.txScanner ? { txScanner: opts.txScanner } : {}),
+    })
 
     const events = await activeEvents(walletId)
     const novos = events.filter(e => result.newEvents.includes(e.id))

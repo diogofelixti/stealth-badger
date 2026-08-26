@@ -275,9 +275,19 @@ atribuição explícita ao scanner**, um achado que a biblioteca já computa —
 diferente de este projeto construir um produto de sanções e decidir por conta própria
 procedência de lista, jurisdição e tratamento de falso positivo.
 
+A análise de origem tem **dois gatilhos, um caminho só**: o clique em "analisar
+privacidade" e o worker, quando detecta transação nova — que é o gatilho previsto no
+design. Sai do worker porque é ele que detecta: senão a origem de um depósito só seria
+conhecida se alguém estivesse olhando a tela. Roda em segundo plano nos dois casos; se o
+ciclo esperasse por ela, deixaria de sincronizar as outras carteiras durante os segundos
+que cada transação custa.
+
 Cada `scan tx` custa segundos contra a cadeia, então `tx_scans` deduplica por
-`(carteira, txid)` — o que uma transação confirmada revela não muda — e cada análise
-manual processa no máximo **cinco** transações, da mais recente para a mais antiga.
+`(carteira, txid)` — o que uma transação confirmada revela não muda — e cada rodada
+processa no máximo **cinco** transações, da mais recente para a mais antiga. Duas
+análises da mesma carteira ao mesmo tempo são impedidas: o clique e o worker
+analisariam a mesma fila em paralelo, gastando o dobro do explorador para chegar ao
+mesmo lugar.
 
 **Por que dust é crítico e reuso é atenção:** crítico se reserva ao que ainda dá para
 evitar. Poeira plantada pede ação imediata — não gastar aquele UTXO. Reuso de endereço
