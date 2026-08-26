@@ -64,6 +64,34 @@ describe('loadConfig', () => {
     expect(() => loadConfig()).toThrow('CHAIN_BACKEND inválido: nao-existe')
   })
 
+  it('vigia a cada trinta segundos quando nada é dito', () => {
+    process.env.MASTER_KEY_HEX = VALID_KEY
+    delete process.env.WORKER_INTERVAL_MS
+    expect(loadConfig().workerIntervalMs).toBe(30_000)
+  })
+
+  it('aceita outro intervalo, para quem quer o aviso mais cedo', () => {
+    process.env.MASTER_KEY_HEX = VALID_KEY
+    process.env.WORKER_INTERVAL_MS = '10000'
+    expect(loadConfig().workerIntervalMs).toBe(10_000)
+  })
+
+  // Intervalo menor que o ciclo empilha sincronizações da mesma carteira sobre
+  // o mesmo log append-only, e quanto mais lento o explorador, mais ciclos se
+  // acumulam. O piso não é gosto: é o que impede o watchtower de criar o
+  // próprio congestionamento.
+  it('recusa intervalo curto demais para caber um ciclo', () => {
+    process.env.MASTER_KEY_HEX = VALID_KEY
+    process.env.WORKER_INTERVAL_MS = '900'
+    expect(() => loadConfig()).toThrow(/WORKER_INTERVAL_MS/)
+  })
+
+  it('recusa intervalo que não é número', () => {
+    process.env.MASTER_KEY_HEX = VALID_KEY
+    process.env.WORKER_INTERVAL_MS = 'depressa'
+    expect(() => loadConfig()).toThrow(/WORKER_INTERVAL_MS/)
+  })
+
   it('lança erro nomeando o valor inválido quando NETWORK é inválida', () => {
     process.env.MASTER_KEY_HEX = VALID_KEY
     process.env.NETWORK = 'nao-existe'

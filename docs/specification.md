@@ -184,8 +184,13 @@ Medido contra a signet, na mesma carteira de 77 endereços e 31 usados:
 
 | | requisições | tráfego | tempo |
 |---|---|---|---|
-| varrendo tudo | 109 | 11.029 KB | 62 s |
-| reconferindo o que mudou | 79 | 21 KB | 18–27 s |
+| varrendo tudo, uma de cada vez | 109 | 11.029 KB | 62 s |
+| reconferindo o que mudou, uma de cada vez | 79 | 21 KB | 18–27 s |
+| reconferindo o que mudou, cinco de cada vez | 87 | 23 KB | **6 s** |
+
+As oito requisições a mais da última linha são o preço de sondar em bloco: a condição
+de parada do gap limit é reavaliada ao fim de cada bloco de cinco, então a varredura vai
+no máximo quatro endereços além de onde iria sozinha.
 
 O tráfego cai porque `/address/:a/txs` devolve as transações inteiras enquanto
 `/address/:a` devolve só os contadores. Os scripts da medição estão em
@@ -401,6 +406,7 @@ exemplo — jamais reais.
 | `ESPLORA_URL` | backend de cadeia quando `CHAIN_BACKEND=esplora` |
 | `ELECTRUM_URL` | `electrum://host:porta` quando `CHAIN_BACKEND=electrum` |
 | `PUBLIC_BACKEND` | governa o aviso persistente de privacidade |
+| `WORKER_INTERVAL_MS` | intervalo entre ciclos; padrão 30000, mínimo 5000 |
 
 ### 11.1 O backend é escolhido por carteira
 
@@ -533,9 +539,9 @@ Escrito para ser lido antes que alguém pergunte.
   O protocolo é coberto por um servidor de teste local que fala JSON-RPC por TCP —
   incluindo resposta partida em vários pedaços, notificação sem id e erro devolvido
   pelo servidor — mas nenhum Electrs, Fulcrum ou florestad rodou contra ele ainda.
-- **A varredura continua sequencial.** Um ciclo pergunta por um endereço de cada vez,
-  e o tempo é dominado pela latência do explorador público. Paralelizar cortaria o
-  tempo, mas concentraria a rajada — e o adapter ainda não tem backoff para o `429`.
+- **O paralelismo é fixo em cinco consultas simultâneas.** É um número escolhido para
+  não virar rajada contra o explorador público, não um valor ajustado por medição de
+  cada backend.
 - **A interface é de duas telas** — login e um dashboard único. Não há navegação nem
   menus; não há uma terceira tela para onde ir.
 

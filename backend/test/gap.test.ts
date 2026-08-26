@@ -166,3 +166,75 @@ describe('scanGap incremental', () => {
     expect(found.every(a => !a.unchanged)).toBe(true)
   })
 })
+
+describe('scanGap em paralelo', () => {
+  function adapterQueMede(usados: Set<string>) {
+    let correndo = 0
+    let pico = 0
+    const consultados: string[] = []
+    const a: ChainAdapter & { pico: () => number; consultados: () => string[] } = {
+      capabilities: () => ({
+        randomAccess: true, needsRegistration: false, supportsSubscribe: false,
+        hasTxIndex: true, isPublic: false, host: 'falso',
+      }),
+      tipHeight: async () => 100,
+      blockHashAt: async () => 'hash',
+      getHistoryForAddress: async (addr: string) => {
+        correndo += 1
+        pico = Math.max(pico, correndo)
+        consultados.push(addr)
+        await new Promise(pronto => setTimeout(pronto, 5))
+        correndo -= 1
+        return usados.has(addr) ? [{ txid: 'aa', height: 10, blockHash: 'bb' }] : []
+      },
+      pico: () => pico,
+      consultados: () => consultados,
+    }
+    return a
+  }
+
+  async function canonical(): Promise<string> {
+    const { parseExtendedKey } = await import('../src/wallet/descriptor')
+    return parseExtendedKey(ZPUB).canonicalXpub
+  }
+
+  // A varredura consultava um endereço de cada vez. Com 77 endereços e uns
+  // 230 ms de latência, são 18 segundos parados esperando resposta.
+  it('consulta vários endereços ao mesmo tempo', async () => {
+    const adapter = adapterQueMede(new Set()) as ReturnType<typeof adapterQueMede>
+    await scanGap({ ...base, canonicalXpub: await canonical(), gapLimit: 20, adapter })
+    expect(adapter.pico()).toBeGreaterThan(1)
+  })
+
+  // Paralelismo sem teto é a rajada que faz o explorador responder 429: o
+  // watchtower não pode resolver a própria lentidão criando o problema
+  // seguinte.
+  it('mantém um teto de consultas simultâneas', async () => {
+    const adapter = adapterQueMede(new Set()) as ReturnType<typeof adapterQueMede>
+    await scanGap({ ...base, canonicalXpub: await canonical(), gapLimit: 20, adapter })
+    expect(adapter.pico()).toBeLessThanOrEqual(5)
+  })
+
+  // O gap limit continua sendo o que decide onde parar: sondar em bloco não
+  // pode fazer a varredura ir muito além do que iria uma a uma.
+  it('não sonda muito além do que o gap limit mandaria', async () => {
+    const adapter = adapterQueMede(new Set()) as ReturnType<typeof adapterQueMede>
+    const found = await scanGap({
+      ...base, canonicalXpub: await canonical(), gapLimit: 5, adapter,
+    })
+    expect(found).toHaveLength(5)
+    // no máximo um bloco de folga além dos cinco que o gap limit exige
+    expect(adapter.consultados().length).toBeLessThanOrEqual(9)
+  })
+
+  it('continua estendendo a varredura quando encontra endereço usado', async () => {
+    const canonicalXpub = await canonical()
+    const { deriveAddress } = await import('../src/wallet/derive')
+    const terceiro = deriveAddress(canonicalXpub, 'p2wpkh', 'mainnet', 0, 3).address
+    const found = await scanGap({
+      ...base, canonicalXpub, gapLimit: 5, adapter: adapterQueMede(new Set([terceiro])),
+    })
+    expect(found.filter(a => a.used).map(a => a.index)).toEqual([3])
+    expect(found.length).toBeGreaterThanOrEqual(9)
+  })
+})

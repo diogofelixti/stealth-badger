@@ -491,3 +491,68 @@ describe('quando o UTXO é gasto', () => {
     expect(e.payload.spentAtTxid).toBe('yy'.repeat(32))
   })
 })
+
+describe('busca de UTXO em paralelo', () => {
+  it('consulta os UTXOs de vários endereços ao mesmo tempo', async () => {
+    const parsed = parseExtendedKey(ZPUB)
+    const enderecos = Array.from(
+      { length: 6 },
+      (_, i) => deriveAddress(parsed.canonicalXpub, 'p2wpkh', 'mainnet', 0, i).address,
+    )
+    const historico = Object.fromEntries(
+      enderecos.map(a => [a, [{ txid: 'aa', height: 100, blockHash: 'h100' }]]),
+    )
+
+    let correndo = 0
+    let pico = 0
+    const adapter: ChainAdapter = {
+      ...adapterWith(historico, {}),
+      getUtxosForAddress: async () => {
+        correndo += 1
+        pico = Math.max(pico, correndo)
+        await new Promise(pronto => setTimeout(pronto, 10))
+        correndo -= 1
+        return []
+      },
+    }
+
+    await syncWallet(walletId, adapter)
+    expect(pico).toBeGreaterThan(1)
+    expect(pico).toBeLessThanOrEqual(5)
+  })
+
+  // Cada UTXO vira um evento com o endereço de onde veio. Se a ordem das
+  // respostas mandasse, o mesmo conjunto de UTXOs geraria eventos em ordens
+  // diferentes a cada volta, e o log append-only deixaria de ser reproduzível.
+  it('mantém a ordem dos endereços, e não a de quem respondeu antes', async () => {
+    const parsed = parseExtendedKey(ZPUB)
+    const primeiro = deriveAddress(parsed.canonicalXpub, 'p2wpkh', 'mainnet', 0, 0).address
+    const segundo = deriveAddress(parsed.canonicalXpub, 'p2wpkh', 'mainnet', 0, 1).address
+
+    const adapter: ChainAdapter = {
+      ...adapterWith(
+        {
+          [primeiro]: [{ txid: 'aa', height: 100, blockHash: 'h100' }],
+          [segundo]: [{ txid: 'bb', height: 100, blockHash: 'h100' }],
+        },
+        {},
+      ),
+      getUtxosForAddress: async (a: string) => {
+        // o primeiro endereço responde por último de propósito
+        if (a === primeiro) await new Promise(pronto => setTimeout(pronto, 40))
+        return a === primeiro
+          ? [{ txid: 'aa', vout: 0, value: 1000, height: 100 }]
+          : a === segundo
+            ? [{ txid: 'bb', vout: 0, value: 2000, height: 100 }]
+            : []
+      },
+    }
+
+    await syncWallet(walletId, adapter)
+    const { rows } = await pool.query<{ txid: string }>(
+      `SELECT txid FROM chain_events WHERE wallet_id = $1 AND type = 'utxo_created' ORDER BY id`,
+      [walletId],
+    )
+    expect(rows.map(r => r.txid)).toEqual(['aa', 'bb'])
+  })
+})

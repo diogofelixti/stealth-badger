@@ -1072,6 +1072,44 @@ O scripthash no formato Electrum está correto: um endereço com histórico foi 
 como tendo histórico, que é a única forma de saber que a derivação `sha256` invertida
 está certa.
 
+## Décima oitava rodada — 26/08, a varredura em cinco frentes
+
+A varredura consultava um endereço de cada vez. Com 77 endereços e uns 230 ms de
+latência, o processo passava dezoito segundos esperando resposta sem fazer nada.
+
+Paralelizada com teto de cinco. O teto não é enfeite: disparar as 77 de uma vez é
+exatamente a rajada que faz o explorador responder `429`, e o watchtower não pode
+resolver a própria lentidão criando o problema seguinte. Só foi seguro fazer isto
+**depois** do backoff da rodada anterior.
+
+A sondagem acontece em blocos de cinco, e não numa fila só, porque o gap limit precisa
+decidir onde parar: a condição é reavaliada ao fim de cada bloco, então a varredura vai
+no máximo quatro endereços além de onde iria sozinha. Custou oito requisições a mais.
+
+Duas ordens são preservadas de propósito: a parada do gap limit é avaliada na ordem do
+índice, e não na de quem respondeu antes — senão o paralelismo mudaria o conjunto de
+endereços da carteira; e os UTXOs lidos são percorridos na ordem dos endereços, senão a
+mesma carteira geraria sequências diferentes de eventos a cada volta, e um log
+append-only deixaria de ser reproduzível.
+
+| | requisições | tempo |
+|---|---|---|
+| antes | 79 | 18–27 s |
+| depois | 87 | **6,0–6,6 s** |
+
+Medido três vezes seguidas contra a signet. As medições intermediárias de 13,8 s e 21,4 s
+eram variação de rede, não do código — foi preciso repetir para não registrar ruído como
+resultado.
+
+Perfilado por fase: a varredura das duas cadeias são 4,8 s dos 6, e as gravações no banco,
+136 ms. O tempo é da rede, como se supunha, mas agora medido em vez de suposto.
+
+### O intervalo do worker virou configuração
+
+Com o ciclo em seis segundos, faz sentido poder aproximar o alerta.
+`WORKER_INTERVAL_MS` tem piso de cinco segundos, porque intervalo menor que o ciclo
+empilha sincronizações da mesma carteira sobre o mesmo log append-only.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
@@ -1114,7 +1152,5 @@ sobre privacidade, não sobre saldo.
   numa execução entre quinze. Não reproduziu depois, e a máquina construía imagem
   Docker no mesmo instante. Fica anotada em vez de dada por resolvida: intermitência
   que não se explica costuma voltar
-- Varredura ainda sequencial: um endereço de cada vez. Paralelizar cortaria o tempo
-  mas concentraria a rajada, e o adapter Esplora segue sem backoff para o `429`
 - Itens não-código do checklist: repositório público antes de 28/08 19h, pitch
   ensaiado, plano B gravado

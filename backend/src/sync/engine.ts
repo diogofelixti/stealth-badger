@@ -4,7 +4,14 @@ import { pool } from '../db/pool'
 import { activeEvents, appendEvent } from '../events/log'
 import { projectWallet } from '../events/project'
 import type { Network, ScriptType } from '../wallet/descriptor'
-import { criarSonda, inalterado, scanGap, type ScannedAddress } from './gap'
+import { mapComLimite } from './concorrencia'
+import {
+  CONSULTAS_SIMULTANEAS,
+  criarSonda,
+  inalterado,
+  scanGap,
+  type ScannedAddress,
+} from './gap'
 import { detectReorg, rollbackFrom } from './reorg'
 
 export interface SyncResult {
@@ -200,24 +207,35 @@ export async function syncWallet(
     const ilegiveis: string[] = []
     let motivoDaRecusa: string | null = null
 
-    for (const a of scanned.filter(s => s.used)) {
-      if (a.unchanged) {
-        // O backend afirmou que nada mudou neste endereço: pedir a lista de
-        // UTXO de novo devolveria exatamente o que já está no log.
-        skipped += 1
-        continue
-      }
+    const paraConsultar = scanned.filter(s => s.used && !s.unchanged)
+    // O backend afirmou que nada mudou nos demais: pedir a lista de UTXO de
+    // novo devolveria exatamente o que já está no log.
+    skipped = scanned.filter(s => s.used && s.unchanged).length
 
-      // Um endereço que o backend recusa servir não invalida os outros. O
-      // mempool.space, por exemplo, recusa `/utxo` de endereço com mais de 500
-      // saídas não gastas — recusa permanente, e nem defeito nosso nem dele.
-      // Abortar a volta perderia o que dava para ver nos outros endereços.
-      let utxos
-      try {
-        utxos = await adapter.getUtxosForAddress(a.address)
-      } catch (err) {
+    // As consultas correm em paralelo, com teto; o que vem depois é percorrido
+    // na ordem dos endereços, e não na de quem respondeu antes. Cada UTXO vira
+    // um evento no log append-only, e a ordem de quem respondeu primeiro faria
+    // a mesma carteira gerar sequências diferentes a cada volta.
+    const lidos = await mapComLimite(
+      paraConsultar,
+      CONSULTAS_SIMULTANEAS,
+      async a => {
+        // Um endereço que o backend recusa servir não invalida os outros. O
+        // mempool.space, por exemplo, recusa `/utxo` de endereço com mais de
+        // 500 saídas não gastas — recusa permanente, e nem defeito nosso nem
+        // dele. Abortar a volta perderia o que dava para ver nos outros.
+        try {
+          return { a, utxos: await adapter.getUtxosForAddress!(a.address), erro: null }
+        } catch (err) {
+          return { a, utxos: null, erro: (err as Error).message }
+        }
+      },
+    )
+
+    for (const { a, utxos, erro: falha } of lidos) {
+      if (utxos === null) {
         ilegiveis.push(a.address)
-        motivoDaRecusa ??= (err as Error).message
+        motivoDaRecusa ??= falha
         continue
       }
 
