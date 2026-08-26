@@ -362,6 +362,10 @@ Escrito para ser lido antes que alguém pergunte.
 | Item | Situação |
 |---|---|
 | **`registerDescriptor` / `rescanFrom`** | caminho de Bitcoin Core e Floresta; previstos na interface, sem implementação |
+| **Escolher o backend de cadeia pela interface** | hoje é `CHAIN_BACKEND` no `.env`, um backend global para toda a instância. O schema já prevê backend por usuário (`backends.user_id`) |
+| **Vigiar endereço avulso**, fora de carteira | `addresses`, `chain_events`, `utxos` e `alerts` são todos ancorados em `wallet_id` |
+| **Busca de endereços** | não há rota nem tela |
+| **Alertas sobre endereços sancionados** | fora de escopo por decisão; ver §4 do design |
 | **Alertas `score_dropped` e `kyc_origin`** | dependem da integração com `am-i-exposed` |
 | **Coin control** (rótulos, tags, regras de gasto, BIP-329) | modelado, não construído |
 | **Fingerprints de transação** | não construído |

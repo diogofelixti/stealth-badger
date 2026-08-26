@@ -127,6 +127,20 @@ Tudo o que foi descrito não cabe em 3 dias. O recorte é a decisão central.
   peso computacional que não paga em 3 dias
 - Quotas, convites, RBAC, internacionalização, SMTP
 
+### Pedidos posteriores ao recorte — levantados em 26/08
+
+Quatro funcionalidades pedidas depois que o recorte foi fechado. Registradas aqui com
+a decisão tomada, para que a §4 continue sendo a fonte da verdade sobre escopo em vez
+de virar acordo verbal.
+
+| Pedido | Decisão | Razão |
+|---|---|---|
+| **Escolher o backend de cadeia pela tela**, em vez de só por `.env` | **entra** | O passo 5 do roteiro da §12.1 — as duas posturas de privacidade lado a lado — é chamado ali mesmo de argumento central, e é impossível com um backend global vindo do ambiente. Não é funcionalidade nova: é a condição do pitch já desenhado |
+| **Alertar sobre fundos de/para corretoras e entidades conhecidas** | **entra como `kyc_origin`**, já previsto na §8.1 | Está na lista "deve entrar" desde o começo. Depende da integração do `am-i-exposed`, que é o risco nomeado nº 1 |
+| **Alertar sobre endereços sancionados** (OFAC e equivalentes) | **fora de escopo** | Não é o mesmo que `kyc_origin`. Exige decidir procedência da lista, jurisdição e o que fazer com falso positivo — e dizer a um usuário que as moedas dele são problemáticas é afirmação com peso que este projeto não desenhou. Vai para o roadmap |
+| **Vigiar endereço avulso**, fora de qualquer carteira | **fora do MVP, com dívida reconhecida** | A descrição do produto diz "vigia endereços *e* carteiras", e o recorte só entregou carteira. O schema ancora `addresses`, `chain_events`, `utxos` e `alerts` em `wallet_id`; o caminho barato é modelar o endereço avulso como carteira de um endereço só, reaproveitando log, projeção e dedupe, mas `syncWallet` precisa de um ramo para carteira sem xpub. Meio dia de trabalho, que não existe antes da entrega |
+| **Campo de busca de endereços** | **fora do MVP** | A interface é de duas telas por decisão. Buscar entre os endereços da própria carteira é barato, mas não resolve nada que o júri perceba em dez minutos |
+
 ---
 
 ## 5. Arquitetura
@@ -519,6 +533,14 @@ demonstração ao vivo · limitações + próximos passos.** Sugestão de divis�
 O ponto 5 combinado com o 2 é o argumento central: **as duas posturas de privacidade
 demonstradas lado a lado, na mesma aplicação.** O adapter deixa de ser arquitetura
 abstrata e vira a tese.
+
+> **Conferido em 26/08: metade deste roteiro não roda hoje.** Os passos 3, 4 e 7
+> dependem de código que não existe (`am-i-exposed`, tabela de UTXO com tags e freeze,
+> BIP-329), e o passo 5 é impossível enquanto o backend for global e vindo do `.env` —
+> daí a decisão de fazer a seleção de backend entrar. O estado item a item, e o roteiro
+> alternativo que usa só o que existe, ficam em
+> `docs/2026-08-25-backend-watchtower-progress.md`. Este roteiro é a intenção do
+> design; aquele é o que sobe no palco.
 
 ---
 

@@ -497,13 +497,92 @@ docker exec coin-controll-postgres-1 \
   sincronizou em `synced`, altura 319381
 - `docs/specification.md` atualizada
 
+## Quarta rodada — 26/08, conferência visual
+
+Feita em navegador headless contra `http://localhost:8080`, que é o que o avaliador
+veria — não o dev server.
+
+**Um defeito real, corrigido.** A listra aposemática e o selo de postura ficavam *no*
+topo do documento, não *presos* a ele. Com 43 alertas o painel tem 5723 px de altura:
+rolar o feed levava embora a advertência de que a consulta passa por explorador
+público. Isso contraria o princípio de que o aviso é persistente — era o toast que
+some, disfarçado de rolagem. É o tipo de defeito que teste de unidade não pega, porque
+jsdom não faz layout e não sabe o que é `position: sticky`.
+
+Conferido e passando:
+
+| Item | Resultado |
+|---|---|
+| Selo de estado parou de oscilar | 25 amostras em 75 s, sempre `synced/100`, atravessando ciclos do worker |
+| Saldo à vista e total correto | 7.552.468 sats, 1 carteira, 32 UTXOs |
+| Feed com os quatro tipos de alerta | `address_reused` em âmbar, `dust_received` em vermelho |
+| Alternância pt→en traduz o histórico | o catálogo bilíngue funciona sobre alerta já gravado |
+| Tela de estreia | formulário aberto, aviso watch-only à vista, sem selo de postura — correto, sem carteira não há postura a declarar |
+| 390 px sem rolagem horizontal | empilha em coluna única |
+
+O único erro de console é o `401` do `api.me()` na carga inicial sem sessão, capturado
+e tratado. Comportamento correto.
+
+Observação sem ação: a tela de login veste a listra âmbar incondicionalmente, antes de
+existir postura a declarar, enquanto o painel vazio usa a linha neutra.
+
+## Roteiro da demonstração — estado real, conferido em 26/08
+
+O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
+
+| Passo do roteiro original | Estado |
+|---|---|
+| 1. Login, painel vazio | **funciona** — conferido em navegador em 26/08 |
+| 2. xpub → modo público, badge de aviso aceso | **funciona** |
+| 3. `am-i-exposed`: score e achados | **não existe** — integração não feita |
+| 4. Tabela de UTXO com tags de proveniência, dust congelado | **não existe** — `utxos.frozen` está no schema e nada o escreve |
+| 5. Segunda carteira em modo soberano, lado a lado com a pública | **impossível hoje** — o backend é global, vem do `.env`, e o `NETWORK` único faz o cadastro recusar chave de outra rede |
+| 6. Transação real no signet → alerta no celular | **funciona** — é o que foi validado ponta a ponta |
+| 7. Exportar BIP-329 e abrir no Sparrow | **não existe** |
+| 8. Roadmap | falar |
+
+O passo 6 é o clímax e está de pé. O passo 5 é chamado no design de argumento central,
+e é o que motiva a seleção de backend a entrar no escopo.
+
+### Roteiro alternativo, se nada mais for construído
+
+Login → cadastrar a carteira de signet → selo de explorador público aceso e preso ao
+topo → o feed mostra `address_reused` e `dust_received` disparados por transação real →
+faucet dispara nova transação → alerta chega no celular ao vivo → roadmap honesto.
+
+Perde o contraste das duas posturas e perde o coin control, mas sustenta a tese: alertar
+sobre privacidade, não sobre saldo.
+
 ## Pendências
+
+### Em execução
+
+- **Seleção de backend pela tela** — decidida em 26/08 (ver §4 do design). Sem ela o
+  passo 5 do pitch não roda. O schema já prevê backend por usuário
+  (`backends.user_id`, `NULL` = global); faltam rota, seleção no cadastro de carteira e
+  tela
+- **Integração do `am-i-exposed`** — risco nomeado nº 1 do design, com spike previsto
+  para terça de manhã e não executado. Timebox de duas horas: se não rodar sob Node 20
+  nesse prazo, corta e o roteiro alternativo assume. Habilita `score_dropped` e
+  `kyc_origin`, este último a resposta ao pedido de alertar sobre fundos de corretora
+
+### Reconhecidas e adiadas, com razão registrada
+
+- **Vigiar endereço avulso** fora de carteira — a descrição do produto promete
+  "endereços *e* carteiras" e só carteira foi entregue. Caminho barato mapeado
+  (carteira de um endereço só), mas exige um ramo em `syncWallet` para carteira sem
+  xpub
+- **Alertar sobre endereços sancionados** — fora de escopo por decisão, não por
+  esquecimento: é afirmação de peso diferente do `kyc_origin` e exige decidir
+  procedência de lista, jurisdição e falso positivo
+- **Campo de busca de endereços** — barato, mas não muda a avaliação
+
+### Técnicas
 
 - **O adapter Electrum nunca falou com um servidor Electrum de verdade.** O protocolo
   está coberto por um servidor de teste local — resposta partida em pedaços,
   notificação sem id, erro devolvido pelo servidor — mas nenhum Electrs, Fulcrum ou
   florestad rodou contra ele
-- Conferência visual da interface pelo navegador
 - Varredura ainda sequencial: um endereço de cada vez. Paralelizar cortaria o tempo
   mas concentraria a rajada, e o adapter Esplora segue sem backoff para o `429`
 - `utxo_spent` continua gravado na altura da ponta e sem a transação que gastou
