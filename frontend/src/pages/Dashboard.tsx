@@ -91,6 +91,16 @@ export function Dashboard({
     void recarregar()
   }, [recarregar])
 
+  // A análise de privacidade demora mais de um minuto e termina no servidor,
+  // sem avisar ninguém. Enquanto alguma estiver correndo, a tela reconsulta —
+  // e para assim que a última termina, em vez de ficar batendo para sempre.
+  const analisando = wallets.some(w => w.privacyScanning)
+  useEffect(() => {
+    if (!analisando) return
+    const timer = setInterval(() => void recarregar(), 4000)
+    return () => clearInterval(timer)
+  }, [analisando, recarregar])
+
   // O alerta aparece sozinho: o feed é empurrado pelo servidor, sem polling.
   useEffect(() => {
     const source = new EventSource('/api/stream', { withCredentials: true })
@@ -206,7 +216,13 @@ export function Dashboard({
           )}
 
           {wallets.map(w => (
-            <WalletCard key={w.id} wallet={w} catalog={catalog} lang={lang} />
+            <WalletCard
+              key={w.id}
+              wallet={w}
+              catalog={catalog}
+              lang={lang}
+              onScan={() => void api.scanPrivacy(w.id).then(recarregar)}
+            />
           ))}
         </aside>
 

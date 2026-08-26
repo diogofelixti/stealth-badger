@@ -387,6 +387,43 @@ que o projeto é self-hostável e que a chave nunca é versionada.
 
 ---
 
+## 11.4 Análise de privacidade
+
+O `am-i-exposed` (MIT) é chamado **como CLI, por subprocess**. O pacote publica só
+`bin`, sem `main` nem `exports`: não há biblioteca para importar.
+
+Três decisões que o resultado depende:
+
+- **Vai um descriptor, nunca a chave crua.** Um `tpub` não declara tipo de script; o
+  scanner assume legado, deriva endereços que nunca existiram e devolve um relatório
+  bem formatado dizendo que a carteira está vazia. Medido contra a signet: 32 UTXOs
+  reais, relatório anunciando zero. É a pior forma de errar, porque não parece erro.
+- **`--api` aponta para o mesmo backend que vigia a carteira.** Sem isso o scanner
+  consulta o explorador público dele, e os endereços ficam expostos a um segundo
+  observador que o usuário nunca escolheu — dentro da ferramenta que existe para
+  avisar sobre exatamente isso.
+- **O campo `links` da saída é descartado.** Ele traz uma URL de site de terceiro com
+  o xpub embutido. Guardar ou exibir seria convidar o usuário a colar a chave fora
+  daqui.
+
+A análise leva por volta de **78 segundos** contra a signet, porque o scanner faz a
+própria varredura por gap limit. Por isso `POST /api/wallets/:id/scan` responde `202` e
+o trabalho segue em segundo plano: segurar a conexão entregaria a decisão a um timeout
+de proxy, e o usuário veria "erro" numa análise que estava indo bem. Uma segunda
+chamada durante a primeira não dispara nada.
+
+`privacy_scans` é **append-only**, como `chain_events` e pela mesma razão: o que este
+projeto acrescenta ao scanner original é o eixo do tempo. Sobrescrever o resultado
+anterior transformaria "o score caiu depois daquela consolidação" num número solto.
+
+> **Empacotamento:** o scanner depende do `better-sqlite3`, módulo nativo sem prebuild
+> para musl. O `Dockerfile` do backend ganhou um estágio com `python3 make g++` para
+> compilá-lo; o compilador não viaja para a imagem final. Sem isso o build morre em
+> "Could not find any Python installation", erro que não menciona nem o scanner nem o
+> sqlite.
+
+---
+
 ## 12. O que ainda não existe
 
 Escrito para ser lido antes que alguém pergunte.
@@ -399,7 +436,7 @@ Escrito para ser lido antes que alguém pergunte.
 | **Vigiar endereço avulso**, fora de carteira | `addresses`, `chain_events`, `utxos` e `alerts` são todos ancorados em `wallet_id` |
 | **Busca de endereços** | não há rota nem tela |
 | **Alertas sobre endereços sancionados** | fora de escopo por decisão; ver §4 do design |
-| **Alertas `score_dropped` e `kyc_origin`** | dependem da integração com `am-i-exposed` |
+| **Alertas `score_dropped` e `kyc_origin`** | a análise já roda e é persistida; falta transformar a variação de score e os achados de origem em alerta |
 | **Coin control** (rótulos, tags, regras de gasto, BIP-329) | modelado, não construído |
 | **Fingerprints de transação** | não construído |
 | **Limiar de poeira configurável** | fixo em 1000 sats; não há tabela `alert_rules` |

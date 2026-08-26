@@ -8,6 +8,10 @@ const catalogo = {
   'wallet.importingNote': 'Varrendo a cadeia de change. O saldo total acima ainda não inclui esta carteira.',
   'wallet.syncError': 'Falha na sincronização',
   'balance.utxos': '{n} UTXOs',
+  'privacy.score': 'Privacidade {score}/100 · {grade}',
+  'privacy.scan': 'Analisar privacidade',
+  'privacy.scanning': 'analisando...',
+  'privacy.never': 'privacidade ainda não analisada',
 }
 
 const base: Wallet = {
@@ -15,6 +19,7 @@ const base: Wallet = {
   fingerprint: 'c81b04af', syncState: 'synced', syncProgress: 100,
   syncHeight: 319233, balanceSats: '412850', utxoCount: 4, frozenCount: 0,
   backendIsPublic: true, backendUrl: 'https://mempool.space/signet/api',
+  privacyScore: null, privacyGrade: null, privacyScannedAt: null,
 }
 
 describe('WalletCard', () => {
@@ -76,5 +81,40 @@ describe('WalletCard', () => {
 
     const exposta = render(<WalletCard wallet={base} catalog={catalogo} lang="pt" />)
     expect(exposta.container.querySelector('[data-wallet-posture="public"]')).not.toBeNull()
+  })
+
+  it('não inventa score para carteira que nunca foi analisada', () => {
+    render(<WalletCard wallet={base} catalog={catalogo} lang="pt" />)
+    expect(screen.getByText(/ainda não analisada/i)).toBeDefined()
+    expect(screen.queryByText(/\/100/)).toBeNull()
+  })
+
+  it('mostra score e nota depois da análise', () => {
+    const analisada: Wallet = {
+      ...base,
+      privacyScore: 66,
+      privacyGrade: 'C',
+      privacyScannedAt: '2026-08-26T12:00:00Z',
+    }
+    render(<WalletCard wallet={analisada} catalog={catalogo} lang="pt" />)
+    expect(screen.getByText(/66\/100/)).toBeDefined()
+    expect(screen.getByText(/\bC\b/)).toBeDefined()
+  })
+
+  // A análise leva mais de um minuto. Sem dizer que está correndo, o usuário
+  // clica de novo achando que o botão não funcionou.
+  it('diz que está analisando, em vez de parecer que o clique não pegou', () => {
+    const rodando: Wallet = { ...base, privacyScanning: true } as Wallet
+    render(<WalletCard wallet={rodando} catalog={catalogo} lang="pt" onScan={() => {}} />)
+    expect(screen.getByText(/analisando/i)).toBeDefined()
+  })
+
+  it('oferece disparar a análise quando há como', () => {
+    const cliques: number[] = []
+    render(
+      <WalletCard wallet={base} catalog={catalogo} lang="pt" onScan={() => cliques.push(1)} />,
+    )
+    screen.getByRole('button', { name: /analisar privacidade/i }).click()
+    expect(cliques).toHaveLength(1)
   })
 })

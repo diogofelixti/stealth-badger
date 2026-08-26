@@ -2,6 +2,13 @@ import type { Catalog, Lang, Wallet } from '../lib/api'
 import { formatSats } from '../lib/format'
 import { render } from '../lib/i18n'
 
+/** Verde acima de 80, âmbar acima de 50, vermelho abaixo. */
+function corDoScore(score: number): string {
+  if (score >= 80) return 'var(--sb-sovereign)'
+  if (score >= 50) return 'var(--sb-warning)'
+  return 'var(--sb-critical)'
+}
+
 function host(url: string): string {
   try {
     return new URL(url).host
@@ -14,10 +21,12 @@ export function WalletCard({
   wallet,
   catalog,
   lang,
+  onScan,
 }: {
   wallet: Wallet
   catalog: Catalog
   lang: Lang
+  onScan?: () => void
 }) {
   // Só a primeira importação esconde o saldo. O backend deixou de remarcar
   // como `importing` quem já sincronizou, mas a condição continua checando
@@ -66,6 +75,45 @@ export function WalletCard({
           </p>
         </>
       )}
+
+      {/* O score de privacidade é a leitura do scanner sobre esta carteira.
+          Enquanto não houver análise, a linha diz que não houve — inventar um
+          número, ou mostrar zero, seria pior que admitir a ausência. */}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-[10px]">
+        {wallet.privacyScore === null ? (
+          <span className="text-xs text-faint">
+            {render(catalog, 'privacy.never', {}, lang)}
+          </span>
+        ) : (
+          <span
+            className="text-xs uppercase tracking-label"
+            style={{ color: corDoScore(wallet.privacyScore) }}
+          >
+            {render(
+              catalog,
+              'privacy.score',
+              { score: wallet.privacyScore, grade: wallet.privacyGrade ?? '?' },
+              lang,
+            )}
+          </span>
+        )}
+
+        {onScan &&
+          (wallet.privacyScanning ? (
+            <span className="text-xs text-faint">
+              {render(catalog, 'privacy.scanning', {}, lang)}
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={onScan}
+              className="text-xs uppercase tracking-label"
+              style={{ color: 'var(--sb-accent)' }}
+            >
+              {render(catalog, 'privacy.scan', {}, lang)}
+            </button>
+          ))}
+      </div>
 
       {/* Por onde *esta* carteira é vigiada. O selo do topo fala da sessão
           inteira e não distingue uma carteira da outra; aqui é onde o

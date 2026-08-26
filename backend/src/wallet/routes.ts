@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import type { ChainAdapter } from '../chain/types'
 import { createAdapter, type BackendRow } from '../chain/adapter'
 import { backendDoUsuario, ensureBackendGlobal } from '../chain/backends'
+import { scanEmAndamento } from '../privacy/andamento'
 import { loadConfig } from '../config'
 import { seal } from '../crypto/secretbox'
 import { pool } from '../db/pool'
@@ -154,6 +155,8 @@ export function registerWalletRoutes(
               w.xpub_fingerprint AS fingerprint, w.sync_state AS "syncState",
               w.sync_progress AS "syncProgress", w.sync_height AS "syncHeight",
               b.is_public AS "backendIsPublic", b.url AS "backendUrl",
+              p.score AS "privacyScore", p.grade AS "privacyGrade",
+              p.scanned_at AS "privacyScannedAt",
               COALESCE((
                 SELECT sum(value_sats) FROM utxos u
                 WHERE u.wallet_id = w.id AND u.spent_at_txid IS NULL
@@ -168,10 +171,21 @@ export function registerWalletRoutes(
               )::int AS "frozenCount"
          FROM wallets w
          JOIN backends b ON b.id = w.backend_id
+         -- LATERAL em vez de subconsulta por coluna: uma varredura só traz
+         -- score, nota e data da mesma análise, e não de três diferentes
+         LEFT JOIN LATERAL (
+           SELECT score, grade, scanned_at FROM privacy_scans ps
+            WHERE ps.wallet_id = w.id
+            ORDER BY ps.scanned_at DESC, ps.id DESC LIMIT 1
+         ) p ON true
         WHERE w.user_id = $1
         ORDER BY w.created_at DESC`,
       [req.userId],
     )
-    return reply.send(rows)
+    // Se a análise está correndo é estado de processo, não de banco: vem do
+    // registro em memória para que a tela não precise inferir pelo relógio.
+    return reply.send(
+      rows.map(r => ({ ...r, privacyScanning: scanEmAndamento(Number(r.id)) })),
+    )
   })
 }

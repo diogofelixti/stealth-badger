@@ -1,13 +1,17 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import cookie from '@fastify/cookie'
 import type { WalletRouteOptions } from './wallet/routes'
+import type { PrivacyRouteOptions } from './privacy/routes'
 import { registerAlertRoutes } from './alerts/routes'
 import { registerBackendRoutes } from './chain/routes'
+import { registerPrivacyRoutes } from './privacy/routes'
 import { registerAuthRoutes } from './auth/routes'
 import { registerWalletRoutes } from './wallet/routes'
 import { registerI18nRoutes } from './i18n/routes'
 
-export function buildApp(opts: WalletRouteOptions = {}): FastifyInstance {
+export type AppOptions = WalletRouteOptions & PrivacyRouteOptions
+
+export function buildApp(opts: AppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false })
 
   app.register(cookie)
@@ -16,6 +20,7 @@ export function buildApp(opts: WalletRouteOptions = {}): FastifyInstance {
   registerAuthRoutes(app)
   registerBackendRoutes(app)
   registerWalletRoutes(app, opts)
+  registerPrivacyRoutes(app, opts)
   registerI18nRoutes(app)
   registerAlertRoutes(app)
 

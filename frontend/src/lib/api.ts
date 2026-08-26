@@ -34,6 +34,33 @@ export interface Wallet {
   frozenCount: number
   backendIsPublic: boolean
   backendUrl: string
+  privacyScore: number | null
+  privacyGrade: string | null
+  privacyScannedAt: string | null
+  privacyScanning?: boolean
+}
+
+export interface PrivacyFinding {
+  id: string
+  severity: string
+  confidence: string
+  title: string
+  description: string
+  recommendation: string
+  scoreImpact: number
+}
+
+export interface PrivacyReport {
+  latest: {
+    score: number
+    grade: string
+    findings: PrivacyFinding[]
+    scannerVersion: string
+    scannedAt: string
+  } | null
+  history: { score: number; grade: string; scannedAt: string }[]
+  running: boolean
+  error: string | null
 }
 
 export type BackendKind = 'esplora' | 'electrum'
@@ -93,6 +120,9 @@ export const api = {
       body: JSON.stringify({ kind, url, isPublic }),
     }),
   alerts: () => request<Alert[]>('/api/alerts'),
+  scanPrivacy: (walletId: number) =>
+    request<{ status: string }>(`/api/wallets/${walletId}/scan`, { method: 'POST' }),
+  privacy: (walletId: number) => request<PrivacyReport>(`/api/wallets/${walletId}/privacy`),
   catalog: (lang: Lang) => request<Catalog>(`/api/i18n/${lang}`),
   setLanguage: (language: Lang) =>
     request<{ ok: true; language: Lang }>('/api/auth/language', {
