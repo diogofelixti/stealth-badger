@@ -357,3 +357,95 @@ Backend em `NETWORK=signet` contra `https://mempool.space/signet/api`:
 - zpub de mainnet recusado no cadastro com a mensagem esperada
 
 Suíte completa: 18 arquivos, 123 testes. `npx tsc --noEmit` limpo.
+
+---
+
+## Segunda rodada de verificação — defeitos achados na tela
+
+Três defeitos que a suíte não pegava, todos encontrados usando o sistema como
+usuário. Cada um corrigido com teste antes da correção.
+
+### Tipo de script assumido em vez de descoberto
+
+`xpub` e `tpub` não dizem o tipo de script. A SLIP-132 os atribui a BIP-44 legado,
+mas Bitcoin Core e Sparrow nunca a adotaram — usam output descriptors, onde o tipo
+vive fora da chave — e exportam `tpub` puro para qualquer tipo.
+
+Consequência: uma `tpub` de carteira native segwit entrava como legado, derivava
+endereços que nunca existiram, sincronizava até `synced` e mostrava **saldo zero sem
+erro nenhum**.
+
+Correção: `parseExtendedKey` marca a chave como ambígua, e o cadastro descobre o tipo
+perguntando à cadeia — deriva os três primeiros endereços de cada candidato e adota o
+que tem histórico. Sem histórico em tipo nenhum, assume `p2wpkh`.
+
+- `backend/src/wallet/detect.ts`, `descriptor.ts`, `routes.ts`, `app.ts`
+- `backend/test/detect.test.ts`, `test/wallets.test.ts`
+
+### Saldo zero durante a reconferência
+
+O painel excluía do total, e o cartão trocava o saldo por travessões, sempre que o
+estado era `importing`. Isso vale na primeira importação; mas o worker remarca a
+carteira a cada ciclo, e uma carteira com histórico grande passa **83% do tempo**
+nesse estado.
+
+O que separa os dois casos é `syncHeight`, que só existe depois da primeira
+sincronização completa.
+
+Um teste existente (`WalletCard.test.tsx`) *codificava* o comportamento errado — usava
+carteira já sincronizada para provar que o saldo some. Por isso a suíte nunca pegou.
+
+- `frontend/src/pages/Dashboard.tsx`, `components/WalletCard.tsx`
+
+### Ciclos do worker se sobrepondo
+
+`setInterval` dispara pelo relógio, não pelo término. Medido contra a signet, um ciclo
+dessa carteira leva de 7 a 32 segundos — então ciclos se sobrepunham, rodando
+sincronizações concorrentes da mesma carteira sobre um log append-only.
+
+- `backend/src/worker/loop.ts`, `src/index.ts`, `test/loop.test.ts`
+
+### Tela de estreia
+
+Sem carteira, o painel anunciava "Saldo total: 0 sats" e oferecia como única ação um
+link de texto minúsculo. Agora troca o saldo zero por uma frase que diz o que falta e
+abre o formulário já expandido.
+
+- `frontend/src/pages/Dashboard.tsx`, `backend/src/i18n/catalog.ts`
+
+### Proxy do dev server
+
+A porta 3000 estava ocupada por outro projeto na máquina de desenvolvimento, e o proxy
+do Vite apontava fixo para ela: as chamadas de `/api` recebiam o 404 em HTML desse
+outro serviço e a interface parecia quebrada sem erro que apontasse o motivo. O alvo
+passou a ser configurável por `BACKEND_URL`.
+
+## Taxonomia de alertas validada com movimentação real
+
+Todos os tipos implementados dispararam contra a signet, com transações criadas pelo
+próprio desenvolvedor:
+
+| Tipo | Severidade | Confirmado |
+|---|---|---|
+| `funds_received` | info | sim, inclusive em `@state.mempool` |
+| `funds_spent` | info | sim |
+| `address_reused` | warning | sim |
+| `dust_received` | critical | sim |
+| `reorg_detected` | warning | só por teste — reorg não ocorre sob demanda |
+
+## Estado ao fim da rodada
+
+- backend: 20 arquivos de teste, 140 testes
+- frontend: 6 arquivos de teste, 35 testes
+- `npx tsc --noEmit` limpo nos dois
+- `docker compose up -d --build` sobe os 5 containers
+- `docs/specification.md` criada, no caminho que o avaliador procura
+
+## Pendências
+
+- Task 13 (adapter Electrum) — não iniciada; o plano a marca como a primeira a cortar
+- Varredura não incremental: cada ciclo revarre todos os endereços, o que mantém o selo
+  de estado oscilando e gera volume alto de consulta ao explorador público
+- Conferência visual da interface pelo navegador
+- Itens não-código do checklist: repositório público antes de 28/08 19h, pitch
+  ensaiado, plano B gravado
