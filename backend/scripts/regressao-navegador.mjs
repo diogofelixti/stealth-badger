@@ -31,7 +31,12 @@ await page.fill('input[type="email"]', 'estreia@teste.local')
 await page.fill('input[type="password"]', 'senha-bem-longa-de-teste')
 await page.getByRole('button').filter({ hasNotText: /^(pt|en)$/i }).first().click()
 await page.waitForSelector('[role="status"][data-posture]')
-await page.waitForTimeout(1500)
+await page.waitForTimeout(1200)
+
+// O idioma é do usuário e fica gravado: sem fixá-lo, o script depende de como
+// a sessão anterior terminou, e os seletores em português deixam de casar.
+await page.getByRole('button', { name: /^pt$/i }).click()
+await page.waitForTimeout(900)
 
 ok('selo de privacidade presente', (await page.locator('[role="status"][data-posture]').count()) === 1)
 await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
