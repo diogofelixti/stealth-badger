@@ -12,8 +12,7 @@
   <a href="#o-problema">Problema</a> •
   <a href="#o-que-ele-faz">Recursos</a> •
   <a href="#início-rápido">Início rápido</a> •
-  <a href="#arquitetura">Arquitetura</a> •
-  <a href="#capturas">Capturas</a>
+  <a href="#arquitetura">Arquitetura</a>
 </p>
 
 <p align="center">
@@ -177,32 +176,6 @@ histórico de qualquer script na hora; Floresta e Bitcoin Core exigem registrar 
 antes e varrer a cadeia a partir de uma altura. O adapter declara o que sabe fazer, e o
 motor decide o caminho.
 
-## Capturas
-
-<details>
-<summary><strong>Painel</strong> — aviso de explorador público preso ao topo, saldo projetado do log de eventos e o feed ao vivo</summary>
-<br>
-<p align="center">
-  <img src="docs/screenshots/painel.png" alt="Painel com feed de alertas ao vivo" width="900">
-</p>
-</details>
-
-<details>
-<summary><strong>Análise de privacidade</strong> — score, nota e o que o scanner viu, com a recomendação de cada achado</summary>
-<br>
-<p align="center">
-  <img src="docs/screenshots/privacidade.png" alt="Achados da análise de privacidade" width="900">
-</p>
-</details>
-
-<details>
-<summary><strong>Coin control</strong> — rótulo, tags e congelamento por UTXO, com dust destacado e ida e volta em BIP-329</summary>
-<br>
-<p align="center">
-  <img src="docs/screenshots/coin-control.png" alt="Tabela de UTXOs com rótulos e congelamento" width="900">
-</p>
-</details>
-
 ## Documentação
 
 | Documento | Conteúdo |
@@ -231,7 +204,7 @@ A análise de privacidade se apoia no [`am-i-exposed`](https://github.com/Copexi
 (MIT), de Copexit. As heurísticas de fingerprint de transação seguem o trabalho do
 [`lumen-fingerprints`](https://fungi-protocol.github.io/lumen-fingerprints/).
 
-Projeto do hackathon **Bitcoin Vibe Builder**, dos [bitcoinCoders](https://discord.com/invite/e5qUsNWgQg).
+Projeto do hackathon **Bitcoin Vibe Builder**, do [bitcoin Coders](https://x.com/bitcoin_coders).
 
 ## Licença
 
