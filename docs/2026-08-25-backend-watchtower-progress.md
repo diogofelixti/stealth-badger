@@ -594,6 +594,63 @@ a CLI roda dentro do contêiner.
 
 Achado que o scanner tem e nós não: `wallet-uniform-script`, positivo, +3 no score.
 
+## Sétima rodada — 26/08, coin control e BIP-329
+
+Passos 4 e 7 do roteiro, os dois na lista "deve entrar" do design, que não pode ser
+cortada.
+
+### Um defeito estrutural que estava escondido no schema
+
+`utxos.frozen` existia desde a migração 001 e **nunca funcionou**. `utxos` é projeção:
+`projectWallet` apaga a tabela inteira e reconstrói a cada sincronização. Congelar um
+UTXO durava até o ciclo seguinte — trinta segundos — e ele voltava a ser gastável sem
+nada na tela explicando por quê.
+
+Rótulo, tags e congelamento passaram para `utxo_marks`, fora da projeção. A chave é
+`(carteira, txid, vout)` e **não referencia `utxos` de propósito**: a marca precisa
+sobreviver ao UTXO ser gasto, porque o BIP-329 exporta rótulo de saída gasta também, e
+apagar destruiria texto que o usuário escreveu. A projeção passa a copiar o
+congelamento de volta, para que as consultas que já liam `utxos.frozen` continuem
+verdadeiras.
+
+### BIP-329
+
+Ida e volta sem perda, com teste de round-trip. Duas decisões:
+
+- **congelamento vira `spendable: false`**, que é como a spec diz "não gaste este
+  UTXO" e é o que faz o Sparrow respeitar a decisão. Escrito só quando é falso, já que
+  o padrão da spec é verdadeiro;
+- **a spec não tem campo de tag.** Elas são anexadas ao rótulo como `#tag`, o que
+  mantém a ida e a volta sem perda e continua legível em carteira que só saiba mostrar
+  o rótulo.
+
+A importação atravessa arquivo de outra carteira sem engasgar: `tx`, `addr` e `xpub`
+são contados e pulados, linha corrompida não aborta o arquivo, e saída que não é desta
+carteira não vira marca órfã.
+
+### A suíte estava intermitente, e não era o que eu suspeitava
+
+Falhas migrando de arquivo a cada execução, sempre como `Hook timed out` no
+`resetDb`. Suspeitei de contenção de lock e de vazamento de conexão pelo SSE. Instrumentado,
+o diagnóstico foi outro: **pool com 2 conexões, 1 ociosa, nenhuma esperando, zero
+contenção** — o `TRUNCATE` é que estava preso em `IO / DataFileImmediateSync` por 3
+segundos.
+
+`TRUNCATE` cria um arquivo novo por relação e força `fsync` imediato em cada um. No
+`beforeEach` de trinta arquivos, com o schema crescendo, isso passou a estourar o
+limite de 10 s do hook em execuções aleatórias. Trocado por `DELETE`, que não troca
+arquivo e deixa o cascata das chaves estrangeiras fazer o trabalho: apagar `users`
+leva junto tudo o que pende dele. Quatro execuções seguidas verdes, suíte inteira em
+18 s.
+
+Intermitente é pior que quebrado: some quando se vai olhar, e some justamente na mão
+de quem for avaliar.
+
+### Conferido em navegador
+
+32 UTXOs listados, o dust destacado, rótulo gravado, congelamento aplicado, arquivo
+BIP-329 exportado com `spendable: false` e `Content-Disposition` nomeando o `.jsonl`.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
@@ -603,10 +660,10 @@ O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
 | 1. Login, painel vazio | **funciona** — conferido em navegador em 26/08 |
 | 2. xpub → modo público, badge de aviso aceso | **funciona** |
 | 3. `am-i-exposed`: score e achados | **funciona desde 26/08** — botão no cartão, 78 s, score e achados persistidos |
-| 4. Tabela de UTXO com tags de proveniência, dust congelado | **não existe** — `utxos.frozen` está no schema e nada o escreve |
+| 4. Tabela de UTXO com tags de proveniência, dust congelado | **funciona desde 26/08** — rótulo, tags, congelamento e dust destacado |
 | 5. Segunda carteira em modo soberano, lado a lado com a pública | **possível desde 26/08**, na mesma rede — falta um servidor Electrum de verdade rodando. `NETWORK` único ainda impede mainnet e signet juntas |
 | 6. Transação real no signet → alerta no celular | **funciona** — é o que foi validado ponta a ponta |
-| 7. Exportar BIP-329 e abrir no Sparrow | **não existe** |
+| 7. Exportar BIP-329 e abrir no Sparrow | **exporta e importa desde 26/08** — falta abrir o arquivo no Sparrow de verdade |
 | 8. Roadmap | falar |
 
 O passo 6 é o clímax e está de pé. O passo 5 é chamado no design de argumento central,

@@ -75,6 +75,18 @@ export interface Backend {
   scope: 'global' | 'own'
 }
 
+export interface Utxo {
+  txid: string
+  vout: number
+  valueSats: number
+  height: number | null
+  address: string
+  derivationPath: string
+  label: string | null
+  tags: string[]
+  frozen: boolean
+}
+
 export interface Me {
   email: string
   isAdmin: boolean
@@ -123,6 +135,28 @@ export const api = {
   scanPrivacy: (walletId: number) =>
     request<{ status: string }>(`/api/wallets/${walletId}/scan`, { method: 'POST' }),
   privacy: (walletId: number) => request<PrivacyReport>(`/api/wallets/${walletId}/privacy`),
+  utxos: (walletId: number) => request<Utxo[]>(`/api/wallets/${walletId}/utxos`),
+  markUtxo: (
+    walletId: number,
+    txid: string,
+    vout: number,
+    marca: { label?: string | null; tags?: string[]; frozen?: boolean },
+  ) =>
+    request<{ ok: true }>(`/api/wallets/${walletId}/utxos/${txid}/${vout}`, {
+      method: 'PUT',
+      body: JSON.stringify(marca),
+    }),
+  exportLabels: (walletId: number) => `/api/wallets/${walletId}/labels`,
+  importLabels: async (walletId: number, arquivo: string) => {
+    const res = await fetch(`/api/wallets/${walletId}/labels`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'text/plain' },
+      body: arquivo,
+    })
+    if (!res.ok) throw new Error((await res.json()).error ?? `erro ${res.status}`)
+    return (await res.json()) as { imported: number; ignored: number }
+  },
   catalog: (lang: Lang) => request<Catalog>(`/api/i18n/${lang}`),
   setLanguage: (language: Lang) =>
     request<{ ok: true; language: Lang }>('/api/auth/language', {

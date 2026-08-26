@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import type { Catalog, Lang, Wallet } from '../lib/api'
 import { formatSats } from '../lib/format'
 import { render } from '../lib/i18n'
 import { PrivacyPanel } from './PrivacyPanel'
+import { UtxoTable } from './UtxoTable'
 
 /** Verde acima de 80, âmbar acima de 50, vermelho abaixo. */
 function corDoScore(score: number): string {
@@ -29,6 +31,8 @@ export function WalletCard({
   lang: Lang
   onScan?: () => void
 }) {
+  const [moedasAbertas, setMoedasAbertas] = useState(false)
+
   // Só a primeira importação esconde o saldo. O backend deixou de remarcar
   // como `importing` quem já sincronizou, mas a condição continua checando
   // `syncHeight`: é ele que distingue "ainda não sei o saldo" de "estou
@@ -119,6 +123,22 @@ export function WalletCard({
       {wallet.privacyScore !== null && (
         <PrivacyPanel walletId={wallet.id} catalog={catalog} lang={lang} />
       )}
+
+      {/* Fechado por padrão: uma carteira com trinta UTXOs empurraria o resto
+          do painel para fora da tela antes de alguém pedir para ver. */}
+      <div className="mt-[10px]">
+        <button
+          type="button"
+          onClick={() => setMoedasAbertas(v => !v)}
+          aria-expanded={moedasAbertas}
+          className="text-xs uppercase tracking-label text-faint hover:text-ink"
+        >
+          {render(catalog, 'utxos.toggle', {}, lang)}
+        </button>
+        {moedasAbertas && (
+          <UtxoTable walletId={wallet.id} catalog={catalog} lang={lang} />
+        )}
+      </div>
 
       {/* Por onde *esta* carteira é vigiada. O selo do topo fala da sessão
           inteira e não distingue uma carteira da outra; aqui é onde o
