@@ -34,9 +34,31 @@ Mensagens de commit descrevem *o que mudou e por quê*, e nada sobre como foram 
 | `docs/superpowers/specs/2026-08-24-coin-control-watchtower-design.md` | design completo: arquitetura, schema, recorte, plano, riscos |
 | `docs/hackathon-briefing.md` | regras oficiais do hackathon e o que elas impõem ao projeto |
 | `docs/specification.md` | comportamento esperado — entrega obrigatória do hackathon |
+| `docs/2026-08-25-backend-watchtower-progress.md` | diário de bordo: o que cada rodada fez, e o que ela desmentiu |
 
 Antes de mudar arquitetura ou escopo, ler o design. O recorte da §4 existe para ser
 obedecido sob pressão, não renegociado.
+
+---
+
+## Registro de cada rodada
+
+**Toda rodada de desenvolvimento termina com o que foi feito escrito no diário de
+bordo**, antes de passar para a próxima. Não é burocracia: metade do que este projeto
+descobriu foi premissa do design caindo na prática — o scanner que não é biblioteca, o
+`tpub` que faz o relatório mentir, o aviso de privacidade que a rolagem levava embora.
+Descoberta que não é escrita volta a custar o mesmo tempo na segunda vez.
+
+Cada rodada registra, nesta ordem:
+
+1. **o que foi construído**, em uma frase por peça;
+2. **o que quebrou a premissa** — medição, erro observado, número medido. Sem isto o
+   registro vira changelog, que o `git log` já faz melhor;
+3. **o que ficou de dívida**, com a razão de ter ficado.
+
+As pendências ficam na mesma página, divididas entre *em execução*, *adiadas com razão
+registrada* e *técnicas*. Pendência sem razão registrada é pendência que volta a ser
+discutida do zero.
 
 ---
 
