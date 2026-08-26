@@ -252,15 +252,37 @@ export async function syncWallet(
       // silencioso.
       if (addressId === null || !consultados.has(addressId)) continue
       const [txid, voutStr] = key.split(':')
+      const vout = Number(voutStr)
+
+      // Onde e por quem o UTXO foi gasto, quando o backend sabe dizer.
+      //
+      // Antes gravava a altura da ponta e "desconhecido". Altura errada num
+      // log append-only é pior que altura ausente: a detecção de reorg compara
+      // exatamente esses pares de altura e hash, e passaria a comparar um par
+      // que nunca descreveu o gasto. `null` diz "não sei"; a altura da ponta
+      // diria "sei, e foi aqui" sobre algo que ninguém verificou.
+      let gasto: Awaited<ReturnType<NonNullable<ChainAdapter['getOutspend']>>> = null
+      if (adapter.getOutspend) {
+        try {
+          gasto = await adapter.getOutspend(txid!, vout)
+        } catch (err) {
+          // Saber quem gastou é acessório: o gasto em si já foi observado, e
+          // perder a volta inteira por causa do detalhe seria pior.
+          console.error(
+            'não foi possível saber quem gastou ' + key + ': ' + (err as Error).message,
+          )
+        }
+      }
+
       newEvents.push(
         await appendEvent({
           walletId,
           type: 'utxo_spent',
-          height: tipHeight,
-          blockHash: await adapter.blockHashAt(tipHeight),
+          height: gasto?.height ?? null,
+          blockHash: gasto?.blockHash ?? null,
           txid: txid!,
-          vout: Number(voutStr),
-          payload: { spentAtTxid: 'desconhecido' },
+          vout,
+          payload: { spentAtTxid: gasto?.spentByTxid ?? null },
         }),
       )
     }

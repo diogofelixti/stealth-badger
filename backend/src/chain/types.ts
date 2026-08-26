@@ -33,6 +33,13 @@ export interface Utxo {
   height: number | null
 }
 
+/** Quem consumiu uma saída, e onde isso ficou registrado. */
+export interface Outspend {
+  spentByTxid: string
+  height: number | null
+  blockHash: string | null
+}
+
 export interface ChainAdapter {
   capabilities(): ChainCapabilities
   tipHeight(): Promise<number>
@@ -40,6 +47,14 @@ export interface ChainAdapter {
   getHistoryForAddress?(address: string): Promise<TxRef[]>
   getAddressStatus?(address: string): Promise<AddressStatus>
   getUtxosForAddress?(address: string): Promise<Utxo[]>
+  /**
+   * Quem gastou `txid:vout`, ou `null` se ninguém gastou.
+   *
+   * Sem isto o evento de gasto só pode registrar que o UTXO sumiu da lista,
+   * sem dizer quando nem por quem — e gravar a altura da ponta no lugar seria
+   * escrever um número errado num log que não se corrige.
+   */
+  getOutspend?(txid: string, vout: number): Promise<Outspend | null>
   registerDescriptor?(descriptor: string): Promise<void>
   rescanFrom?(height: number): Promise<void>
   subscribe?(scripthash: string, onChange: () => void): () => void

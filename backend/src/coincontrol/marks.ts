@@ -91,7 +91,7 @@ export async function utxosDaCarteira(walletId: number): Promise<UtxoNaTela[]> {
        JOIN addresses a ON a.id = u.address_id
        LEFT JOIN utxo_marks m
          ON m.wallet_id = u.wallet_id AND m.txid = u.txid AND m.vout = u.vout
-      WHERE u.wallet_id = $1 AND u.spent_at_txid IS NULL
+      WHERE u.wallet_id = $1 AND NOT u.spent
       ORDER BY u.value_sats DESC, u.txid, u.vout`,
     [walletId],
   )

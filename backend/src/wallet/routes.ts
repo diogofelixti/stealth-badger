@@ -237,15 +237,15 @@ export function registerWalletRoutes(
               p.scanned_at AS "privacyScannedAt",
               COALESCE((
                 SELECT sum(value_sats) FROM utxos u
-                WHERE u.wallet_id = w.id AND u.spent_at_txid IS NULL
+                WHERE u.wallet_id = w.id AND NOT u.spent
               ), 0)::bigint AS "balanceSats",
               (
                 SELECT count(*) FROM utxos u
-                WHERE u.wallet_id = w.id AND u.spent_at_txid IS NULL
+                WHERE u.wallet_id = w.id AND NOT u.spent
               )::int AS "utxoCount",
               (
                 SELECT count(*) FROM utxos u
-                WHERE u.wallet_id = w.id AND u.spent_at_txid IS NULL AND u.frozen
+                WHERE u.wallet_id = w.id AND NOT u.spent AND u.frozen
               )::int AS "frozenCount"
          FROM wallets w
          JOIN backends b ON b.id = w.backend_id

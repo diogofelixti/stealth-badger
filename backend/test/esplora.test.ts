@@ -285,3 +285,51 @@ describe('recusa explicada pelo explorador', () => {
     )
   })
 })
+
+describe('quem gastou a saída', () => {
+  // O evento de gasto gravava a altura da ponta e "desconhecido" como
+  // transação. Altura errada num log append-only é pior que altura ausente: a
+  // detecção de reorg compara exatamente esses pares de altura e hash.
+  it('descobre a transação que gastou e a altura em que isso aconteceu', async () => {
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: fakeFetch({
+        '/tx/aa/outspend/0': {
+          spent: true,
+          txid: 'bb'.repeat(32),
+          vin: 1,
+          status: { confirmed: true, block_height: 319000, block_hash: '0000cafe' },
+        },
+      }),
+    })
+    expect(await a.getOutspend!('aa', 0)).toEqual({
+      spentByTxid: 'bb'.repeat(32),
+      height: 319000,
+      blockHash: '0000cafe',
+    })
+  })
+
+  it('devolve nulo quando a saída ainda não foi gasta', async () => {
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: fakeFetch({ '/tx/aa/outspend/0': { spent: false } }),
+    })
+    expect(await a.getOutspend!('aa', 0)).toBeNull()
+  })
+
+  it('trata gasto ainda no mempool, que não tem altura', async () => {
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: fakeFetch({
+        '/tx/aa/outspend/0': {
+          spent: true,
+          txid: 'cc'.repeat(32),
+          vin: 0,
+          status: { confirmed: false },
+        },
+      }),
+    })
+    expect(await a.getOutspend!('aa', 0)).toMatchObject({
+      spentByTxid: 'cc'.repeat(32),
+      height: null,
+      blockHash: null,
+    })
+  })
+})

@@ -1,0 +1,11 @@
+-- Apaga o sentinela que ocupava o lugar do txid de quem gastou.
+--
+-- Antes de existir a coluna `spent`, o motor precisava de um valor não nulo em
+-- `spent_at_txid` para marcar o gasto, e escrevia a palavra "desconhecido"
+-- ali. Não é um txid, e deixá-la faria qualquer leitura futura tratar texto
+-- inventado como dado de cadeia.
+--
+-- A projeção é reconstruível a partir do log, mas o log guarda o mesmo
+-- sentinela no payload dos eventos antigos: `chain_events` é append-only e não
+-- se corrige, então a limpeza vale para a projeção e para a leitura dela.
+UPDATE utxos SET spent_at_txid = NULL WHERE spent_at_txid = 'desconhecido';

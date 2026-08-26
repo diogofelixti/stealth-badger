@@ -41,7 +41,7 @@ export function registerSearchRoutes(app: FastifyInstance): void {
               COALESCE((
                 SELECT sum(u.value_sats) FROM utxos u
                  WHERE u.wallet_id = a.wallet_id AND u.address_id = a.id
-                   AND u.spent_at_txid IS NULL
+                   AND NOT u.spent
               ), 0)::bigint AS balance
          FROM addresses a
          JOIN wallets w ON w.id = a.wallet_id

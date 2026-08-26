@@ -7,7 +7,7 @@ interface CreatedPayload {
 }
 
 interface SpentPayload {
-  spentAtTxid: string
+  spentAtTxid: string | null
 }
 
 export async function projectWallet(walletId: number): Promise<void> {
@@ -20,6 +20,7 @@ export async function projectWallet(walletId: number): Promise<void> {
       addressId: number
       valueSats: number
       height: number | null
+      spent: boolean
       spentAtTxid: string | null
     }
   >()
@@ -33,11 +34,20 @@ export async function projectWallet(walletId: number): Promise<void> {
         addressId: p.addressId,
         valueSats: p.valueSats,
         height: e.height,
+        spent: false,
         spentAtTxid: null,
       })
     } else if (e.type === 'utxo_spent' && e.txid !== null && e.vout !== null) {
       const found = utxos.get(e.txid + ':' + e.vout)
-      if (found) found.spentAtTxid = (e.payload as unknown as SpentPayload).spentAtTxid
+      if (!found) continue
+      // O evento é que diz que foi gasto. O txid é detalhe, e pode faltar
+      // quando o backend não soube dizer quem consumiu a saída.
+      found.spent = true
+      const quemGastou = (e.payload as unknown as SpentPayload).spentAtTxid
+      // "desconhecido" é o sentinela que os eventos antigos gravavam quando o
+      // motor era obrigado a preencher o campo. `chain_events` é append-only:
+      // o texto continua lá, e é aqui que ele deixa de virar dado.
+      found.spentAtTxid = quemGastou && quemGastou !== 'desconhecido' ? quemGastou : null
     }
   }
 
@@ -47,9 +57,9 @@ export async function projectWallet(walletId: number): Promise<void> {
     await client.query('DELETE FROM utxos WHERE wallet_id = $1', [walletId])
     for (const u of utxos.values()) {
       await client.query(
-        `INSERT INTO utxos (wallet_id, txid, vout, address_id, value_sats, height, spent_at_txid)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [walletId, u.txid, u.vout, u.addressId, u.valueSats, u.height, u.spentAtTxid],
+        `INSERT INTO utxos (wallet_id, txid, vout, address_id, value_sats, height, spent, spent_at_txid)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [walletId, u.txid, u.vout, u.addressId, u.valueSats, u.height, u.spent, u.spentAtTxid],
       )
     }
     // O congelamento é do usuário e vive em `utxo_marks`, fora da projeção.
@@ -74,7 +84,7 @@ export async function projectWallet(walletId: number): Promise<void> {
 export async function walletBalance(walletId: number): Promise<number> {
   const { rows } = await pool.query<{ total: string }>(
     `SELECT COALESCE(sum(value_sats), 0)::bigint AS total
-       FROM utxos WHERE wallet_id = $1 AND spent_at_txid IS NULL`,
+       FROM utxos WHERE wallet_id = $1 AND NOT spent`,
     [walletId],
   )
   return Number(rows[0]!.total)

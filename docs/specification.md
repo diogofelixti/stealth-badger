@@ -201,7 +201,22 @@ piscando a cada ciclo, e o usuário leria como uma importação que nunca termin
 Falha do backend marca a carteira como `error` e grava `sync_error`. A falha é
 **isolada por carteira**: uma carteira quebrada não impede as outras de sincronizar.
 
-### 6.3 Reorg
+### 6.3 Gasto: o que se sabe e o que não se inventa
+
+Quando um UTXO conhecido some da lista, o backend é perguntado **quem o gastou** —
+`/tx/:txid/outspend/:vout` no Esplora. Sabendo, o evento registra a transação, a altura
+e o hash de bloco reais. Não sabendo, registra `null`.
+
+Antes o evento gravava a altura da ponta e a palavra `desconhecido` no lugar do txid.
+Altura errada num log append-only é pior que altura ausente: a **detecção de reorg
+compara exatamente esses pares de altura e hash**, e passaria a comparar um par que
+nunca descreveu o gasto.
+
+Isso obrigou a separar duas coisas que estavam na mesma coluna. `utxos.spent` diz que o
+gasto aconteceu; `utxos.spent_at_txid` diz por quem, e pode ser nulo sem que isso
+signifique "ainda tenho o dinheiro".
+
+### 6.4 Reorg
 
 Reorganização **nunca apaga evento**. O sistema grava um evento `reorg_detected` e
 marca os eventos afetados com `rolled_back_by`. Consultas de estado ignoram eventos
@@ -505,8 +520,6 @@ Escrito para ser lido antes que alguém pergunte.
 
 ### 12.2 Limitações conhecidas do que existe
 
-- **`utxo_spent` é gravado na altura da ponta e sem a transação que gastou.** Coin
-  control precisará desse dado.
 - **O adapter Esplora não tem backoff contra o `429`** do explorador público.
 - **O adapter Electrum não foi exercido contra um servidor Electrum de verdade.**
   O protocolo é coberto por um servidor de teste local que fala JSON-RPC por TCP —

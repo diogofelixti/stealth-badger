@@ -1,4 +1,11 @@
-import type { AddressStatus, ChainAdapter, ChainCapabilities, TxRef, Utxo } from './types'
+import type {
+  AddressStatus,
+  ChainAdapter,
+  ChainCapabilities,
+  Outspend,
+  TxRef,
+  Utxo,
+} from './types'
 
 interface EsploraStatus {
   confirmed: boolean
@@ -20,6 +27,12 @@ interface EsploraStats {
 interface EsploraAddress {
   chain_stats: EsploraStats
   mempool_stats: EsploraStats
+}
+
+interface EsploraOutspend {
+  spent: boolean
+  txid?: string
+  status?: EsploraStatus
 }
 
 interface EsploraUtxo {
@@ -179,6 +192,18 @@ export function createEsploraAdapter(
           mempool.funded_txo_count,
           mempool.spent_txo_count,
         ].join(':'),
+      }
+    },
+
+    async getOutspend(txid: string, vout: number): Promise<Outspend | null> {
+      const r = (await (
+        await get('/tx/' + txid + '/outspend/' + vout)
+      ).json()) as EsploraOutspend
+      if (!r.spent || !r.txid) return null
+      return {
+        spentByTxid: r.txid,
+        height: r.status?.confirmed ? r.status.block_height ?? null : null,
+        blockHash: r.status?.confirmed ? r.status.block_hash ?? null : null,
       }
     },
 

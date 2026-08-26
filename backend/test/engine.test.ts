@@ -394,3 +394,100 @@ describe('endereço que o backend não sabe servir', () => {
     expect(rows[0]!.sync_error).toBeNull()
   })
 })
+
+describe('quando o UTXO é gasto', () => {
+  async function comSaldo(): Promise<void> {
+    await syncWallet(
+      walletId,
+      adapterWith(
+        { [firstAddress]: [{ txid: 'aa', height: 100, blockHash: 'h100' }] },
+        { [firstAddress]: [{ txid: 'aa', vout: 0, value: 5000, height: 100 }] },
+      ),
+    )
+  }
+
+  function adapterSemUtxo(over: Partial<ChainAdapter> = {}): ChainAdapter {
+    return {
+      ...adapterWith({ [firstAddress]: [{ txid: 'aa', height: 100, blockHash: 'h100' }] }, {}),
+      ...over,
+    }
+  }
+
+  async function eventoDeGasto() {
+    const { rows } = await pool.query<{
+      height: number | null
+      block_hash: string | null
+      payload: { spentAtTxid?: string | null }
+    }>(
+      `SELECT height, block_hash, payload FROM chain_events
+        WHERE wallet_id = $1 AND type = 'utxo_spent' ORDER BY id DESC LIMIT 1`,
+      [walletId],
+    )
+    return rows[0]!
+  }
+
+  // O evento gravava a altura da ponta e "desconhecido". Altura errada num log
+  // append-only é pior que altura ausente: a detecção de reorg compara
+  // exatamente esses pares de altura e hash, e passaria a comparar um par que
+  // nunca descreveu o gasto.
+  it('registra quem gastou e em que altura, quando o backend sabe dizer', async () => {
+    await comSaldo()
+    await syncWallet(
+      walletId,
+      adapterSemUtxo({
+        getOutspend: async () => ({
+          spentByTxid: 'zz'.repeat(32),
+          height: 105,
+          blockHash: 'h105-de-verdade',
+        }),
+      }),
+    )
+    const e = await eventoDeGasto()
+    expect(e.height).toBe(105)
+    expect(e.block_hash).toBe('h105-de-verdade')
+    expect(e.payload.spentAtTxid).toBe('zz'.repeat(32))
+  })
+
+  // Ignorância registrada como ignorância. Um `null` diz "não sei"; a altura
+  // da ponta diria "sei, e foi aqui" sobre algo que ninguém verificou.
+  it('não inventa altura quando o backend não sabe dizer', async () => {
+    await comSaldo()
+    await syncWallet(walletId, adapterSemUtxo())
+    const e = await eventoDeGasto()
+    expect(e.height).toBeNull()
+    expect(e.block_hash).toBeNull()
+    expect(e.payload.spentAtTxid).toBeNull()
+  })
+
+  it('não deixa a consulta de gasto derrubar a sincronização', async () => {
+    await comSaldo()
+    await syncWallet(
+      walletId,
+      adapterSemUtxo({
+        getOutspend: async () => {
+          throw new Error('explorador recusou')
+        },
+      }),
+    )
+    const e = await eventoDeGasto()
+    expect(e.height).toBeNull()
+    expect(await walletBalance(walletId)).toBe(0)
+  })
+
+  it('registra o gasto que ainda está no mempool, sem altura', async () => {
+    await comSaldo()
+    await syncWallet(
+      walletId,
+      adapterSemUtxo({
+        getOutspend: async () => ({
+          spentByTxid: 'yy'.repeat(32),
+          height: null,
+          blockHash: null,
+        }),
+      }),
+    )
+    const e = await eventoDeGasto()
+    expect(e.height).toBeNull()
+    expect(e.payload.spentAtTxid).toBe('yy'.repeat(32))
+  })
+})

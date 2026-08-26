@@ -117,4 +117,37 @@ describe('projeção', () => {
     await projectWallet(walletId)
     expect(await walletBalance(walletId)).toBe(0)
   })
+
+  // Eventos antigos gravavam a palavra "desconhecido" no lugar do txid, porque
+  // o motor era obrigado a preencher o campo. O log é append-only e o texto
+  // continua lá; a projeção é o lugar onde ele deixa de virar dado de cadeia.
+  it('não trata o sentinela antigo como se fosse a transação que gastou', async () => {
+    await appendEvent({
+      walletId,
+      type: 'utxo_created',
+      height: 100,
+      blockHash: 'bb',
+      txid: 'aa',
+      vout: 0,
+      payload: { addressId, valueSats: 5000 },
+    })
+    await appendEvent({
+      walletId,
+      type: 'utxo_spent',
+      height: null,
+      blockHash: null,
+      txid: 'aa',
+      vout: 0,
+      payload: { spentAtTxid: 'desconhecido' },
+    })
+    await projectWallet(walletId)
+
+    const { rows } = await pool.query<{ spent: boolean; spent_at_txid: string | null }>(
+      'SELECT spent, spent_at_txid FROM utxos WHERE wallet_id = $1',
+      [walletId],
+    )
+    expect(rows[0]!.spent).toBe(true)
+    expect(rows[0]!.spent_at_txid).toBeNull()
+    expect(await walletBalance(walletId)).toBe(0)
+  })
 })

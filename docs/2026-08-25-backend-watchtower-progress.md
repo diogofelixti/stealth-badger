@@ -1004,6 +1004,35 @@ o defeito que estamos consertando.
 Conferido em navegador: *"Email and password do not match."* e *"This key is for
 mainnet, and this watchtower watches signet. Use a signet key."*
 
+## Décima sexta rodada — 26/08, parar de inventar a altura do gasto
+
+O evento de gasto gravava a **altura da ponta** e a palavra `desconhecido` no lugar do
+txid. Estava na lista de limitações como dívida do coin control, mas é pior que isso:
+altura errada num log append-only é pior que altura ausente, porque a detecção de reorg
+compara exatamente esses pares de altura e hash — e passaria a comparar um par que nunca
+descreveu o gasto.
+
+O Esplora tem o endpoint exato: `/tx/:txid/outspend/:vout` diz quem consumiu a saída e
+em que bloco. Sabendo, o evento registra o real; não sabendo, registra `null`.
+Ignorância anotada como ignorância.
+
+### O que isso obrigou a arrumar
+
+A projeção usava `spent_at_txid IS NULL` como **o** sinal de "não gasto" — era por isso
+que o motor precisava inventar um txid. Com o campo podendo ser nulo legitimamente, o
+saldo passou a contar UTXO gasto como disponível, e a suíte pegou na hora.
+
+`utxos.spent` passou a dizer que o gasto aconteceu, e `spent_at_txid`, por quem. Sinal e
+detalhe separados. Uma migração marca retroativamente o que já estava gasto e apaga o
+sentinela `desconhecido`, que não é um txid e faria qualquer leitura futura tratar texto
+inventado como dado de cadeia.
+
+O log é append-only e guarda o sentinela nos eventos antigos para sempre — é na projeção
+que ele deixa de virar dado, e há teste para isso.
+
+Conferido contra a base real: saldo intacto em 7.552.468 sats, nenhum sentinela
+restante.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
@@ -1053,6 +1082,5 @@ sobre privacidade, não sobre saldo.
   que não se explica costuma voltar
 - Varredura ainda sequencial: um endereço de cada vez. Paralelizar cortaria o tempo
   mas concentraria a rajada, e o adapter Esplora segue sem backoff para o `429`
-- `utxo_spent` continua gravado na altura da ponta e sem a transação que gastou
 - Itens não-código do checklist: repositório público antes de 28/08 19h, pitch
   ensaiado, plano B gravado
