@@ -11,7 +11,13 @@ export function WalletCard({
   catalog: Catalog
   lang: Lang
 }) {
-  const importando = wallet.syncState === 'importing' || wallet.syncState === 'pending'
+  // Só a primeira importação esconde o saldo. Depois dela o worker remarca a
+  // carteira como `importing` a cada ciclo, e numa carteira com histórico
+  // grande isso é a maior parte do tempo: trocar um número conhecido por
+  // travessões aí não é prudência, é deixar o painel parecer vazio.
+  const importando =
+    wallet.syncHeight === null &&
+    (wallet.syncState === 'importing' || wallet.syncState === 'pending')
 
   return (
     <article className="rounded border border-line bg-surface px-[18px] py-4">

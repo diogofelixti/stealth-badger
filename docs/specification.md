@@ -302,6 +302,12 @@ Escrito para ser lido antes que alguém pergunte.
 - **`utxo_spent` é gravado na altura da ponta e sem a transação que gastou.** Coin
   control precisará desse dado.
 - **O adapter Esplora não tem backoff contra o `429`** do explorador público.
+- **Cada ciclo revarre todos os endereços da carteira, sem sincronização
+  incremental.** Medido contra a signet, uma carteira com 30 UTXOs e ~40 endereços
+  leva de 7 a 32 segundos por ciclo, num intervalo de 30 — ou seja, ela passa a maior
+  parte do tempo em `importing`, e o selo de estado oscila. O saldo exibido não é
+  afetado: uma carteira que já sincronizou uma vez mantém o número à vista enquanto
+  reconfere. O custo real está no volume de consultas ao explorador.
 - **Mensagens de erro da API saem só em português**, embora a interface seja bilíngue.
 - **A interface é de duas telas** — login e um dashboard único. Não há navegação nem
   menus; não há uma terceira tela para onde ir.

@@ -143,7 +143,8 @@ describe('Dashboard — saldo durante a ressincronização', () => {
     ])
     montar()
 
-    await waitFor(() => expect(screen.getByText(/30 UTXOs/)).toBeDefined())
+    // aparece duas vezes: no resumo do topo e no cartão da carteira
+    await waitFor(() => expect(screen.getAllByText(/30 UTXOs/).length).toBe(2))
   })
 
   // Primeira importação é outra coisa: aí o dado realmente não existe, e

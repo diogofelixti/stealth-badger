@@ -23,16 +23,31 @@ describe('WalletCard', () => {
     expect(screen.getByText(/412\.850/)).toBeDefined()
   })
 
-  // Mostrar saldo parcial como se fosse o final é mentir com número: enquanto
-  // importa, a carteira diz que ainda não terminou.
-  it('não apresenta saldo parcial como definitivo enquanto importa', () => {
-    const importando: Wallet = { ...base, syncState: 'importing', syncProgress: 43 }
+  // Mostrar saldo parcial como se fosse o final é mentir com número: na
+  // primeira importação a carteira diz que ainda não terminou. `syncHeight`
+  // nulo é o que marca esse caso — nunca houve sincronização completa.
+  it('não apresenta saldo parcial como definitivo na primeira importação', () => {
+    const importando: Wallet = {
+      ...base, syncState: 'importing', syncProgress: 43, syncHeight: null,
+    }
     const { container } = render(
       <WalletCard wallet={importando} catalog={catalogo} lang="pt" />,
     )
     expect(container.textContent).toContain('Importando 43%')
     expect(container.textContent).toContain('ainda não inclui esta carteira')
     expect(container.textContent).not.toContain('412.850')
+  })
+
+  // Depois da primeira sincronização o worker remarca a carteira como
+  // `importing` a cada ciclo, e numa carteira com histórico grande isso é a
+  // maior parte do tempo. Esconder o saldo aí não é prudência: o número é
+  // conhecido, e trocá-lo por travessões faz o painel parecer vazio.
+  it('mantém o saldo à vista quando só está reconferindo', () => {
+    const reconferindo: Wallet = { ...base, syncState: 'importing', syncProgress: 43 }
+    const { container } = render(
+      <WalletCard wallet={reconferindo} catalog={catalogo} lang="pt" />,
+    )
+    expect(container.textContent).toContain('412.850')
   })
 
   it('mostra a falha de sincronização em vez de fingir carteira parada', () => {
