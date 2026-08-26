@@ -717,6 +717,10 @@ sobre privacidade, não sobre saldo.
   está coberto por um servidor de teste local — resposta partida em pedaços,
   notificação sem id, erro devolvido pelo servidor — mas nenhum Electrs, Fulcrum ou
   florestad rodou contra ele
+- **Uma falha isolada na suíte do frontend**, em `Dashboard > anuncia postura pública`,
+  numa execução entre quinze. Não reproduziu depois, e a máquina construía imagem
+  Docker no mesmo instante. Fica anotada em vez de dada por resolvida: intermitência
+  que não se explica costuma voltar
 - Varredura ainda sequencial: um endereço de cada vez. Paralelizar cortaria o tempo
   mas concentraria a rajada, e o adapter Esplora segue sem backoff para o `429`
 - `utxo_spent` continua gravado na altura da ponta e sem a transação que gastou
