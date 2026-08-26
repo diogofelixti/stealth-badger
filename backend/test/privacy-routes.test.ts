@@ -420,4 +420,49 @@ describe('kyc_origin — origem dos fundos', () => {
     expect(chamadas).toBeLessThanOrEqual(5)
     expect(chamadas).toBeGreaterThan(0)
   })
+
+  // Três transações da carteira real retornam 404 no explorador: foram vistas
+  // no mempool e substituídas depois. Elas falham para sempre. Se falhar não
+  // contar como tentativa, essas três consomem o teto a cada clique e as
+  // outras trinta nunca chegam a ser analisadas.
+  it('não deixa transação que falha bloquear a fila das outras', async () => {
+    const tentadas: string[] = []
+    const { app, cookie, walletId } = await comCarteira(async () => RESULTADO, (async (ctx: {
+      txid: string
+    }) => {
+      tentadas.push(ctx.txid)
+      throw new Error('Not found')
+    }) as never)
+
+    const a = await pool.query<{ id: string }>(
+      `INSERT INTO addresses (wallet_id, chain, idx, derivation_path, address, scripthash)
+       VALUES ($1,0,0,'0/0','bc1qexemplo','ff') RETURNING id`,
+      [walletId],
+    )
+    for (let i = 0; i < 7; i += 1) {
+      await appendEvent({
+        walletId,
+        type: 'utxo_created',
+        height: 100 + i,
+        blockHash: 'bb',
+        txid: String(i).padStart(2, '0').repeat(32),
+        vout: 0,
+        payload: { addressId: Number(a.rows[0]!.id), valueSats: 1000 },
+      })
+    }
+    await projectWallet(walletId)
+
+    for (const _ of [1, 2]) {
+      await app.inject({
+        method: 'POST',
+        url: `/api/wallets/${walletId}/scan`,
+        cookies: { sb_session: cookie },
+      })
+      await aguardarScan(walletId)
+    }
+
+    // sete transações, teto de cinco por vez: a segunda rodada tem de alcançar
+    // as que ainda não foram tentadas
+    expect(new Set(tentadas).size).toBe(7)
+  })
 })

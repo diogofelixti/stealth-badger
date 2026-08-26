@@ -1,0 +1,11 @@
+-- Por que a análise daquela transação não deu certo.
+--
+-- Tentativa que falha precisa ficar registrada, e não apenas ser esquecida.
+-- Sem isso, uma transação que falha sempre — as que foram vistas no mempool e
+-- substituídas depois retornam 404 no explorador para sempre — consome a cota
+-- de análises a cada clique, e as outras nunca chegam a ser olhadas.
+--
+-- Ficam no fim da fila em vez de excluídas: falha também acontece por rede
+-- instável ou 429 do explorador, e essas merecem outra chance quando não
+-- houver mais nada novo para analisar.
+ALTER TABLE tx_scans ADD COLUMN error TEXT;

@@ -68,15 +68,43 @@ export function descriptorFor(canonicalXpub: string, scriptType: ScriptType): st
   }
 }
 
+/** Quanto da saída do processo cabe na mensagem de erro. */
+const TRECHO_DE_SAIDA = 240
+
+/**
+ * Descreve por que o scanner falhou, com a saída que ele produziu.
+ *
+ * O `Error` do `execFile` diz só `Command failed: <comando>`, e guarda a causa
+ * em `stdout` e `stderr`. Sem trazê-las, o log registra o comando inteiro e
+ * nenhuma informação — foi o que aconteceu quando três análises falharam
+ * contra a signet e a causa real, "Not found", só apareceu rodando o comando à
+ * mão.
+ */
+export function mensagemDeFalha(err: unknown): string {
+  const e = err as { message?: string; stdout?: string; stderr?: string }
+  const saida = [e.stderr, e.stdout]
+    .map(t => (t ?? '').trim())
+    .filter(Boolean)
+    .join(' | ')
+    .slice(0, TRECHO_DE_SAIDA)
+
+  const base = e.message ?? String(err)
+  return saida ? base + ' · saída: ' + saida : base
+}
+
 /** Chama a CLI de verdade. */
 export function cliRunner(timeoutMs: number, comando = 'am-i-exposed'): ScanRunner {
   return async (args: string[]) => {
-    const { stdout } = await exec(comando, args, {
-      timeout: timeoutMs,
-      // o relatório de uma carteira grande passa folgado do padrão de 1 MB
-      maxBuffer: 64 * 1024 * 1024,
-    })
-    return stdout
+    try {
+      const { stdout } = await exec(comando, args, {
+        timeout: timeoutMs,
+        // o relatório de uma carteira grande passa folgado do padrão de 1 MB
+        maxBuffer: 64 * 1024 * 1024,
+      })
+      return stdout
+    } catch (err) {
+      throw new Error(mensagemDeFalha(err))
+    }
   }
 }
 

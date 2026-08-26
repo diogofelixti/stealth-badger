@@ -137,8 +137,13 @@ export function registerPrivacyRoutes(
           walletId,
         )
       } catch (err) {
+        // A tentativa fica registrada mesmo tendo falhado, senão a transação
+        // que falha sempre consome a cota a cada clique e as outras nunca
+        // chegam a ser analisadas.
+        const motivo = (err as Error).message
+        await salvarTxScan(walletId, pendente.txid, [], 'desconhecida', motivo)
         console.error(
-          'falha ao analisar a origem de ' + pendente.txid + ': ' + (err as Error).message,
+          'falha ao analisar a origem de ' + pendente.txid + ': ' + motivo,
         )
       }
     }

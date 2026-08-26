@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   descriptorFor,
+  mensagemDeFalha,
   scanTransaction,
   scanWallet,
   type ScanRunner,
@@ -208,5 +209,39 @@ describe('scanTransaction', () => {
     await expect(
       scanTransaction({ ...base, runner: async () => 'nem json é' }),
     ).rejects.toThrow(/scanner/i)
+  })
+})
+
+describe('mensagemDeFalha', () => {
+  // `Command failed: am-i-exposed ...` foi o que o log registrou quando três
+  // análises falharam contra a signet, e não dizia nada: a causa real, "Not
+  // found", estava na saída do processo, que o Error do execFile guarda em
+  // campo separado. Sem trazê-la, diagnosticar exigiu rodar o comando à mão.
+  it('traz a saída do processo, e não só o comando que falhou', () => {
+    const erro = Object.assign(new Error('Command failed: am-i-exposed scan tx abc'), {
+      stdout: '{"error":true,"message":"Not found"}',
+      stderr: '',
+    })
+    expect(mensagemDeFalha(erro)).toContain('Not found')
+  })
+
+  it('traz o stderr quando é ali que o processo reclamou', () => {
+    const erro = Object.assign(new Error('Command failed'), {
+      stdout: '',
+      stderr: 'permissão negada',
+    })
+    expect(mensagemDeFalha(erro)).toContain('permissão negada')
+  })
+
+  it('se vira com erro que não veio de processo nenhum', () => {
+    expect(mensagemDeFalha(new Error('sem rede'))).toContain('sem rede')
+  })
+
+  it('não deixa a mensagem crescer sem limite com a saída inteira', () => {
+    const erro = Object.assign(new Error('Command failed'), {
+      stdout: 'x'.repeat(5000),
+      stderr: '',
+    })
+    expect(mensagemDeFalha(erro).length).toBeLessThan(700)
   })
 })

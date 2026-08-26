@@ -726,6 +726,27 @@ subestimaria o que ele sabe.
 - **`tx_scans` deduplica por (carteira, txid).** O que uma transação confirmada revela
   não muda: reanalisar gastaria o explorador do usuário e repetiria o mesmo aviso.
 
+### Rodar contra a signet real achou dois defeitos meus
+
+A primeira rodada analisou 5 transações: 2 passaram, 3 falharam.
+
+**O log não dizia por quê.** Só `Command failed: am-i-exposed --json ...` com o comando
+inteiro e nenhuma informação. A causa estava em `stdout`, que o `Error` do `execFile`
+guarda em campo separado e eu não repassava — diagnosticar exigiu rodar o comando à
+mão para descobrir `{"error":true,"message":"Not found"}`. Agora a mensagem carrega a
+saída do processo, truncada.
+
+**E o "Not found" era legítimo, e permanente.** As três transações retornam 404 no
+próprio explorador: foram vistas no mempool e substituídas depois. Nosso log é
+append-only, então o `utxo_created` delas fica para sempre, apontando um txid que não
+existe mais.
+
+Isso expôs o defeito de verdade: como falha não era registrada, essas três consumiam o
+teto de cinco a cada clique, e as outras trinta **nunca chegariam a ser analisadas**.
+A tentativa passou a ficar gravada com o motivo, e a fila ordena nunca-tentadas
+primeiro, com as que falharam no fim — fora, e não excluídas, porque falha também
+acontece por rede instável e essas merecem outra chance.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
