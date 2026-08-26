@@ -9,6 +9,10 @@ export interface ScannedAddress {
   scripthash: string
   path: string
   used: boolean
+  /** retrato opaco do endereço nesta volta; `null` se o backend não informa */
+  status: string | null
+  /** o backend confirmou que nada mudou aqui desde a volta anterior */
+  unchanged: boolean
 }
 
 export interface GapScanOptions {
@@ -19,13 +23,16 @@ export interface GapScanOptions {
   chain: 0 | 1
   gapLimit: number
   maxIndex?: number
+  /** status guardado da volta anterior, por índice desta cadeia */
+  knownStatus?: Map<number, string | null>
 }
 
 export async function scanGap(opts: GapScanOptions): Promise<ScannedAddress[]> {
   const { adapter, canonicalXpub, scriptType, network, chain, gapLimit } = opts
   const maxIndex = opts.maxIndex ?? 1000
+  const knownStatus = opts.knownStatus ?? new Map<number, string | null>()
 
-  if (!adapter.getHistoryForAddress) {
+  if (!adapter.getAddressStatus && !adapter.getHistoryForAddress) {
     throw new Error(
       'este adapter não oferece acesso aleatório; use o caminho de registro e rescan',
     )
@@ -34,13 +41,22 @@ export async function scanGap(opts: GapScanOptions): Promise<ScannedAddress[]> {
     throw new Error('gap limit inválido')
   }
 
+  // O resumo custa uma fração do histórico completo e responde as duas
+  // perguntas da varredura: o endereço foi usado, e mudou alguma coisa nele.
+  const probe = adapter.getAddressStatus
+    ? (address: string) => adapter.getAddressStatus!(address)
+    : async (address: string) => ({
+        used: (await adapter.getHistoryForAddress!(address)).length > 0,
+        status: null,
+      })
+
   const found: ScannedAddress[] = []
   let consecutiveUnused = 0
 
   for (let index = 0; index < maxIndex; index += 1) {
     const d = deriveAddress(canonicalXpub, scriptType, network, chain, index)
-    const history = await adapter.getHistoryForAddress(d.address)
-    const used = history.length > 0
+    const { used, status } = await probe(d.address)
+    const anterior = knownStatus.get(index)
 
     found.push({
       chain,
@@ -49,6 +65,10 @@ export async function scanGap(opts: GapScanOptions): Promise<ScannedAddress[]> {
       scripthash: d.scripthash,
       path: d.path,
       used,
+      status,
+      // `null` de um dos lados significa ignorância, não igualdade: sem status
+      // não há como afirmar que nada mudou, e o endereço é reconferido.
+      unchanged: anterior != null && status !== null && anterior === status,
     })
 
     consecutiveUnused = used ? 0 : consecutiveUnused + 1

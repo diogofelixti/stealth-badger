@@ -126,3 +126,104 @@ describe('syncWallet', () => {
     expect(w.rows[0]!.sync_error).toMatch(/fora do ar/)
   })
 })
+
+interface AdapterIncremental extends ChainAdapter {
+  utxoPedidos: string[]
+  estadoVisto: string | null
+}
+
+function adapterIncremental(
+  status: Record<string, string>,
+  utxos: Record<string, Utxo[]>,
+  tip = 200,
+): AdapterIncremental {
+  const a: AdapterIncremental = {
+    capabilities: () => ({
+      randomAccess: true,
+      needsRegistration: false,
+      supportsSubscribe: false,
+      hasTxIndex: true,
+      isPublic: false,
+      host: 'falso',
+    }),
+    // a varredura já começou quando o adapter é chamado: é o ponto certo para
+    // espiar o selo que a interface mostraria durante a reconferência
+    tipHeight: async () => {
+      const { rows } = await pool.query<{ sync_state: string }>(
+        'SELECT sync_state FROM wallets WHERE id = $1',
+        [walletId],
+      )
+      a.estadoVisto = rows[0]!.sync_state
+      return tip
+    },
+    blockHashAt: async (h: number) => 'h' + h,
+    getAddressStatus: async (addr: string) => ({
+      used: status[addr] !== undefined,
+      status: status[addr] ?? '0:0:0:0:0:0',
+    }),
+    getUtxosForAddress: async (addr: string) => {
+      a.utxoPedidos.push(addr)
+      return utxos[addr] ?? []
+    },
+    utxoPedidos: [],
+    estadoVisto: null,
+  }
+  return a
+}
+
+describe('syncWallet incremental', () => {
+  function comSaldo(status: string, tip = 200): AdapterIncremental {
+    return adapterIncremental(
+      { [firstAddress]: status },
+      { [firstAddress]: [{ txid: 'aa', vout: 0, value: 7500, height: 100 }] },
+      tip,
+    )
+  }
+
+  it('não repete a consulta de UTXO do endereço cujo status não mudou', async () => {
+    await syncWallet(walletId, comSaldo('1:1:0:0:0:0'))
+    const segunda = comSaldo('1:1:0:0:0:0')
+    await syncWallet(walletId, segunda)
+    expect(segunda.utxoPedidos).toEqual([])
+  })
+
+  it('não dá o UTXO por gasto só porque deixou de consultar o endereço', async () => {
+    await syncWallet(walletId, comSaldo('1:1:0:0:0:0'))
+    const segunda = await syncWallet(walletId, comSaldo('1:1:0:0:0:0'))
+
+    expect(segunda.newEvents).toHaveLength(0)
+    expect(await walletBalance(walletId)).toBe(7500)
+  })
+
+  it('volta a conferir o endereço assim que o status muda', async () => {
+    await syncWallet(walletId, comSaldo('1:1:0:0:0:0'))
+
+    const gasto = adapterIncremental({ [firstAddress]: '2:1:1:0:0:0' }, {})
+    await syncWallet(walletId, gasto)
+
+    expect(gasto.utxoPedidos).toContain(firstAddress)
+    expect(await walletBalance(walletId)).toBe(0)
+  })
+
+  it('anuncia importação na primeira varredura da carteira', async () => {
+    const primeira = comSaldo('1:1:0:0:0:0')
+    await syncWallet(walletId, primeira)
+    expect(primeira.estadoVisto).toBe('importing')
+  })
+
+  it('mantém a carteira sincronizada enquanto apenas reconfere', async () => {
+    await syncWallet(walletId, comSaldo('1:1:0:0:0:0'))
+    const segunda = comSaldo('1:1:0:0:0:0')
+    await syncWallet(walletId, segunda)
+    expect(segunda.estadoVisto).toBe('synced')
+  })
+
+  it('guarda o status de cada endereço para a volta seguinte', async () => {
+    await syncWallet(walletId, comSaldo('1:1:0:0:0:0'))
+    const { rows } = await pool.query<{ status: string }>(
+      'SELECT status FROM addresses WHERE wallet_id = $1 AND address = $2',
+      [walletId, firstAddress],
+    )
+    expect(rows[0]!.status).toBe('1:1:0:0:0:0')
+  })
+})

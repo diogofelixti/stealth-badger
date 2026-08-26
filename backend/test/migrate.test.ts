@@ -2,11 +2,32 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { readdir } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { migrate } from '../src/db/migrate'
 import { pool } from '../src/db/pool'
+import { exigirBancoDeTeste } from './helpers/db'
+
+async function aplicadas(): Promise<number> {
+  const { rows } = await pool.query<{ count: string }>(
+    'SELECT count(*) FROM schema_migrations',
+  )
+  return Number(rows[0]!.count)
+}
+
+async function arquivosDeMigracao(): Promise<number> {
+  const dir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../migrations',
+  )
+  return (await readdir(dir)).filter(f => f.endsWith('.sql')).length
+}
 
 describe('migrações', () => {
   beforeAll(async () => {
+    // derrubar o schema é ainda mais destrutivo que truncar: passa pela mesma
+    // barreira, porque este arquivo não chama resetDb
+    exigirBancoDeTeste()
     await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
   })
 
@@ -25,11 +46,14 @@ describe('migrações', () => {
   })
 
   it('é idempotente — rodar de novo não falha nem reaplica', async () => {
+    // Contar contra o número de arquivos, e não contra um número escrito à
+    // mão, é o que faz este teste continuar valendo quando a próxima migração
+    // entrar: fixar a contagem só provaria quantos arquivos existiam no dia em
+    // que ele foi escrito.
+    const antes = await aplicadas()
     await migrate()
-    const { rows } = await pool.query<{ count: string }>(
-      'SELECT count(*) FROM schema_migrations',
-    )
-    expect(Number(rows[0]!.count)).toBe(1)
+    expect(await aplicadas()).toBe(antes)
+    expect(antes).toBe(await arquivosDeMigracao())
   })
 
   it('reverte tudo quando uma migração falha no meio — nada sobrevive', async () => {

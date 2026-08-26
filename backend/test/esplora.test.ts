@@ -84,3 +84,67 @@ describe('adapter Esplora', () => {
     await expect(a.tipHeight()).rejects.toThrow(/Esplora/)
   })
 })
+
+describe('resumo de endereço', () => {
+  const virgem = {
+    chain_stats: { funded_txo_count: 0, spent_txo_count: 0, tx_count: 0 },
+    mempool_stats: { funded_txo_count: 0, spent_txo_count: 0, tx_count: 0 },
+  }
+
+  function comContadores(stats: unknown) {
+    return createEsploraAdapter('https://exemplo/api', {
+      fetchFn: fakeFetch({ '/address/bc1qx': stats }),
+    })
+  }
+
+  it('não marca como usado o endereço sem nenhuma transação', async () => {
+    const s = await comContadores(virgem).getAddressStatus!('bc1qx')
+    expect(s.used).toBe(false)
+  })
+
+  it('marca como usado o endereço que só aparece no mempool', async () => {
+    const s = await comContadores({
+      ...virgem,
+      mempool_stats: { funded_txo_count: 1, spent_txo_count: 0, tx_count: 1 },
+    }).getAddressStatus!('bc1qx')
+    expect(s.used).toBe(true)
+  })
+
+  it('muda o status quando a transação sai do mempool e confirma', async () => {
+    const noMempool = await comContadores({
+      chain_stats: { funded_txo_count: 0, spent_txo_count: 0, tx_count: 0 },
+      mempool_stats: { funded_txo_count: 1, spent_txo_count: 0, tx_count: 1 },
+    }).getAddressStatus!('bc1qx')
+
+    const confirmada = await comContadores({
+      chain_stats: { funded_txo_count: 1, spent_txo_count: 0, tx_count: 1 },
+      mempool_stats: { funded_txo_count: 0, spent_txo_count: 0, tx_count: 0 },
+    }).getAddressStatus!('bc1qx')
+
+    expect(confirmada.status).not.toBe(noMempool.status)
+  })
+
+  it('repete o mesmo status enquanto nada muda no endereço', async () => {
+    const stats = {
+      chain_stats: { funded_txo_count: 3, spent_txo_count: 2, tx_count: 4 },
+      mempool_stats: { funded_txo_count: 0, spent_txo_count: 0, tx_count: 0 },
+    }
+    const primeira = await comContadores(stats).getAddressStatus!('bc1qx')
+    const segunda = await comContadores(stats).getAddressStatus!('bc1qx')
+    expect(segunda.status).toBe(primeira.status)
+  })
+
+  it('muda o status quando um UTXO do endereço é gasto', async () => {
+    const antes = await comContadores({
+      chain_stats: { funded_txo_count: 1, spent_txo_count: 0, tx_count: 1 },
+      mempool_stats: { funded_txo_count: 0, spent_txo_count: 0, tx_count: 0 },
+    }).getAddressStatus!('bc1qx')
+
+    const depois = await comContadores({
+      chain_stats: { funded_txo_count: 1, spent_txo_count: 1, tx_count: 2 },
+      mempool_stats: { funded_txo_count: 0, spent_txo_count: 0, tx_count: 0 },
+    }).getAddressStatus!('bc1qx')
+
+    expect(depois.status).not.toBe(antes.status)
+  })
+})
