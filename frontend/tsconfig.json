@@ -19,7 +19,8 @@
     "skipLibCheck": true,
     "types": [
       "vite/client",
-      "vitest/globals"
+      "vitest/globals",
+      "node"
     ],
     "noEmit": true
   },
