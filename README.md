@@ -183,7 +183,6 @@ motor decide o caminho.
 | [`docs/specification.md`](docs/specification.md) | **comportamento esperado** — o que o sistema faz, e o que ainda não faz |
 | [`docs/2026-08-25-backend-watchtower-progress.md`](docs/2026-08-25-backend-watchtower-progress.md) | diário de bordo: o que cada rodada fez, e que premissa ela desmentiu |
 | [`docs/superpowers/specs/2026-08-24-coin-control-watchtower-design.md`](docs/superpowers/specs/2026-08-24-coin-control-watchtower-design.md) | design completo: arquitetura, modelo de dados, recorte, riscos |
-| [`docs/hackathon-briefing.md`](docs/hackathon-briefing.md) | regras do hackathon e o que impõem ao projeto |
 
 ## Notas de segurança
 

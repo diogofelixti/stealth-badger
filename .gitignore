@@ -40,6 +40,10 @@ tmp/
 
 # material de curso de terceiros — não redistribuir num repo público
 docs/*.pdf
+docs/hackathon-briefing.md
+
+# instruções internas de trabalho
+CLAUDE.md
 
 # scratch do executor de planos
 .superpowers/
