@@ -556,7 +556,7 @@ deduplicação de alerta, detecção de reorg, gap limit, projeção de UTXO, de
 cifra em repouso e reconexão do listener SSE.
 
 ```bash
-cd backend && npm test     # 30 arquivos, 273 testes
+cd backend && npm test     # 35 arquivos, 381 testes
 npx tsc --noEmit           # sem erros
 ```
 

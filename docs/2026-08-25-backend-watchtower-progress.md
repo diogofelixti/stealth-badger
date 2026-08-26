@@ -1116,26 +1116,43 @@ O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
 
 | Passo do roteiro original | Estado |
 |---|---|
-| 1. Login, painel vazio | **funciona** — conferido em navegador em 26/08 |
-| 2. xpub → modo público, badge de aviso aceso | **funciona** |
-| 3. `am-i-exposed`: score e achados | **funciona desde 26/08** — botão no cartão, 78 s, score e achados persistidos |
-| 4. Tabela de UTXO com tags de proveniência, dust congelado | **funciona desde 26/08** — rótulo, tags, congelamento e dust destacado |
-| 5. Segunda carteira em modo soberano, lado a lado com a pública | **possível desde 26/08**, na mesma rede — falta um servidor Electrum de verdade rodando. `NETWORK` único ainda impede mainnet e signet juntas |
-| 6. Transação real no signet → alerta no celular | **funciona** — é o que foi validado ponta a ponta |
-| 7. Exportar BIP-329 e abrir no Sparrow | **exporta e importa desde 26/08** — falta abrir o arquivo no Sparrow de verdade |
+| 1. Login, painel vazio | **funciona** |
+| 2. xpub → modo público, badge de aviso aceso | **funciona**, e o aviso fica preso ao topo ao rolar |
+| 3. `am-i-exposed`: score e achados | **funciona** — botão no cartão, score, nota e achados com recomendação |
+| 4. Tabela de UTXO com tags, dust congelado | **funciona** — rótulo, tags, congelamento e dust destacado |
+| 5. Segunda carteira em modo soberano, lado a lado | **possível**, na mesma rede. O adapter Electrum foi verificado contra um ElectrumX real; falta um nó do próprio apresentador para a postura ser soberana de verdade |
+| 6. Transação real no signet → alerta no celular | **funciona**, e o canal agora se cadastra pela tela, com botão de teste |
+| 7. Exportar BIP-329 e abrir no Sparrow | **exporta e importa**; falta abrir o arquivo no Sparrow de verdade |
 | 8. Roadmap | falar |
 
-O passo 6 é o clímax e está de pé. O passo 5 é chamado no design de argumento central,
-e é o que motiva a seleção de backend a entrar no escopo.
+Além do roteiro original, existem agora e valem mostrar:
 
-### Roteiro alternativo, se nada mais for construído
+- **vigiar endereço avulso**, para quem publica endereço de doação;
+- **origem dos fundos** (`kyc_origin`), que dispara sozinha quando o worker detecta
+  transação nova, e distingue o que o scanner reconheceu do que apenas suspeitou;
+- **queda de privacy score** (`score_dropped`) entre duas análises;
+- **busca** de endereço entre o que está sendo vigiado;
+- **degradação honesta**: uma carteira cujo endereço o backend recusa servir fica
+  "vigiando em parte", com o motivo à vista, em vez de quebrar.
 
-Login → cadastrar a carteira de signet → selo de explorador público aceso e preso ao
-topo → o feed mostra `address_reused` e `dust_received` disparados por transação real →
-faucet dispara nova transação → alerta chega no celular ao vivo → roadmap honesto.
+### Roteiro alternativo, se algo falhar ao vivo
 
-Perde o contraste das duas posturas e perde o coin control, mas sustenta a tese: alertar
-sobre privacidade, não sobre saldo.
+Login → a carteira de signet já sincronizada → selo de explorador público aceso e preso
+ao topo → o feed mostra `address_reused`, `dust_received` e `kyc_origin` disparados por
+transação real → análise de privacidade com os achados → coin control com dust destacado
+e exportação BIP-329 → roadmap honesto.
+
+Não depende de transação nova chegar na hora, que é a única parte fora do nosso controle.
+
+## Estado em 26/08, ao fim do dia
+
+- backend: 35 arquivos de teste, **381 testes**
+- frontend: 11 arquivos de teste, **95 testes**
+- `npx tsc --noEmit` limpo nos dois
+- `docker compose up -d --build` sobe os 5 containers
+- regressão pela interface: 11 verificações, nenhuma resposta 4xx, nenhum erro de página
+- ciclo de sincronização em **6 segundos** contra a signet
+- repositório **público**, licença MIT
 
 ## Pendências
 
@@ -1143,14 +1160,14 @@ sobre privacidade, não sobre saldo.
 
 - **Nada.** Os sete tipos da taxonomia da §8.1 estão implementados.
 
-### Reconhecidas e adiadas, com razão registrada
-
-
 ### Técnicas
 
 - **Uma falha isolada na suíte do frontend**, em `Dashboard > anuncia postura pública`,
   numa execução entre quinze. Não reproduziu depois, e a máquina construía imagem
   Docker no mesmo instante. Fica anotada em vez de dada por resolvida: intermitência
   que não se explica costuma voltar
-- Itens não-código do checklist: repositório público antes de 28/08 19h, pitch
-  ensaiado, plano B gravado
+- **Abrir o arquivo BIP-329 exportado no Sparrow de verdade.** A ida e volta está
+  coberta por teste de round-trip, mas nenhuma outra carteira leu o arquivo ainda
+- **A postura soberana não foi demonstrada.** O adapter Electrum falou com um servidor
+  real, mas público; mostrar "soberano" exige um nó do próprio apresentador
+- Itens não-código do checklist: pitch ensaiado e plano B gravado
