@@ -10,10 +10,8 @@ import { render } from '../lib/i18n'
 /**
  * Só entra no total a carteira cujo saldo já é conhecido.
  *
- * O worker remarca cada carteira como `importing` a cada tick, e numa
- * carteira com histórico grande isso é a maior parte do tempo. Zerar o total
- * durante a reconferência faria o painel anunciar saldo zero para quem tem
- * fundos — o estado é "reconferindo", não "não sei".
+ * Zerar o total durante uma reconferência faria o painel anunciar saldo zero
+ * para quem tem fundos — o estado é "reconferindo", não "não sei".
  *
  * `syncHeight` é o que separa os dois casos: só existe depois da primeira
  * sincronização completa. Sem ele, o dado realmente não existe ainda, e aí

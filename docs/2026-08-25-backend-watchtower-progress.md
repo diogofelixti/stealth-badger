@@ -433,19 +433,79 @@ próprio desenvolvedor:
 | `dust_received` | critical | sim |
 | `reorg_detected` | warning | só por teste — reorg não ocorre sob demanda |
 
+## Terceira rodada — 26/08
+
+### Varredura incremental
+
+Cada ciclo revarria a carteira inteira. O adapter passou a oferecer um resumo barato
+do endereço (`getAddressStatus`), guardado em `addresses.status` e comparado na volta
+seguinte; endereço com status repetido não tem a lista de UTXO pedida de novo.
+
+Medido contra a signet, na mesma carteira de 77 endereços e 31 usados:
+
+| | requisições | tráfego | tempo |
+|---|---|---|---|
+| varrendo tudo | 109 | 11.029 KB | 62 s |
+| reconferindo o que mudou | 79 | 21 KB | 18–27 s |
+
+O tráfego despenca porque `/address/:a/txs` devolve as transações inteiras enquanto
+`/address/:a` devolve só os contadores. Os scripts da medição estão em
+`backend/scripts/`.
+
+Pular consulta mudou o que significa um UTXO sumir da lista: antes, qualquer UTXO
+conhecido ausente virava `utxo_spent`, e com endereços pulados isso esvaziaria a
+carteira num ciclo silencioso. O gasto passou a exigir que o endereço tenha sido de
+fato perguntado — o que também cobre o caso, já existente, do endereço que sai da
+janela do gap.
+
+Junto foi o selo oscilante: carteira já sincronizada não volta a `importing`.
+
+### Task 13 — adapter Electrum
+
+Escrito conforme o plano, mais o `getAddressStatus`, que no protocolo Electrum é a
+primitiva `blockchain.scripthash.subscribe` — um hash do histórico que só muda quando
+o histórico muda.
+
+O adapter era código morto: nada sabia montá-lo. O tipo do backend passou a ser dado
+do banco (`backends.kind`), com uma fábrica única para o motor e para o cadastro, e
+`CHAIN_BACKEND` escolhe entre `esplora` e `electrum`.
+
+Exercitar o transporte TCP contra um servidor local — que os testes de cima
+contornavam pelo transporte falso — revelou dois vazamentos de socket: o adapter não
+tinha como fechar a conexão que abre (e o worker monta um adapter por carteira a cada
+volta), e uma chamada que falhava soltava a referência do transporte sem fechá-lo.
+Erro devolvido pelo servidor deixou de derrubar a conexão: bloco inexistente é
+resposta legítima, não queda.
+
+### Suíte deixa de rodar contra o banco de desenvolvimento
+
+`resetDb` trunca tudo e `migrate.test.ts` derruba o schema. Ambos passaram a exigir um
+banco terminado em `_test`, e o vitest monta essa URL sozinho a partir do `.env`. O
+banco é criado uma vez:
+
+```bash
+docker exec coin-controll-postgres-1 \
+  psql -U badger -d postgres -c 'CREATE DATABASE stealth_badger_test OWNER badger'
+```
+
 ## Estado ao fim da rodada
 
-- backend: 20 arquivos de teste, 140 testes
+- backend: 22 arquivos de teste, 184 testes
 - frontend: 6 arquivos de teste, 35 testes
 - `npx tsc --noEmit` limpo nos dois
-- `docker compose up -d --build` sobe os 5 containers
-- `docs/specification.md` criada, no caminho que o avaliador procura
+- `docker compose up -d --build` sobe os 5 containers, e a carteira da signet
+  sincronizou em `synced`, altura 319381
+- `docs/specification.md` atualizada
 
 ## Pendências
 
-- Task 13 (adapter Electrum) — não iniciada; o plano a marca como a primeira a cortar
-- Varredura não incremental: cada ciclo revarre todos os endereços, o que mantém o selo
-  de estado oscilando e gera volume alto de consulta ao explorador público
+- **O adapter Electrum nunca falou com um servidor Electrum de verdade.** O protocolo
+  está coberto por um servidor de teste local — resposta partida em pedaços,
+  notificação sem id, erro devolvido pelo servidor — mas nenhum Electrs, Fulcrum ou
+  florestad rodou contra ele
 - Conferência visual da interface pelo navegador
+- Varredura ainda sequencial: um endereço de cada vez. Paralelizar cortaria o tempo
+  mas concentraria a rajada, e o adapter Esplora segue sem backoff para o `429`
+- `utxo_spent` continua gravado na altura da ponta e sem a transação que gastou
 - Itens não-código do checklist: repositório público antes de 28/08 19h, pitch
   ensaiado, plano B gravado

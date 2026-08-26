@@ -11,10 +11,11 @@ export function WalletCard({
   catalog: Catalog
   lang: Lang
 }) {
-  // Só a primeira importação esconde o saldo. Depois dela o worker remarca a
-  // carteira como `importing` a cada ciclo, e numa carteira com histórico
-  // grande isso é a maior parte do tempo: trocar um número conhecido por
-  // travessões aí não é prudência, é deixar o painel parecer vazio.
+  // Só a primeira importação esconde o saldo. O backend deixou de remarcar
+  // como `importing` quem já sincronizou, mas a condição continua checando
+  // `syncHeight`: é ele que distingue "ainda não sei o saldo" de "estou
+  // reconferindo um saldo que já conheço". Trocar um número conhecido por
+  // travessões não é prudência, é deixar o painel parecer vazio.
   const importando =
     wallet.syncHeight === null &&
     (wallet.syncState === 'importing' || wallet.syncState === 'pending')
