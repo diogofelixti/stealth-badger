@@ -900,6 +900,43 @@ fila em paralelo para chegar ao mesmo lugar gastando o dobro do explorador.
 Vale para a demonstração de sexta: o depósito do faucet passa a disparar sozinho o
 alerta de movimentação **e** o de origem.
 
+## Décima terceira rodada — 26/08, o canal que ninguém podia cadastrar
+
+Fui conferir o clímax da demonstração — o alerta chegando no celular — e descobri que
+**não havia rota para cadastrar canal nenhum**. O `deliver`, o `sendToNtfy` e a tabela
+`channels` existiam desde o começo; a única forma de configurar era inserindo linha no
+banco à mão. O push está no núcleo inegociável do design, e estava inalcançável pela
+aplicação.
+
+Agora há `GET`, `POST`, `DELETE` e — o mais importante — **`POST /api/channels/:id/test`**,
+que dispara uma notificação de verdade. Descobrir no palco que o push não chega é tarde
+demais: o teste existe para exercitar o caminho inteiro, da cifra ao celular, antes de
+valer. Conferido: a notificação chegou ao ntfy com título, corpo e tag.
+
+O tópico do ntfy **nunca sai na listagem**. Ele é a única coisa que separa as
+notificações de quem quer que as leia, e devolvê-lo o espalharia por log de proxy,
+histórico de navegador e captura de tela.
+
+### E o botão de sair estava quebrado
+
+Testar o canal pela tela deu "Bad Request" onde o `curl` dava `ok`. A causa: o cliente
+de API do frontend anunciava `Content-Type: application/json` em **toda** requisição, e o
+Fastify recusa corpo vazio com esse cabeçalho — `FST_ERR_CTP_EMPTY_JSON_BODY`.
+
+Isso quebrava **todo POST sem corpo**: sair, analisar privacidade e testar canal. Três
+botões, um deles o de encerrar sessão. Nenhum teste pegava, porque todos simulam o
+cliente de API em vez de exercê-lo — a correção veio com um teste que finalmente exercita
+o `request` de verdade.
+
+### E a análise de privacidade de endereço avulso morria
+
+Clicar em "analisar privacidade" num endereço avulso registrava
+`Cannot read properties of null (reading 'length')`: a rota tentava abrir uma chave que
+não existe. O scanner tem `scan address`, com score e achados próprios, e agora a rota
+escolhe a análise conforme o tipo. O retrato que ele devolve é guardado como veio —
+traduzir campo a campo para a forma de carteira obrigaria a inventar os que não existem
+de um lado.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.

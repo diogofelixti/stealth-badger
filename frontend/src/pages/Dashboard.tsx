@@ -5,6 +5,7 @@ import { AlertFeed } from '../components/AlertFeed'
 import { AddWallet } from '../components/AddWallet'
 import { LangToggle } from '../components/LangToggle'
 import { WalletCard } from '../components/WalletCard'
+import { Channels } from '../components/Channels'
 import { render } from '../lib/i18n'
 
 /**
@@ -213,6 +214,13 @@ export function Dashboard({
                 void recarregar()
               }}
             />
+          )}
+
+          {!semCarteira && (
+            <>
+              <div className="h-px bg-line" />
+              <Channels catalog={catalog} lang={lang} />
+            </>
           )}
 
           {wallets.map(w => (

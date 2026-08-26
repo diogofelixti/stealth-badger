@@ -472,3 +472,55 @@ describe('kyc_origin — origem dos fundos', () => {
     expect(new Set(tentadas).size).toBe(7)
   })
 })
+
+describe('análise de privacidade de endereço avulso', () => {
+  const ENDERECO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'
+
+  // Um endereço avulso não tem chave para abrir. A rota tentava abri-la assim
+  // mesmo e morria em "Cannot read properties of null" — o botão de analisar
+  // aparecia na tela e não funcionava.
+  it('analisa o endereço em vez de tentar abrir uma chave que não existe', async () => {
+    let pedido: { address?: string } | null = null
+    const app = buildApp({
+      addressScanner: (async (ctx: { address: string }) => {
+        pedido = ctx
+        return { ...RESULTADO, score: 96, grade: 'A+' }
+      }) as never,
+    })
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'avulso@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'avulso@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+    const criada = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Doações', address: ENDERECO },
+    })
+    const walletId = Number(criada.json().id)
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${walletId}/scan`,
+      cookies: { sb_session: cookie },
+    })
+    await aguardarScan(walletId)
+
+    expect(pedido!.address).toBe(ENDERECO)
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/wallets/${walletId}/privacy`,
+      cookies: { sb_session: cookie },
+    })
+    expect(res.json().error).toBeNull()
+    expect(res.json().latest).toMatchObject({ score: 96, grade: 'A+' })
+  })
+})

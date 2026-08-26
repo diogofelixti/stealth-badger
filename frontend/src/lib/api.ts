@@ -93,6 +93,14 @@ export interface Utxo {
   frozen: boolean
 }
 
+export type ChannelKind = 'ntfy' | 'webhook'
+
+export interface Channel {
+  id: number
+  kind: ChannelKind
+  enabled: boolean
+}
+
 export interface Me {
   email: string
   isAdmin: boolean
@@ -100,10 +108,16 @@ export interface Me {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // O cabeçalho só entra quando existe corpo. O Fastify recusa corpo vazio
+  // anunciado como JSON — `FST_ERR_CTP_EMPTY_JSON_BODY` —, e mandá-lo sempre
+  // quebrava todo POST sem corpo: sair, analisar privacidade, testar canal.
   const res = await fetch(path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers: {
+      ...(init?.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.headers as Record<string, string> | undefined),
+    },
   })
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string }
@@ -142,6 +156,15 @@ export const api = {
       body: JSON.stringify({ kind, url, isPublic }),
     }),
   alerts: () => request<Alert[]>('/api/alerts'),
+  channels: () => request<Channel[]>('/api/channels'),
+  addChannel: (config: { kind: ChannelKind; topic?: string; server?: string; url?: string }) =>
+    request<Channel>('/api/channels', { method: 'POST', body: JSON.stringify(config) }),
+  testChannel: (id: number) =>
+    request<{ ok: boolean; error?: string }>(`/api/channels/${id}/test`, { method: 'POST' }),
+  removeChannel: async (id: number) => {
+    const res = await fetch(`/api/channels/${id}`, { method: 'DELETE', credentials: 'include' })
+    if (!res.ok) throw new Error(`erro ${res.status}`)
+  },
   scanPrivacy: (walletId: number) =>
     request<{ status: string }>(`/api/wallets/${walletId}/scan`, { method: 'POST' }),
   privacy: (walletId: number) => request<PrivacyReport>(`/api/wallets/${walletId}/privacy`),

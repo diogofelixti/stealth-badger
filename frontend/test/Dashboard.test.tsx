@@ -4,12 +4,21 @@ import type { Alert, Catalog, Me, Wallet } from '../src/lib/api'
 
 const wallets = vi.fn<() => Promise<Wallet[]>>()
 const alerts = vi.fn<() => Promise<Alert[]>>()
+// O painel renderiza a seção de canais, que busca sozinha. Sem simular, o
+// fetch real falha em jsdom e a atualização de estado chega depois das
+// asserções — que foi a origem de falhas intermitentes neste arquivo.
+const channels = vi.fn<() => Promise<never[]>>()
 
 vi.mock('../src/lib/api', async importOriginal => {
   const real = await importOriginal<typeof import('../src/lib/api')>()
   return {
     ...real,
-    api: { ...real.api, wallets: () => wallets(), alerts: () => alerts() },
+    api: {
+      ...real.api,
+      wallets: () => wallets(),
+      alerts: () => alerts(),
+      channels: () => channels(),
+    },
   }
 })
 
@@ -69,6 +78,7 @@ function montar() {
 
 beforeEach(() => {
   alerts.mockResolvedValue([])
+  channels.mockResolvedValue([])
 })
 
 describe('Dashboard — primeiro acesso', () => {

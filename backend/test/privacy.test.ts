@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   descriptorFor,
   mensagemDeFalha,
+  scanAddress,
   scanTransaction,
   scanWallet,
   type ScanRunner,
@@ -254,5 +255,89 @@ describe('mensagemDeFalha', () => {
       stderr: '',
     })
     expect(mensagemDeFalha(erro).length).toBeLessThan(700)
+  })
+})
+
+const SAIDA_ENDERECO = JSON.stringify({
+  version: '0.34.2',
+  network: 'signet',
+  score: 96,
+  grade: 'A+',
+  addressInfo: {
+    type: 'p2wpkh',
+    txCount: 2,
+    fundedTxoCount: 1,
+    spentTxoCount: 1,
+    balance: 0,
+  },
+  findings: [
+    {
+      id: 'h8-no-reuse',
+      severity: 'good',
+      confidence: 'deterministic',
+      title: 'No address reuse detected',
+      description: 'd',
+      recommendation: 'r',
+      scoreImpact: 5,
+      params: {},
+    },
+  ],
+  links: { analysis: 'https://am-i.exposed/#addr=tb1q' },
+})
+
+describe('scanAddress', () => {
+  const base = {
+    address: 'tb1qxfskf5u0v6',
+    network: 'signet' as const,
+    backendUrl: 'http://meu-esplora:3002',
+  }
+
+  // Um endereço avulso não tem chave para virar descriptor. Mandar `scan xpub`
+  // com um endereço faria o scanner recusar, e a análise de privacidade ficaria
+  // indisponível justamente para o caso mais simples.
+  it('pede a análise do endereço, e não da carteira', async () => {
+    let recebidos: string[] = []
+    await scanAddress({
+      ...base,
+      runner: async args => {
+        recebidos = args
+        return SAIDA_ENDERECO
+      },
+    })
+    expect(recebidos).toContain('address')
+    expect(recebidos).not.toContain('xpub')
+    expect(recebidos).toContain(base.address)
+  })
+
+  it('lê score, nota e achados do endereço', async () => {
+    const scan = await scanAddress({ ...base, runner: async () => SAIDA_ENDERECO })
+    expect(scan.score).toBe(96)
+    expect(scan.grade).toBe('A+')
+    expect(scan.findings[0]!.id).toBe('h8-no-reuse')
+  })
+
+  // O que o scanner devolve sobre um endereço não tem a mesma forma do que ele
+  // devolve sobre uma carteira. Guardar como veio é honesto; traduzir campo a
+  // campo obrigaria a inventar os que não existem.
+  it('guarda o retrato do endereço como o scanner o devolveu', async () => {
+    const scan = await scanAddress({ ...base, runner: async () => SAIDA_ENDERECO })
+    expect(scan.walletInfo).toMatchObject({ txCount: 2, balance: 0 })
+  })
+
+  it('consulta pelo mesmo backend que vigia', async () => {
+    let recebidos: string[] = []
+    await scanAddress({
+      ...base,
+      runner: async args => {
+        recebidos = args
+        return SAIDA_ENDERECO
+      },
+    })
+    expect(recebidos[recebidos.indexOf('--api') + 1]).toBe('http://meu-esplora:3002')
+  })
+
+  it('descarta o link que carrega o endereço para fora', async () => {
+    const scan = await scanAddress({ ...base, runner: async () => SAIDA_ENDERECO })
+    expect(JSON.stringify(scan)).not.toContain('am-i.exposed')
   })
 })

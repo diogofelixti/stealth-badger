@@ -12,7 +12,7 @@ import {
   analisarOrigens,
   type TxScanner,
 } from './origem-service'
-import { scanWallet, type PrivacyScan } from './scan'
+import { scanAddress, scanWallet, type PrivacyScan } from './scan'
 import { historicoDeScans, salvarScan, ultimoScan } from './store'
 
 /**
@@ -34,18 +34,29 @@ export interface ScanContext {
 
 export type WalletScanner = (ctx: ScanContext) => Promise<PrivacyScan>
 
+export interface AddressScanContext {
+  address: string
+  network: Network
+  backendUrl: string
+}
+
+export type AddressScanner = (ctx: AddressScanContext) => Promise<PrivacyScan>
+
 export interface PrivacyRouteOptions {
   scanner?: WalletScanner
+  addressScanner?: AddressScanner
   txScanner?: TxScanner
 }
 
 interface Linha {
   id: string
-  xpub_encrypted: Buffer
+  kind: 'xpub' | 'address'
+  xpub_encrypted: Buffer | null
   script_type: ScriptType
   network: Network
   gap_limit: number
   url: string
+  address: string | null
 }
 
 /** Carteira do usuário, ou `null` — inclusive quando é de outra pessoa. */
@@ -54,7 +65,9 @@ async function carteiraDoUsuario(
   walletId: number,
 ): Promise<Linha | null> {
   const { rows } = await pool.query<Linha>(
-    `SELECT w.id, w.xpub_encrypted, w.script_type, w.network, w.gap_limit, b.url
+    `SELECT w.id, w.kind, w.xpub_encrypted, w.script_type, w.network, w.gap_limit, b.url,
+            (SELECT a.address FROM addresses a WHERE a.wallet_id = w.id ORDER BY a.id LIMIT 1)
+              AS address
        FROM wallets w JOIN backends b ON b.id = w.backend_id
       WHERE w.id = $1 AND w.user_id = $2`,
     [walletId, userId],
@@ -67,6 +80,8 @@ export function registerPrivacyRoutes(
   opts: PrivacyRouteOptions = {},
 ): void {
   const scanner = opts.scanner ?? ((ctx: ScanContext) => scanWallet(ctx))
+  const addressScanner =
+    opts.addressScanner ?? ((ctx: AddressScanContext) => scanAddress(ctx))
   /** Publica um alerta e o entrega pelos canais do usuário. */
   async function publicar(
     candidatos: ReturnType<typeof alertsForScan>,
@@ -104,14 +119,22 @@ export function registerPrivacyRoutes(
       // Lido antes de gravar: depois, a análise nova já é a última.
       const anterior = await ultimoScan(walletId)
 
-      const canonicalXpub = open(carteira.xpub_encrypted, loadConfig().masterKeyHex)
-      const resultado = await scanner({
-        canonicalXpub,
-        scriptType: carteira.script_type,
-        network: carteira.network,
-        backendUrl: carteira.url,
-        gapLimit: carteira.gap_limit,
-      })
+      // Endereço avulso não tem chave para abrir nem descriptor para montar: a
+      // análise dele é de outro tipo, e o scanner tem os dois.
+      const resultado =
+        carteira.kind === 'address'
+          ? await addressScanner({
+              address: carteira.address!,
+              network: carteira.network,
+              backendUrl: carteira.url,
+            })
+          : await scanner({
+              canonicalXpub: open(carteira.xpub_encrypted!, loadConfig().masterKeyHex),
+              scriptType: carteira.script_type,
+              network: carteira.network,
+              backendUrl: carteira.url,
+              gapLimit: carteira.gap_limit,
+            })
       const scanId = await salvarScan(walletId, resultado)
 
       await publicar(

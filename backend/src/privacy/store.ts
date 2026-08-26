@@ -1,5 +1,5 @@
 import { pool } from '../db/pool'
-import type { PrivacyFinding, PrivacyScan, WalletInfo } from './scan'
+import type { PrivacyFinding, PrivacyScan } from './scan'
 
 export interface ScanSalvo extends PrivacyScan {
   id: number
@@ -10,7 +10,7 @@ interface Linha {
   id: string
   score: number
   grade: string
-  wallet_info: WalletInfo
+  wallet_info: Record<string, unknown>
   findings: PrivacyFinding[]
   scanner_version: string
   scanned_at: Date

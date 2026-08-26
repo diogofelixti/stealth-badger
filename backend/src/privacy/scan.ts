@@ -25,12 +25,19 @@ export interface WalletInfo {
   totalBalance: number
   reusedAddresses: number
   dustUtxos: number
+  [campo: string]: unknown
 }
 
 export interface PrivacyScan {
   score: number
   grade: string
-  walletInfo: WalletInfo
+  /**
+   * O retrato que o scanner devolveu: `walletInfo` para carteira,
+   * `addressInfo` para endereço avulso. Guardado como veio — as duas formas
+   * não coincidem, e traduzir campo a campo obrigaria a inventar os que não
+   * existem de um lado.
+   */
+  walletInfo: Record<string, unknown>
   findings: PrivacyFinding[]
   scannerVersion: string
 }
@@ -192,6 +199,49 @@ export async function scanTransaction(opts: TxScanOptions): Promise<TxScan> {
   return {
     findings: (bruto.findings as PrivacyFinding[]) ?? [],
     scannerVersion: (bruto.version as string) ?? 'desconhecida',
+  }
+}
+
+export interface AddressScanOptions {
+  address: string
+  network: Network
+  backendUrl: string
+  runner?: ScanRunner
+  timeoutMs?: number
+}
+
+/**
+ * Analisa um endereço avulso.
+ *
+ * Um endereço não vira descriptor, e mandar `scan xpub` com ele faria o
+ * scanner recusar — a análise de privacidade ficaria indisponível justamente
+ * para o caso mais simples que o produto vigia.
+ */
+export async function scanAddress(opts: AddressScanOptions): Promise<PrivacyScan> {
+  const timeoutMs = opts.timeoutMs ?? 120_000
+  const runner = opts.runner ?? cliRunner(timeoutMs)
+
+  const bruto = (await rodar(
+    [...argumentosBase(opts.network, opts.backendUrl), 'scan', 'address', opts.address],
+    runner,
+  )) as {
+    version?: string
+    score?: number
+    grade?: string
+    addressInfo?: Record<string, unknown>
+    findings?: PrivacyFinding[]
+  }
+
+  if (typeof bruto.score !== 'number') {
+    throw new Error('o scanner devolveu JSON sem score')
+  }
+
+  return {
+    score: bruto.score,
+    grade: bruto.grade ?? '?',
+    walletInfo: bruto.addressInfo ?? {},
+    findings: bruto.findings ?? [],
+    scannerVersion: bruto.version ?? 'desconhecida',
   }
 }
 
