@@ -747,6 +747,15 @@ A tentativa passou a ficar gravada com o motivo, e a fila ordena nunca-tentadas
 primeiro, com as que falharam no fim — fora, e não excluídas, porque falha também
 acontece por rede instável e essas merecem outra chance.
 
+**Confirmado contra a signet:** 7 transações tentadas, 4 com achados e 3 registradas
+como falha. O teto é 5 por rodada, então 7 é a prova de que a fila avançou em vez de
+repetir as mesmas.
+
+Um terceiro detalhe, menor e da mesma família: a mensagem de erro terminava em
+"Confira se ele está instalado" mesmo quando o binário tinha rodado e o explorador é
+que não achou a transação. Conselho errado gruda mais que conselho ausente — manda
+procurar no lugar errado. A dica agora só aparece quando é ela que resolve.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.

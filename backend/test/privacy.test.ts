@@ -126,7 +126,18 @@ describe('scanWallet', () => {
     const quebrado: ScanRunner = async () => {
       throw new Error('spawn am-i-exposed ENOENT')
     }
-    await expect(scanWallet({ ...base, runner: quebrado })).rejects.toThrow(/am-i-exposed/)
+    await expect(scanWallet({ ...base, runner: quebrado })).rejects.toThrow(/PATH/)
+  })
+
+  // A dica de instalação contradiz a causa quando o binário rodou e o
+  // explorador é que não achou a transação. Conselho errado gruda mais que
+  // conselho ausente: manda procurar no lugar errado.
+  it('não manda conferir a instalação quando o scanner rodou e reclamou', async () => {
+    const naoAchou: ScanRunner = async () => {
+      throw new Error('Command failed · saída: {"error":true,"message":"Not found"}')
+    }
+    await expect(scanWallet({ ...base, runner: naoAchou })).rejects.toThrow(/Not found/)
+    await expect(scanWallet({ ...base, runner: naoAchou })).rejects.not.toThrow(/PATH/)
   })
 
   it('falha em vez de inventar quando a saída não é o JSON esperado', async () => {

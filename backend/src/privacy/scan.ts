@@ -123,10 +123,15 @@ async function rodar(
   try {
     saida = await runner(args)
   } catch (err) {
+    const motivo = (err as Error).message
+    // A dica de instalação só entra quando é ela que resolve. Se o binário
+    // rodou e reclamou, mandar conferir o PATH manda procurar no lugar errado
+    // — e conselho errado gruda mais que conselho ausente.
+    const naoEncontrado = /ENOENT|not found: am-i-exposed|command not found/i.test(motivo)
     throw new Error(
       'falha ao rodar o am-i-exposed: ' +
-        (err as Error).message +
-        '. Confira se ele está instalado e no PATH do processo.',
+        motivo +
+        (naoEncontrado ? '. Confira se ele está instalado e no PATH do processo.' : ''),
     )
   }
 
