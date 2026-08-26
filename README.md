@@ -79,7 +79,7 @@ fica "vigiando em parte" com o motivo à vista, e os outros endereços continuam
 lidos
 
 ✅ **Escolha do backend de cadeia por carteira** — Esplora ou Electrum (que cobre Electrs,
-Fulcrum e Floresta de uma vez)
+Fulcrum e Floresta de uma vez), o segundo verificado contra um ElectrumX real
 
 ✅ **Aviso de privacidade permanente** — enquanto qualquer carteira consultar por
 explorador público, a advertência fica presa no topo da tela

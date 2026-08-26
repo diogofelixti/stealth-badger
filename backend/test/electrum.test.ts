@@ -1,10 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { causaDaFalha, createElectrumAdapter } from '../src/chain/electrum'
 
-/** Transporte falso: responde por método, sem abrir socket. */
+/**
+ * Transporte falso: responde por método, sem abrir socket.
+ *
+ * Responde ao `server.version` por padrão porque qualquer servidor real
+ * responde — foi justamente não cobrar o handshake que deixou o adapter passar
+ * nos testes e falhar contra um ElectrumX de verdade.
+ */
 function fakeTransport(handlers: Record<string, (params: unknown[]) => unknown>) {
   return async () => ({
     call: async (method: string, params: unknown[]) => {
+      if (method === 'server.version' && !handlers[method]) {
+        return ['ElectrumX 1.19.0', '1.4']
+      }
       const h = handlers[method]
       if (!h) throw new Error(`método não simulado: ${method}`)
       return h(params)
@@ -92,7 +101,7 @@ describe('adapter Electrum', () => {
   it('nomeia o servidor e o método quando a chamada falha', async () => {
     const a = createElectrumAdapter({
       host: 'nó.local', port: 50001, network: 'mainnet',
-      connect: fakeTransport({}),
+      connect: fakeTransport({ 'server.version': () => ['ElectrumX', '1.4'] }),
     })
     await expect(a.tipHeight()).rejects.toThrow(/nó\.local:50001.*blockchain\.headers\.subscribe/)
   })
@@ -179,6 +188,12 @@ describe('transporte TCP do Electrum', () => {
         while ((quebra = buffer.indexOf('\n')) !== -1) {
           const linha = buffer.slice(0, quebra)
           buffer = buffer.slice(quebra + 1)
+          // o handshake é respondido aqui, como faria qualquer servidor
+          if (linha.includes('server.version')) {
+            const { id } = JSON.parse(linha) as { id: number }
+            socket.write(JSON.stringify({ id, result: ['ElectrumX 1.19.0', '1.4'] }) + '\n')
+            continue
+          }
           responder(linha, texto => socket.write(texto))
         }
       })
@@ -383,5 +398,95 @@ describe('servidor que aceita e não responde', () => {
     } finally {
       await new Promise<void>(pronto => servidor.close(() => pronto()))
     }
+  })
+})
+
+describe('handshake do protocolo', () => {
+  // O ElectrumX recusa qualquer chamada antes de `server.version`, com
+  // "use server.version to identify client". O adapter nunca o enviava, e
+  // por isso nunca teria funcionado contra servidor de verdade — o transporte
+  // falso dos testes de cima não cobra o handshake, e o defeito só apareceu
+  // ao falar com um ElectrumX 1.19 real.
+  it('identifica o cliente antes de qualquer outra chamada', async () => {
+    const ordem: string[] = []
+    const a = createElectrumAdapter({
+      host: 'x', port: 1, network: 'mainnet',
+      connect: async () => ({
+        call: async (method: string) => {
+          ordem.push(method)
+          if (method === 'server.version') return ['ElectrumX 1.19.0', '1.4']
+          return { height: 42 }
+        },
+        close: () => {},
+      }),
+    })
+    await a.tipHeight()
+    expect(ordem[0]).toBe('server.version')
+    expect(ordem[1]).toBe('blockchain.headers.subscribe')
+  })
+
+  it('diz quem é e que versão de protocolo fala', async () => {
+    let params: unknown[] = []
+    const a = createElectrumAdapter({
+      host: 'x', port: 1, network: 'mainnet',
+      connect: async () => ({
+        call: async (method: string, p: unknown[]) => {
+          if (method === 'server.version') params = p
+          return method === 'server.version' ? ['ElectrumX', '1.4'] : { height: 1 }
+        },
+        close: () => {},
+      }),
+    })
+    await a.tipHeight()
+    expect(String(params[0])).toMatch(/stealth.badger/i)
+    expect(params[1]).toBe('1.4')
+  })
+
+  // Um handshake por conexão, e não por chamada: repeti-lo a cada consulta
+  // dobraria o tráfego com o servidor para não dizer nada de novo.
+  it('não repete o handshake a cada chamada', async () => {
+    let versoes = 0
+    const a = createElectrumAdapter({
+      host: 'x', port: 1, network: 'mainnet',
+      connect: async () => ({
+        call: async (method: string) => {
+          if (method === 'server.version') versoes += 1
+          return method === 'server.version' ? ['ElectrumX', '1.4'] : { height: 1 }
+        },
+        close: () => {},
+      }),
+    })
+    await a.tipHeight()
+    await a.tipHeight()
+    await a.tipHeight()
+    expect(versoes).toBe(1)
+  })
+
+  // Conexão nova é servidor que não sabe quem somos: o handshake tem de
+  // acontecer de novo, senão a reconexão volta a esbarrar na recusa.
+  it('refaz o handshake quando a conexão é reaberta', async () => {
+    let versoes = 0
+    let conexoes = 0
+    const a = createElectrumAdapter({
+      host: 'x', port: 1, network: 'mainnet',
+      connect: async () => {
+        conexoes += 1
+        const daVez = conexoes
+        return {
+          call: async (method: string) => {
+            if (method === 'server.version') {
+              versoes += 1
+              return ['ElectrumX', '1.4']
+            }
+            if (daVez === 1) throw new Error('conexão caiu')
+            return { height: 9 }
+          },
+          close: () => {},
+        }
+      },
+    })
+    await expect(a.tipHeight()).rejects.toThrow()
+    expect(await a.tipHeight()).toBe(9)
+    expect(versoes).toBe(2)
   })
 })

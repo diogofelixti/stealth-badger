@@ -1033,6 +1033,45 @@ que ele deixa de virar dado, e há teste para isso.
 Conferido contra a base real: saldo intacto em 7.552.468 sats, nenhum sentinela
 restante.
 
+## Décima sétima rodada — 26/08, o Electrum nunca teria funcionado
+
+Segunda tentativa contra o ElectrumX público de signet, depois que ele voltou a
+responder. O adapter falhou com uma mensagem inequívoca:
+
+> `use server.version to identify client`
+
+**O protocolo exige `server.version` como primeira chamada, e o adapter nunca o
+enviava.** Ele nunca teria funcionado contra servidor nenhum de verdade. Os testes
+passavam porque o transporte falso *é* o servidor, e um transporte falso não cobra o que
+um servidor real cobra.
+
+Vale registrar duas coisas sobre como isso apareceu:
+
+- **a mensagem só estava legível por causa da correção de erro mudo de mais cedo.** Antes
+  dela, esse mesmo erro chegava como string vazia, e o diagnóstico teria custado outra
+  rodada de socket na mão;
+- **o transporte falso foi corrigido junto.** Ele passa a responder ao handshake, como
+  qualquer servidor real — não cobrar o handshake foi exatamente o que deixou o defeito
+  passar.
+
+O handshake vale por conexão, não por chamada, e é refeito quando a conexão é reaberta:
+servidor novo não sabe quem somos, e sem repetir a reconexão voltaria a esbarrar na
+recusa.
+
+### Verificado contra o servidor real
+
+| Método | Resultado |
+|---|---|
+| `tipHeight` | 319.487 |
+| `blockHashAt` | **confere com o mempool.space** — duas fontes independentes no mesmo hash |
+| `getAddressStatus` | `used=true` |
+| `getUtxosForAddress` | 0 UTXOs |
+| `getHistoryForAddress` | 2 transações |
+
+O scripthash no formato Electrum está correto: um endereço com histórico foi encontrado
+como tendo histórico, que é a única forma de saber que a derivação `sha256` invertida
+está certa.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
@@ -1071,11 +1110,6 @@ sobre privacidade, não sobre saldo.
 
 ### Técnicas
 
-- **O adapter Electrum ainda não completou uma consulta contra servidor real.**
-  Tentado em 26/08 contra um ElectrumX público de signet: conectou e negociou, mas o
-  servidor passou a não responder depois de algumas conexões. O protocolo segue coberto
-  por servidor de teste local — resposta partida em pedaços, notificação sem id, erro
-  devolvido pelo servidor, e servidor que aceita e fica calado
 - **Uma falha isolada na suíte do frontend**, em `Dashboard > anuncia postura pública`,
   numa execução entre quinze. Não reproduziu depois, e a máquina construía imagem
   Docker no mesmo instante. Fica anotada em vez de dada por resolvida: intermitência

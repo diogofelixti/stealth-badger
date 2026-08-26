@@ -451,6 +451,14 @@ O adapter Electrum recebe **endereço** e deriva o scripthash internamente. A
 alternativa — expor scripthash na interface — vazaria detalhe do protocolo Electrum
 até o motor de sincronização, e custaria a um Esplora ter de conhecê-lo.
 
+O protocolo exige `server.version` como **primeira** chamada de cada conexão; sem ele o
+servidor recusa tudo com "use server.version to identify client". O handshake vale por
+conexão e é refeito quando ela é reaberta.
+
+Verificado em 26/08 contra um ElectrumX 1.19 público de signet: altura da ponta,
+histórico, UTXOs e status de endereço. O hash de bloco que o adapter calcula do
+cabeçalho **confere com o que o mempool.space reporta** para a mesma altura.
+
 `PUBLIC_BACKEND` sem valor assume público no Esplora e soberano no Electrum, que é o
 uso corrente dos dois. Quem aponta para um Esplora próprio, ou para um servidor
 Electrum de terceiro, precisa dizer — é o aviso de privacidade da tela que depende

@@ -67,6 +67,17 @@ const ESPERA_POR_FAMILIA_MS = 1_000
 const LIMITE_DE_RESPOSTA_MS = 20_000
 
 /**
+ * Handshake obrigatório do protocolo Electrum.
+ *
+ * O ElectrumX recusa qualquer chamada antes de `server.version`, respondendo
+ * "use server.version to identify client". O adapter não o enviava, e por isso
+ * nunca teria funcionado contra servidor de verdade: o transporte falso dos
+ * testes é o servidor, e não cobra o que um servidor real cobra.
+ */
+const CLIENTE = 'stealth-badger'
+const PROTOCOLO = '1.4'
+
+/**
  * Descreve por que a conexão ou a chamada falhou.
  *
  * Um `connect` que falha nas duas famílias de endereço devolve `AggregateError`
@@ -185,7 +196,22 @@ export function createElectrumAdapter(opts: ElectrumOptions): ChainAdapter {
   let transport: Transport | null = null
 
   async function call(method: string, params: unknown[] = []): Promise<unknown> {
-    if (!transport) transport = await connect()
+    if (!transport) {
+      const novo = await connect()
+      // O handshake vale por conexão, não por chamada: repeti-lo a cada
+      // consulta dobraria o tráfego para não dizer nada de novo. E conexão
+      // reaberta é servidor que não sabe quem somos, então ele acontece de
+      // novo — senão a reconexão volta a esbarrar na recusa.
+      try {
+        await novo.call('server.version', [CLIENTE, PROTOCOLO])
+      } catch (err) {
+        novo.close()
+        throw new Error(
+          `Electrum ${opts.host}:${opts.port} recusou a identificação do cliente: ${causaDaFalha(err)}`,
+        )
+      }
+      transport = novo
+    }
     try {
       return await transport.call(method, params)
     } catch (err) {
