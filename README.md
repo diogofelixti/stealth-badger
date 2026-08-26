@@ -49,6 +49,9 @@ algo que **vigie de forma contínua e avise a tempo**.
 ✅ **Vigia carteiras por chave pública estendida** — `xpub`, `ypub`, `zpub`, `tpub`,
 `upub`, `vpub` ou output descriptor, com gap limit e varredura das duas cadeias
 
+✅ **Vigia endereço avulso**, fora de qualquer carteira, para quem publica um endereço
+de doação e não quer entregar a carteira inteira ao watchtower
+
 ✅ **Sete tipos de alerta**, dos quais quatro são de privacidade e não de movimento:
 reutilização de endereço, dust attack, queda de privacy score e origem dos fundos
 
@@ -68,7 +71,12 @@ e Jade
 
 ✅ **Feed ao vivo** por SSE, empurrado pelo servidor, sem polling
 
-✅ **Push no celular** via [ntfy](https://ntfy.sh), renderizado no idioma do usuário
+✅ **Push no celular** via [ntfy](https://ntfy.sh), renderizado no idioma do usuário,
+com botão de teste para conferir que o aviso chega antes de precisar
+
+✅ **Degrada em vez de quebrar** — quando o backend recusa servir um endereço, a carteira
+fica "vigiando em parte" com o motivo à vista, e os outros endereços continuam sendo
+lidos
 
 ✅ **Escolha do backend de cadeia por carteira** — Esplora ou Electrum (que cobre Electrs,
 Fulcrum e Floresta de uma vez)
