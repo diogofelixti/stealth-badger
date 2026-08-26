@@ -799,6 +799,51 @@ forma de falhar, porque não se anuncia. Agora cada chamada tem relógio própri
 nos dois desfechos, e tempo esgotado derruba a conexão: servidor que ficou calado uma
 vez não merece confiança na consulta seguinte.
 
+## Décima rodada — 26/08, vigiar endereço avulso
+
+A descrição do produto sempre prometeu "endereços **e** carteiras", e só carteira tinha
+sido entregue. A dívida estava registrada na §4 do design como adiada com razão; a razão
+deixou de valer quando sobrou tempo.
+
+### Carteira de um endereço só, e não tabela nova
+
+O endereço avulso entra como uma carteira cujo `kind` é `address`. Não é preguiça de
+modelagem: assim ele reaproveita inteiros o log de eventos, a projeção de UTXO, o motor
+de alertas e a deduplicação — que são justamente as partes onde a falha é silenciosa, e
+que já estão cobertas por teste. Uma tabela paralela duplicaria essas quatro coisas, e a
+segunda cópia é a que ninguém lembra de corrigir.
+
+Sem xpub não há o que derivar nem o que cifrar, então `xpub_encrypted` e
+`xpub_fingerprint` passaram a aceitar nulo. `kind` existe para o motor saber disso sem
+inferir de coluna nula, que é o tipo de acordo tácito que se perde na leitura seguinte.
+
+No motor, o ramo é pequeno: em vez de derivar por gap limit, confere os endereços já
+cadastrados. A sonda que pergunta ao backend o que existe num endereço foi extraída para
+ser usada pelos dois caminhos, e daí para baixo o resto do motor não sabe a diferença.
+
+### O que a validação recusa, e por quê
+
+- **endereço de outra rede**, com a mensagem dizendo qual é qual — aceitar produziria
+  algo que sincroniza, não encontra nada e mostra saldo zero para sempre;
+- **chave estendida colada no campo de endereço**, que é o engano mais provável do
+  usuário. Dizer "endereço inválido" mandaria procurar no lugar errado; a mensagem
+  reconhece a chave e sugere cadastrar como carteira;
+- **chave e endereço juntos** — aceitar obrigaria a escolher um em silêncio, e o usuário
+  descobriria depois que vigiou o que não pediu.
+
+O tipo de script sai do endereço decodificado, não de heurística sobre o texto: `bc1q` de
+42 caracteres e `bc1q` de 62 são coisas diferentes, e adivinhar pelo prefixo erraria no
+segundo.
+
+### Na tela
+
+O formulário ganhou a escolha entre carteira inteira e um endereço, com o aviso de que o
+segundo vigia só aquilo. O cartão mostra o endereço encurtado no lugar da fingerprint —
+que não existe sem chave, e o campo vazio pareceria defeito — e não anuncia tipo de
+script no formato de carteira, porque sugeriria que o watchtower vigia mais do que vigia.
+
+Conferido em navegador com um endereço tirado de um bloco recente da signet.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
@@ -834,10 +879,6 @@ sobre privacidade, não sobre saldo.
 
 ### Reconhecidas e adiadas, com razão registrada
 
-- **Vigiar endereço avulso** fora de carteira — a descrição do produto promete
-  "endereços *e* carteiras" e só carteira foi entregue. Caminho barato mapeado
-  (carteira de um endereço só), mas exige um ramo em `syncWallet` para carteira sem
-  xpub
 - **Análise de origem disparada pelo worker**, e não só pelo botão. O gatilho da §9.1
   prevê "transação nova detectada"; hoje só o clique dispara. Precisa de fila própria,
   senão um `scan tx` de cinco segundos por depósito estica o ciclo de sincronização

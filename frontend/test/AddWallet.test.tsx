@@ -25,6 +25,10 @@ const CATALOGO: Catalog = {
   'wallets.formTitle': 'Vigiar uma carteira',
   'wallets.labelPlaceholder': 'Rótulo',
   'wallets.keyPlaceholder': 'xpub, ypub, zpub',
+  'wallets.modeKey': 'Carteira inteira',
+  'wallets.modeAddress': 'Um endereço',
+  'wallets.addressPlaceholder': 'bc1..., 3..., 1...',
+  'wallets.addressNote': 'Vigia só este endereço.',
   'wallets.watchOnly': 'Somente chaves públicas.',
   'wallets.submit': 'Começar a vigiar',
   'wallets.submitting': 'cadastrando...',
@@ -82,7 +86,9 @@ describe('AddWallet — escolha de backend', () => {
     fireEvent.change(screen.getByPlaceholderText(/xpub/i), { target: { value: 'zpub123' } })
     fireEvent.click(screen.getByRole('button', { name: /começar a vigiar/i }))
 
-    await waitFor(() => expect(addWallet).toHaveBeenCalledWith('No meu nó', 'zpub123', MEU.id))
+    await waitFor(() =>
+      expect(addWallet).toHaveBeenCalledWith('No meu nó', { key: 'zpub123' }, MEU.id),
+    )
   })
 
   // O usuário está escolhendo por onde os endereços dele serão consultados.
@@ -117,5 +123,41 @@ describe('AddWallet — escolha de backend', () => {
     expect((screen.getByLabelText(/vigiar por/i) as HTMLSelectElement).value).toBe(
       String(MEU.id),
     )
+  })
+
+  // A descrição do produto promete "endereços e carteiras". Quem publica um
+  // endereço de doação quer saber quando alguém paga, sem entregar a carteira
+  // inteira ao watchtower.
+  it('deixa escolher entre vigiar a carteira inteira ou só um endereço', async () => {
+    montar()
+    await waitFor(() => expect(screen.getByLabelText(/vigiar por/i)).toBeDefined())
+    expect(screen.getByRole('button', { name: /um endereço/i })).toBeDefined()
+  })
+
+  it('manda o endereço, e não a chave, quando o modo é de endereço', async () => {
+    montar()
+    await waitFor(() => expect(screen.getByLabelText(/vigiar por/i)).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: /um endereço/i }))
+    fireEvent.change(screen.getByPlaceholderText(/rótulo/i), { target: { value: 'Doações' } })
+    fireEvent.change(screen.getByPlaceholderText(/bc1/i), {
+      target: { value: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /começar a vigiar/i }))
+
+    await waitFor(() =>
+      expect(addWallet).toHaveBeenCalledWith(
+        'Doações',
+        { address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4' },
+        GLOBAL.id,
+      ),
+    )
+  })
+
+  it('avisa que o modo de endereço vigia só aquele endereço', async () => {
+    montar()
+    await waitFor(() => expect(screen.getByLabelText(/vigiar por/i)).toBeDefined())
+    fireEvent.click(screen.getByRole('button', { name: /um endereço/i }))
+    expect(screen.getByText(/vigia só este endereço/i)).toBeDefined()
   })
 })

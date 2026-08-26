@@ -8,6 +8,7 @@ const catalogo = {
   'wallet.importingNote': 'Varrendo a cadeia de change. O saldo total acima ainda não inclui esta carteira.',
   'wallet.syncError': 'Falha na sincronização',
   'balance.utxos': '{n} UTXOs',
+  'wallet.watchedAddress': 'endereço avulso',
   'privacy.score': 'Privacidade {score}/100 · {grade}',
   'privacy.scan': 'Analisar privacidade',
   'privacy.scanning': 'analisando...',
@@ -19,6 +20,7 @@ const base: Wallet = {
   fingerprint: 'c81b04af', syncState: 'synced', syncProgress: 100,
   syncHeight: 319233, balanceSats: '412850', utxoCount: 4, frozenCount: 0,
   backendIsPublic: true, backendUrl: 'https://mempool.space/signet/api',
+  kind: 'xpub', address: null,
   privacyScore: null, privacyGrade: null, privacyScannedAt: null,
 }
 
@@ -116,5 +118,32 @@ describe('WalletCard', () => {
     )
     screen.getByRole('button', { name: /analisar privacidade/i }).click()
     expect(cliques).toHaveLength(1)
+  })
+
+  // Uma carteira mostra a fingerprint da chave; um endereço avulso não tem
+  // chave nenhuma, e mostrar o campo vazio faria parecer defeito.
+  it('mostra o endereço no lugar da fingerprint quando é endereço avulso', () => {
+    const avulso: Wallet = {
+      ...base,
+      kind: 'address',
+      address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+      fingerprint: null as unknown as string,
+    }
+    render(<WalletCard wallet={avulso} catalog={catalogo} lang="pt" />)
+    expect(screen.getByText(/bc1qw508/)).toBeDefined()
+    expect(screen.getByText(/endereço avulso/i)).toBeDefined()
+  })
+
+  // Gap limit e cadeia de troco não existem para um endereço solto: anunciar
+  // "32 UTXOs · p2wpkh · signet" no mesmo formato de carteira sugeriria que o
+  // watchtower está vigiando mais do que vigia.
+  it('não anuncia endereço avulso como se fosse carteira inteira', () => {
+    const avulso: Wallet = {
+      ...base,
+      kind: 'address',
+      address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+    }
+    const { container } = render(<WalletCard wallet={avulso} catalog={catalogo} lang="pt" />)
+    expect(container.querySelector('[data-wallet-kind="address"]')).not.toBeNull()
   })
 })

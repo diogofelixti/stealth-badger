@@ -4,7 +4,7 @@ import { pool } from '../db/pool'
 import { activeEvents, appendEvent } from '../events/log'
 import { projectWallet } from '../events/project'
 import type { Network, ScriptType } from '../wallet/descriptor'
-import { scanGap, type ScannedAddress } from './gap'
+import { criarSonda, inalterado, scanGap, type ScannedAddress } from './gap'
 import { detectReorg, rollbackFrom } from './reorg'
 
 export interface SyncResult {
@@ -17,7 +17,8 @@ export interface SyncResult {
 
 interface WalletRow {
   id: string
-  xpub_encrypted: Buffer
+  kind: 'xpub' | 'address'
+  xpub_encrypted: Buffer | null
   script_type: ScriptType
   network: Network
   gap_limit: number
@@ -55,12 +56,56 @@ async function knownStatuses(
   return byChain
 }
 
+/**
+ * Confere os endereços já cadastrados, sem derivar nada.
+ *
+ * É o caminho do endereço avulso. Devolve a mesma forma que a varredura por
+ * gap limit para que todo o resto do motor — persistência, eventos, projeção —
+ * não precise saber a diferença.
+ */
+async function conferirRegistrados(
+  walletId: number,
+  adapter: ChainAdapter,
+  conhecidos: Map<number, string | null>,
+): Promise<ScannedAddress[]> {
+  const { rows } = await pool.query<{
+    chain: number
+    idx: number
+    address: string
+    scripthash: string
+    derivation_path: string
+  }>(
+    `SELECT chain, idx, address, scripthash, derivation_path
+       FROM addresses WHERE wallet_id = $1 ORDER BY chain, idx`,
+    [walletId],
+  )
+
+  const sonda = criarSonda(adapter)
+  const encontrados: ScannedAddress[] = []
+
+  for (const r of rows) {
+    const { used, status } = await sonda(r.address)
+    encontrados.push({
+      chain: r.chain === 1 ? 1 : 0,
+      index: r.idx,
+      address: r.address,
+      scripthash: r.scripthash,
+      path: r.derivation_path,
+      used,
+      status,
+      unchanged: inalterado(conhecidos.get(r.idx), status),
+    })
+  }
+
+  return encontrados
+}
+
 export async function syncWallet(
   walletId: number,
   adapter: ChainAdapter,
 ): Promise<SyncResult> {
   const { rows } = await pool.query<WalletRow>(
-    `SELECT id, xpub_encrypted, script_type, network, gap_limit, sync_state
+    `SELECT id, kind, xpub_encrypted, script_type, network, gap_limit, sync_state
        FROM wallets WHERE id = $1`,
     [walletId],
   )
@@ -78,10 +123,6 @@ export async function syncWallet(
   try {
     await anunciar(0)
 
-    const masterKey = process.env.MASTER_KEY_HEX
-    if (!masterKey) throw new Error('MASTER_KEY_HEX ausente')
-    const canonicalXpub = open(wallet.xpub_encrypted, masterKey)
-
     const tipHeight = await adapter.tipHeight()
     const reorgAt = await detectReorg(walletId, adapter)
     if (reorgAt !== null) await rollbackFrom(walletId, reorgAt)
@@ -95,19 +136,31 @@ export async function syncWallet(
         : await knownStatuses(walletId)
 
     const scanned: ScannedAddress[] = []
-    for (const chain of [0, 1] as const) {
-      scanned.push(
-        ...(await scanGap({
-          adapter,
-          canonicalXpub,
-          scriptType: wallet.script_type,
-          network: wallet.network,
-          chain,
-          gapLimit: wallet.gap_limit,
-          knownStatus: conhecidos[chain],
-        })),
-      )
-      await anunciar(chain === 0 ? 50 : 90)
+    if (wallet.kind === 'address') {
+      // Endereço avulso não tem chave para abrir nem cadeia para derivar: a
+      // lista de endereços já é o que foi cadastrado, e a varredura é só
+      // perguntar o que existe em cada um.
+      scanned.push(...(await conferirRegistrados(walletId, adapter, conhecidos[0])))
+      await anunciar(90)
+    } else {
+      const masterKey = process.env.MASTER_KEY_HEX
+      if (!masterKey) throw new Error('MASTER_KEY_HEX ausente')
+      const canonicalXpub = open(wallet.xpub_encrypted!, masterKey)
+
+      for (const chain of [0, 1] as const) {
+        scanned.push(
+          ...(await scanGap({
+            adapter,
+            canonicalXpub,
+            scriptType: wallet.script_type,
+            network: wallet.network,
+            chain,
+            gapLimit: wallet.gap_limit,
+            knownStatus: conhecidos[chain],
+          })),
+        )
+        await anunciar(chain === 0 ? 50 : 90)
+      }
     }
 
     const addressIds = new Map<string, number>()

@@ -27,28 +27,46 @@ export interface GapScanOptions {
   knownStatus?: Map<number, string | null>
 }
 
+/**
+ * Como perguntar ao backend o que existe num endereço.
+ *
+ * Extraída porque as duas varreduras precisam dela: a que deriva por gap limit
+ * e a que só confere os endereços já registrados.
+ */
+export function criarSonda(
+  adapter: ChainAdapter,
+): (address: string) => Promise<{ used: boolean; status: string | null }> {
+  if (adapter.getAddressStatus) {
+    // O resumo custa uma fração do histórico completo e responde as duas
+    // perguntas da varredura: o endereço foi usado, e mudou alguma coisa nele.
+    return address => adapter.getAddressStatus!(address)
+  }
+  if (adapter.getHistoryForAddress) {
+    return async address => ({
+      used: (await adapter.getHistoryForAddress!(address)).length > 0,
+      status: null,
+    })
+  }
+  throw new Error(
+    'este adapter não oferece acesso aleatório; use o caminho de registro e rescan',
+  )
+}
+
+/** `null` de um dos lados é ignorância, não igualdade: sem status não há como
+ *  afirmar que nada mudou, e o endereço é reconferido. */
+export function inalterado(anterior: string | null | undefined, atual: string | null): boolean {
+  return anterior != null && atual !== null && anterior === atual
+}
+
 export async function scanGap(opts: GapScanOptions): Promise<ScannedAddress[]> {
   const { adapter, canonicalXpub, scriptType, network, chain, gapLimit } = opts
   const maxIndex = opts.maxIndex ?? 1000
   const knownStatus = opts.knownStatus ?? new Map<number, string | null>()
 
-  if (!adapter.getAddressStatus && !adapter.getHistoryForAddress) {
-    throw new Error(
-      'este adapter não oferece acesso aleatório; use o caminho de registro e rescan',
-    )
-  }
+  const probe = criarSonda(adapter)
   if (!Number.isInteger(gapLimit) || gapLimit < 1) {
     throw new Error('gap limit inválido')
   }
-
-  // O resumo custa uma fração do histórico completo e responde as duas
-  // perguntas da varredura: o endereço foi usado, e mudou alguma coisa nele.
-  const probe = adapter.getAddressStatus
-    ? (address: string) => adapter.getAddressStatus!(address)
-    : async (address: string) => ({
-        used: (await adapter.getHistoryForAddress!(address)).length > 0,
-        status: null,
-      })
 
   const found: ScannedAddress[] = []
   let consecutiveUnused = 0
@@ -66,9 +84,7 @@ export async function scanGap(opts: GapScanOptions): Promise<ScannedAddress[]> {
       path: d.path,
       used,
       status,
-      // `null` de um dos lados significa ignorância, não igualdade: sem status
-      // não há como afirmar que nada mudou, e o endereço é reconferido.
-      unchanged: anterior != null && status !== null && anterior === status,
+      unchanged: inalterado(anterior, status),
     })
 
     consecutiveUnused = used ? 0 : consecutiveUnused + 1

@@ -20,9 +20,14 @@ export interface Alert {
 
 export type Catalog = Record<string, string>
 
+export type WalletKind = 'xpub' | 'address'
+
 export interface Wallet {
   id: number
   label: string
+  kind: WalletKind
+  /** preenchido apenas quando `kind` é `address` */
+  address: string | null
   scriptType: string
   network: string
   fingerprint: string
@@ -120,10 +125,14 @@ export const api = {
   logout: () => request<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
   me: () => request<Me>('/api/auth/me'),
   wallets: () => request<Wallet[]>('/api/wallets'),
-  addWallet: (label: string, key: string, backendId?: number) =>
+  addWallet: (
+    label: string,
+    entrada: { key?: string; address?: string },
+    backendId?: number,
+  ) =>
     request<Wallet>('/api/wallets', {
       method: 'POST',
-      body: JSON.stringify({ label, key, backendId }),
+      body: JSON.stringify({ label, ...entrada, backendId }),
     }),
   backends: () => request<Backend[]>('/api/backends'),
   addBackend: (kind: BackendKind, url: string, isPublic: boolean) =>

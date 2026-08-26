@@ -68,6 +68,12 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallets.formTitle': 'Vigiar uma carteira',
     'wallets.labelPlaceholder': 'Rótulo, por exemplo Cold wallet',
     'wallets.keyPlaceholder': 'xpub, ypub, zpub, tpub, upub ou vpub',
+    'wallets.modeKey': 'Carteira inteira',
+    'wallets.modeAddress': 'Um endereço',
+    'wallets.addressPlaceholder': 'bc1..., tb1..., 3... ou 1...',
+    'wallets.addressNote':
+      'Vigia só este endereço, e nada mais da carteira de onde ele veio.',
+    'wallet.watchedAddress': 'endereço avulso',
     'wallets.watchOnly':
       'Somente chaves públicas. O Stealth Badger é watch-only e recusa qualquer ' +
       'material que permita gastar.',
@@ -175,6 +181,12 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallets.formTitle': 'Watch a wallet',
     'wallets.labelPlaceholder': 'Label, for example Cold wallet',
     'wallets.keyPlaceholder': 'xpub, ypub, zpub, tpub, upub or vpub',
+    'wallets.modeKey': 'Whole wallet',
+    'wallets.modeAddress': 'One address',
+    'wallets.addressPlaceholder': 'bc1..., tb1..., 3... or 1...',
+    'wallets.addressNote':
+      'Watches this address only, and nothing else from the wallet it came from.',
+    'wallet.watchedAddress': 'single address',
     'wallets.watchOnly':
       'Public keys only. Stealth Badger is watch-only and refuses anything that ' +
       'could spend.',

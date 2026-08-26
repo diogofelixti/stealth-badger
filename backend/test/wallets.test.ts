@@ -329,3 +329,137 @@ describe('POST /api/wallets — tipo de script ambíguo', () => {
     expect(fechados).toBe(1)
   })
 })
+
+describe('POST /api/wallets com endereço avulso', () => {
+  const ENDERECO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'
+
+  async function logado() {
+    const app = buildApp()
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'avulso@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'avulso@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    return { app, cookie: login.cookies.find(c => c.name === 'sb_session')!.value }
+  }
+
+  // A descrição do produto sempre prometeu "endereços e carteiras". Vigiar um
+  // endereço solto é o caso de quem publica um endereço de doação e quer saber
+  // quando alguém paga, sem expor a carteira inteira ao watchtower.
+  it('cadastra endereço solto e o deixa pronto para vigiar', async () => {
+    const { app, cookie } = await logado()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Doações', address: ENDERECO },
+    })
+    expect(res.statusCode).toBe(201)
+    expect(res.json()).toMatchObject({ kind: 'address', syncState: 'pending' })
+  })
+
+  it('registra o endereço para o motor conferir, sem derivar nada', async () => {
+    const { app, cookie } = await logado()
+    const criada = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Doações', address: ENDERECO },
+    })
+    const { rows } = await pool.query<{ address: string; total: string }>(
+      `SELECT address, (SELECT count(*) FROM addresses WHERE wallet_id = $1)::text AS total
+         FROM addresses WHERE wallet_id = $1`,
+      [Number(criada.json().id)],
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.address).toBe(ENDERECO)
+  })
+
+  // Não há chave para cifrar, e gravar bytes vazios fingindo que há tornaria
+  // impossível distinguir "sem chave" de "chave corrompida".
+  it('não guarda chave cifrada nenhuma para endereço avulso', async () => {
+    const { app, cookie } = await logado()
+    const criada = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Doações', address: ENDERECO },
+    })
+    const { rows } = await pool.query<{ xpub_encrypted: Buffer | null }>(
+      'SELECT xpub_encrypted FROM wallets WHERE id = $1',
+      [Number(criada.json().id)],
+    )
+    expect(rows[0]!.xpub_encrypted).toBeNull()
+  })
+
+  it('recusa endereço de outra rede, dizendo qual é qual', async () => {
+    const { app, cookie } = await logado()
+    process.env.NETWORK = 'signet'
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Doações', address: ENDERECO },
+    })
+    expect(res.statusCode).toBe(400)
+    expect(res.json().error).toMatch(/signet/)
+  })
+
+  it('exige rótulo, endereço ou chave, e recusa os dois juntos', async () => {
+    const { app, cookie } = await logado()
+    const semNada = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'x' },
+    })
+    expect(semNada.statusCode).toBe(400)
+
+    const ambos = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'x', address: ENDERECO, key: ZPUB },
+    })
+    expect(ambos.statusCode).toBe(400)
+    expect(ambos.json().error).toMatch(/endereço|chave/i)
+  })
+
+  it('mostra na listagem que é endereço avulso, e qual endereço', async () => {
+    const { app, cookie } = await logado()
+    await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Doações', address: ENDERECO },
+    })
+    const lista = await app.inject({
+      method: 'GET',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+    })
+    expect(lista.json()[0]).toMatchObject({ kind: 'address', address: ENDERECO })
+  })
+
+  it('não inventa endereço para carteira por chave estendida', async () => {
+    const { app, cookie } = await logado()
+    await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre', key: ZPUB },
+    })
+    const lista = await app.inject({
+      method: 'GET',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+    })
+    expect(lista.json()[0]).toMatchObject({ kind: 'xpub' })
+    expect(lista.json()[0].address).toBeNull()
+  })
+})

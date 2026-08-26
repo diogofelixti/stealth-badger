@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Catalog, Lang, Wallet } from '../lib/api'
-import { formatSats } from '../lib/format'
+import { formatSats, shorten } from '../lib/format'
 import { render } from '../lib/i18n'
 import { PrivacyPanel } from './PrivacyPanel'
 import { UtxoTable } from './UtxoTable'
@@ -43,10 +43,19 @@ export function WalletCard({
     (wallet.syncState === 'importing' || wallet.syncState === 'pending')
 
   return (
-    <article className="rounded border border-line bg-surface px-[18px] py-4">
+    <article
+      data-wallet-kind={wallet.kind}
+      className="rounded border border-line bg-surface px-[18px] py-4"
+    >
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h3 className="text-base font-medium">{wallet.label}</h3>
-        <span className="text-xs text-faint">{wallet.fingerprint}</span>
+        {/* Carteira se identifica pela fingerprint da chave; endereço avulso
+            não tem chave, e o campo vazio pareceria defeito. */}
+        <span className="text-xs text-faint">
+          {wallet.kind === 'address' && wallet.address
+            ? shorten(wallet.address)
+            : wallet.fingerprint}
+        </span>
       </div>
 
       {importando ? (
@@ -75,7 +84,10 @@ export function WalletCard({
             {formatSats(Number(wallet.balanceSats), lang)}
           </p>
           <p className="text-xs uppercase tracking-label text-faint">
-            {wallet.scriptType} · {wallet.network} ·{' '}
+            {wallet.kind === 'address'
+              ? render(catalog, 'wallet.watchedAddress', {}, lang)
+              : wallet.scriptType}{' '}
+            · {wallet.network} ·{' '}
             {render(catalog, 'balance.utxos', { n: wallet.utxoCount }, lang)}
           </p>
         </>

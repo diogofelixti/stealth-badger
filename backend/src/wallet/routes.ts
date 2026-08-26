@@ -6,6 +6,7 @@ import { scanEmAndamento } from '../privacy/andamento'
 import { loadConfig } from '../config'
 import { seal } from '../crypto/secretbox'
 import { pool } from '../db/pool'
+import { parseWatchAddress } from './address'
 import { detectScriptType } from './detect'
 import {
   parseExtendedKey,
@@ -27,7 +28,10 @@ const PADRAO_QUANDO_NAO_DA_PARA_SABER: ScriptType = 'p2wpkh'
 
 interface CreateWalletBody {
   label: string
-  key: string
+  /** chave estendida ou descriptor; exclusivo com `address` */
+  key?: string
+  /** endereço avulso a vigiar; exclusivo com `key` */
+  address?: string
   gapLimit?: number
   /** backend escolhido na tela; ausente usa o configurado na instância */
   backendId?: number
@@ -44,31 +48,23 @@ export function registerWalletRoutes(
   app.post<{ Body: CreateWalletBody }>('/api/wallets', async (req, reply) => {
     if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
 
-    const { label, key, gapLimit } = req.body
+    const { label, key, address, gapLimit } = req.body
     if (!label?.trim()) return reply.code(400).send({ error: 'rótulo obrigatório' })
 
-    let parsed
-    try {
-      parsed = parseExtendedKey(key)
-    } catch (err) {
-      return reply.code(400).send({ error: (err as Error).message })
+    // Exclusivos de propósito: aceitar os dois obrigaria a escolher um em
+    // silêncio, e o usuário descobriria depois que vigiou o que não pediu.
+    if (key?.trim() && address?.trim()) {
+      return reply.code(400).send({
+        error: 'informe uma chave estendida ou um endereço, não os dois',
+      })
+    }
+    if (!key?.trim() && !address?.trim()) {
+      return reply
+        .code(400)
+        .send({ error: 'informe a chave estendida da carteira ou um endereço a vigiar' })
     }
 
     const cfg = loadConfig()
-
-    // Um backend Esplora atende uma rede só. Aceitar a chave da outra rede
-    // faria o watchtower derivar endereços que o explorador recusa, e a
-    // carteira morreria em `error` sem dizer o motivo. Melhor recusar aqui,
-    // enquanto ainda dá para explicar. Signet e testnet compartilham as
-    // mesmas version bytes, por isso a comparação é com `testnet`.
-    const esperada: KeyNetwork = cfg.network === 'mainnet' ? 'mainnet' : 'testnet'
-    if (parsed.keyNetwork !== esperada) {
-      return reply.code(400).send({
-        error:
-          `esta chave é de ${parsed.keyNetwork}, mas este watchtower vigia ` +
-          `${cfg.network}. Use uma chave de ${cfg.network}.`,
-      })
-    }
 
     const network: Network = cfg.network
 
@@ -101,48 +97,105 @@ export function registerWalletRoutes(
       }
     }
 
-    // `xpub`/`tpub` não dizem o tipo de script: quem exporta por descriptor
-    // usa a mesma codificação para legado, segwit e taproot. Assumir errado
-    // não dá erro — a carteira sincroniza e mostra saldo zero para sempre.
-    let scriptType = parsed.scriptType
-    if (parsed.scriptTypeAmbiguous) {
-      const adapter = adapterFactory(backend)
+    // Endereço avulso e carteira divergem só aqui: o que se guarda e o que
+    // precisa ser derivado. Daqui para baixo o motor não sabe a diferença.
+    let scriptType: ScriptType
+    let cifrada: Buffer | null = null
+    let fingerprint: string | null = null
+    let enderecoAvulso: string | null = null
+
+    if (address?.trim()) {
+      let avulso
       try {
-        scriptType =
-          (await detectScriptType(parsed.canonicalXpub, network, adapter).catch(
-            () => null,
-          )) ?? PADRAO_QUANDO_NAO_DA_PARA_SABER
-      } finally {
-        // adapter aberto só para esta consulta; com Electrum é um socket
-        adapter.close?.()
+        avulso = parseWatchAddress(address, network)
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
       }
+      scriptType = avulso.scriptType
+      enderecoAvulso = avulso.address
+    } else {
+      let parsed
+      try {
+        parsed = parseExtendedKey(key!)
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message })
+      }
+
+      // Um backend Esplora atende uma rede só. Aceitar a chave da outra rede
+      // faria o watchtower derivar endereços que o explorador recusa, e a
+      // carteira morreria em `error` sem dizer o motivo. Melhor recusar aqui,
+      // enquanto ainda dá para explicar. Signet e testnet compartilham as
+      // mesmas version bytes, por isso a comparação é com `testnet`.
+      const esperada: KeyNetwork = cfg.network === 'mainnet' ? 'mainnet' : 'testnet'
+      if (parsed.keyNetwork !== esperada) {
+        return reply.code(400).send({
+          error:
+            `esta chave é de ${parsed.keyNetwork}, mas este watchtower vigia ` +
+            `${cfg.network}. Use uma chave de ${cfg.network}.`,
+        })
+      }
+
+      // `xpub`/`tpub` não dizem o tipo de script: quem exporta por descriptor
+      // usa a mesma codificação para legado, segwit e taproot. Assumir errado
+      // não dá erro — a carteira sincroniza e mostra saldo zero para sempre.
+      scriptType = parsed.scriptType
+      if (parsed.scriptTypeAmbiguous) {
+        const adapter = adapterFactory(backend)
+        try {
+          scriptType =
+            (await detectScriptType(parsed.canonicalXpub, network, adapter).catch(
+              () => null,
+            )) ?? PADRAO_QUANDO_NAO_DA_PARA_SABER
+        } finally {
+          // adapter aberto só para esta consulta; com Electrum é um socket
+          adapter.close?.()
+        }
+      }
+
+      cifrada = seal(parsed.canonicalXpub, cfg.masterKeyHex)
+      fingerprint = parsed.fingerprint
     }
 
-    const backendId = backend.id
+    const kind = enderecoAvulso ? 'address' : 'xpub'
     const { rows } = await pool.query<{ id: string }>(
       `INSERT INTO wallets
-         (user_id, label, xpub_encrypted, xpub_fingerprint, script_type,
+         (user_id, label, kind, xpub_encrypted, xpub_fingerprint, script_type,
           network, gap_limit, backend_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id`,
       [
         req.userId,
         label.trim(),
-        seal(parsed.canonicalXpub, cfg.masterKeyHex),
-        parsed.fingerprint,
+        kind,
+        cifrada,
+        fingerprint,
         scriptType,
         network,
         gapLimit ?? 20,
-        backendId,
+        backend.id,
       ],
     )
+    const walletId = Number(rows[0]!.id)
+
+    if (enderecoAvulso) {
+      // Registrado já: sem isto o motor não teria o que conferir, porque não
+      // há chave da qual derivar.
+      const avulso = parseWatchAddress(enderecoAvulso, network)
+      await pool.query(
+        `INSERT INTO addresses (wallet_id, chain, idx, derivation_path, address, scripthash)
+         VALUES ($1, 0, 0, '', $2, $3)`,
+        [walletId, avulso.address, avulso.scripthash],
+      )
+    }
 
     return reply.code(201).send({
-      id: Number(rows[0]!.id),
+      id: walletId,
       label: label.trim(),
+      kind,
       scriptType,
       network,
-      fingerprint: parsed.fingerprint,
+      fingerprint,
+      address: enderecoAvulso,
       syncState: 'pending',
     })
   })
@@ -151,8 +204,14 @@ export function registerWalletRoutes(
     if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
 
     const { rows } = await pool.query(
-      `SELECT w.id, w.label, w.script_type AS "scriptType", w.network,
+      `SELECT w.id, w.label, w.kind, w.script_type AS "scriptType", w.network,
               w.xpub_fingerprint AS fingerprint, w.sync_state AS "syncState",
+              -- só o endereço avulso: uma carteira por chave tem dezenas, e
+              -- eleger um deles seria mostrar um dado que não significa nada
+              CASE WHEN w.kind = 'address' THEN (
+                SELECT a.address FROM addresses a
+                 WHERE a.wallet_id = w.id ORDER BY a.id LIMIT 1
+              ) END AS address,
               w.sync_progress AS "syncProgress", w.sync_height AS "syncHeight",
               b.is_public AS "backendIsPublic", b.url AS "backendUrl",
               p.score AS "privacyScore", p.grade AS "privacyGrade",

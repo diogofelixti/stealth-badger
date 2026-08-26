@@ -51,6 +51,7 @@ const CARTEIRA: Wallet = {
   frozenCount: 0,
   backendIsPublic: true,
   backendUrl: 'https://mempool.space/signet/api',
+  kind: 'xpub', address: null,
   privacyScore: null, privacyGrade: null, privacyScannedAt: null,
 }
 

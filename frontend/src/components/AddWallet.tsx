@@ -21,6 +21,10 @@ export function AddWallet({
 }) {
   const [label, setLabel] = useState('')
   const [key, setKey] = useState('')
+  const [endereco, setEndereco] = useState('')
+  // Vigiar a carteira inteira é o caso comum; um endereço só é o de quem
+  // publica endereço de doação e não quer entregar a carteira ao watchtower.
+  const [modo, setModo] = useState<'key' | 'address'>('key')
   const [erro, setErro] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
 
@@ -48,9 +52,14 @@ export function AddWallet({
     setErro(null)
     setEnviando(true)
     try {
-      await api.addWallet(label.trim(), key.trim(), escolhido ?? undefined)
+      await api.addWallet(
+        label.trim(),
+        modo === 'address' ? { address: endereco.trim() } : { key: key.trim() },
+        escolhido ?? undefined,
+      )
       setLabel('')
       setKey('')
+      setEndereco('')
       onAdded()
     } catch (err) {
       setErro((err as Error).message)
@@ -88,13 +97,45 @@ export function AddWallet({
         placeholder={render(catalog, 'wallets.labelPlaceholder', {}, lang)}
         className={`mb-2 ${campo}`}
       />
-      <textarea
-        value={key}
-        onChange={e => setKey(e.target.value)}
-        placeholder={render(catalog, 'wallets.keyPlaceholder', {}, lang)}
-        rows={3}
-        className={`mb-2 resize-none ${campo}`}
-      />
+      <div className="mb-2 flex gap-1" role="group">
+        {(['key', 'address'] as const).map(m => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setModo(m)}
+            aria-pressed={modo === m}
+            className="flex-1 rounded border px-2 py-1 text-xs uppercase tracking-label"
+            style={{
+              borderColor: modo === m ? 'var(--sb-accent)' : 'var(--sb-border)',
+              color: modo === m ? 'var(--sb-accent)' : 'var(--sb-faint)',
+            }}
+          >
+            {render(catalog, m === 'key' ? 'wallets.modeKey' : 'wallets.modeAddress', {}, lang)}
+          </button>
+        ))}
+      </div>
+
+      {modo === 'key' ? (
+        <textarea
+          value={key}
+          onChange={e => setKey(e.target.value)}
+          placeholder={render(catalog, 'wallets.keyPlaceholder', {}, lang)}
+          rows={3}
+          className={`mb-2 resize-none ${campo}`}
+        />
+      ) : (
+        <>
+          <input
+            value={endereco}
+            onChange={e => setEndereco(e.target.value)}
+            placeholder={render(catalog, 'wallets.addressPlaceholder', {}, lang)}
+            className={`mb-2 ${campo}`}
+          />
+          <p className="mb-2 font-prose text-xs leading-relaxed text-faint">
+            {render(catalog, 'wallets.addressNote', {}, lang)}
+          </p>
+        </>
+      )}
 
       {/* Escolher o backend é escolher quem vê os endereços consultados. Fica
           no mesmo formulário, e não numa tela de configuração distante, porque
@@ -183,7 +224,11 @@ export function AddWallet({
 
       <button
         type="submit"
-        disabled={enviando || !label.trim() || !key.trim()}
+        disabled={
+          enviando ||
+          !label.trim() ||
+          (modo === 'key' ? !key.trim() : !endereco.trim())
+        }
         className="rounded px-3 py-2 text-sm font-semibold uppercase tracking-label disabled:opacity-40"
         style={{ background: 'var(--sb-accent)', color: 'var(--sb-bg)' }}
       >

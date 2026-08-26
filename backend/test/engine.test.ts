@@ -227,3 +227,86 @@ describe('syncWallet incremental', () => {
     expect(rows[0]!.status).toBe('1:1:0:0:0:0')
   })
 })
+
+describe('syncWallet de endereço avulso', () => {
+  let enderecoId: number
+
+  async function carteiraDeEndereco(endereco: string): Promise<number> {
+    const u = await pool.query<{ id: string }>(
+      `INSERT INTO users (email,password_hash) VALUES ('avulso@b.c','x') RETURNING id`,
+    )
+    const b = await pool.query<{ id: string }>(
+      `INSERT INTO backends (kind,url,network) VALUES ('esplora','http://y','mainnet') RETURNING id`,
+    )
+    const w = await pool.query<{ id: string }>(
+      `INSERT INTO wallets (user_id,label,kind,xpub_encrypted,xpub_fingerprint,script_type,
+                            network,gap_limit,backend_id)
+       VALUES ($1,'Doação','address',NULL,NULL,'p2wpkh','mainnet',20,$2) RETURNING id`,
+      [u.rows[0]!.id, b.rows[0]!.id],
+    )
+    const id = Number(w.rows[0]!.id)
+    const a = await pool.query<{ id: string }>(
+      `INSERT INTO addresses (wallet_id, chain, idx, derivation_path, address, scripthash)
+       VALUES ($1,0,0,'',$2,'ff') RETURNING id`,
+      [id, endereco],
+    )
+    enderecoId = Number(a.rows[0]!.id)
+    return id
+  }
+
+  const ENDERECO = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'
+
+  // Sem xpub não há o que derivar. A varredura por gap limit abriria a chave
+  // cifrada, que não existe, e a sincronização morreria antes de começar.
+  it('sincroniza sem abrir chave nenhuma', async () => {
+    const id = await carteiraDeEndereco(ENDERECO)
+    const adapter = adapterWith(
+      { [ENDERECO]: [{ txid: 'aa', height: 100, blockHash: 'h100' }] },
+      { [ENDERECO]: [{ txid: 'aa', vout: 0, value: 4200, height: 100 }] },
+    )
+    const r = await syncWallet(id, adapter)
+    expect(r.newEvents).toHaveLength(1)
+    expect(await walletBalance(id)).toBe(4200)
+  })
+
+  it('não deriva endereço nenhum além do registrado', async () => {
+    const id = await carteiraDeEndereco(ENDERECO)
+    const consultados: string[] = []
+    const adapter: ChainAdapter = {
+      ...adapterWith({}, {}),
+      getHistoryForAddress: async (a: string) => {
+        consultados.push(a)
+        return []
+      },
+    }
+    await syncWallet(id, adapter)
+    expect(consultados).toEqual([ENDERECO])
+  })
+
+  it('marca a carteira como sincronizada, como qualquer outra', async () => {
+    const id = await carteiraDeEndereco(ENDERECO)
+    await syncWallet(id, adapterWith({}, {}))
+    const { rows } = await pool.query<{ sync_state: string }>(
+      'SELECT sync_state FROM wallets WHERE id = $1',
+      [id],
+    )
+    expect(rows[0]!.sync_state).toBe('synced')
+  })
+
+  it('emite utxo_spent quando o UTXO do endereço some', async () => {
+    const id = await carteiraDeEndereco(ENDERECO)
+    await syncWallet(
+      id,
+      adapterWith(
+        { [ENDERECO]: [{ txid: 'aa', height: 100, blockHash: 'h100' }] },
+        { [ENDERECO]: [{ txid: 'aa', vout: 0, value: 4200, height: 100 }] },
+      ),
+    )
+    await syncWallet(
+      id,
+      adapterWith({ [ENDERECO]: [{ txid: 'aa', height: 100, blockHash: 'h100' }] }, {}),
+    )
+    expect(await walletBalance(id)).toBe(0)
+    expect(enderecoId).toBeGreaterThan(0)
+  })
+})
