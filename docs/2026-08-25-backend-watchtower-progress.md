@@ -651,6 +651,19 @@ de quem for avaliar.
 32 UTXOs listados, o dust destacado, rótulo gravado, congelamento aplicado, arquivo
 BIP-329 exportado com `spendable: false` e `Content-Disposition` nomeando o `.jsonl`.
 
+**A prova do defeito estrutural:** com um UTXO congelado, esperado um ciclo do worker
+contra a signet real. A projeção foi reconstruída — 32 UTXOs viraram 36, porque chegou
+transação nova — e o congelamento continuou lá. Antes desta rodada ele teria sumido.
+
+A conferência achou dois defeitos que teste de unidade não pegaria sozinho:
+
+- **"938.602 sats sats"** — `formatSats` já anexa a unidade e a tela anexava de novo.
+  Cada metade está certa isolada, e é por isso que só olhando se vê;
+- **o campo de rótulo não atualizava depois de importar.** Era `defaultValue` num input
+  não controlado: o React não mexe no valor de um nó que já existe, então a tela
+  continuaria mostrando o rótulo antigo e o usuário concluiria que o arquivo não foi
+  lido. Os dois viraram teste antes de virar correção.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.

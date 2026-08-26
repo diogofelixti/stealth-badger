@@ -124,7 +124,7 @@ export function UtxoTable({
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="text-sm font-medium">
-                    {formatSats(u.valueSats, lang)} sats
+                    {formatSats(u.valueSats, lang)}
                   </span>
                   <span className="text-xs text-faint">
                     {encurtar(u.txid)}:{u.vout} · {u.derivationPath}
@@ -133,6 +133,13 @@ export function UtxoTable({
 
                 <div className="mt-[6px] flex flex-wrap items-center gap-2">
                   <input
+                    // A chave inclui o rótulo de propósito. O input é não
+                    // controlado — digitar não deve custar um render por
+                    // tecla —, e o React não mexe no valor de um nó que já
+                    // existe. Sem remontar, um rótulo que chega pela
+                    // importação nunca apareceria, e o usuário concluiria que
+                    // o arquivo não foi lido.
+                    key={u.label ?? ''}
                     defaultValue={u.label ?? ''}
                     placeholder={render(catalog, 'utxos.labelPlaceholder', {}, lang)}
                     onBlur={e => {

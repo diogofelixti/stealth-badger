@@ -115,4 +115,41 @@ describe('UtxoTable', () => {
     const link = screen.getByRole('link', { name: /exportar rótulos/i })
     expect(link.getAttribute('href')).toBe('/api/wallets/1/labels')
   })
+
+  // `formatSats` já anexa a unidade. Repetir na tela produziu "938.602 sats
+  // sats" na conferência em navegador — que nenhum teste de unidade pegaria,
+  // porque cada metade está certa sozinha.
+  it('escreve a unidade uma vez só', async () => {
+    montar()
+    await waitFor(() => expect(screen.getByText(/412\.850/)).toBeDefined())
+    expect(screen.queryByText(/sats\s+sats/)).toBeNull()
+  })
+
+  // Importar rótulos recarrega a lista. Com `defaultValue` num input não
+  // controlado, o React não mexe no valor de um nó que já existe — a tela
+  // continuaria mostrando o rótulo antigo, e o usuário concluiria que a
+  // importação não funcionou.
+  it('mostra o rótulo que chegou pela importação, e não o que estava na tela', async () => {
+    utxos.mockResolvedValue([utxo({ label: 'antigo' })])
+    importLabels.mockResolvedValue({ imported: 1, ignored: 0 })
+    const { container } = montar()
+
+    await waitFor(() =>
+      expect((screen.getByPlaceholderText(/rótulo/i) as HTMLInputElement).value).toBe(
+        'antigo',
+      ),
+    )
+
+    utxos.mockResolvedValue([utxo({ label: 'veio do Sparrow' })])
+    const entrada = container.querySelector('input[type="file"]') as HTMLInputElement
+    const arquivo = new File(['{}'], 'labels.jsonl', { type: 'application/jsonl' })
+    Object.defineProperty(entrada, 'files', { value: [arquivo] })
+    fireEvent.change(entrada)
+
+    await waitFor(() =>
+      expect((screen.getByPlaceholderText(/rótulo/i) as HTMLInputElement).value).toBe(
+        'veio do Sparrow',
+      ),
+    )
+  })
 })
