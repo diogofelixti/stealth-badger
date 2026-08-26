@@ -68,19 +68,26 @@ export function Shell({
 }) {
   return (
     <div className="flex min-h-screen flex-col bg-bg font-ui text-ink">
-      <PrivacyStripe backend={backend} />
+      {/* Preso ao topo, e não apenas no topo. O painel com histórico passa de
+          cinco mil pixels: sem isto, rolar o feed leva embora a advertência de
+          que a consulta está passando por explorador público — um toast que
+          some, só que disfarçado de rolagem. O fundo é explícito porque o
+          conteúdo passa por baixo. */}
+      <div className="sticky top-0 z-20 shrink-0 bg-bg">
+        <PrivacyStripe backend={backend} />
 
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-line px-4 py-4 sm:px-8">
-        <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="" width={28} height={28} className="block" />
-          <span className="text-base font-semibold uppercase tracking-label">Stealth Badger</span>
-        </div>
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-line px-4 py-4 sm:px-8">
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="" width={28} height={28} className="block" />
+            <span className="text-base font-semibold uppercase tracking-label">Stealth Badger</span>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-4 sm:gap-5">
-          {backend && <PrivacyBadge {...backend} />}
-          {actions}
-        </div>
-      </header>
+          <div className="flex flex-wrap items-center gap-4 sm:gap-5">
+            {backend && <PrivacyBadge {...backend} />}
+            {actions}
+          </div>
+        </header>
+      </div>
 
       <main className="min-h-0 flex-grow">{children}</main>
     </div>

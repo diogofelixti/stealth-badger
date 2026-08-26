@@ -296,7 +296,9 @@ tempo todo**, nunca como um toast que some:
   consultado.
 
 Os dois saem da mesma fonte de verdade, para que nenhuma tela consiga mostrar um sem o
-outro.
+outro, e ficam **presos ao topo**. Estar no topo não basta: o painel com histórico
+passa de cinco mil pixels de altura, e um aviso que a rolagem leva embora é o mesmo
+toast que some, disfarçado.
 
 ### 10.2 Idioma
 
