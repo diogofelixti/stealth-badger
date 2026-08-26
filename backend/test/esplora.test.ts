@@ -258,3 +258,30 @@ describe('limite de taxa do explorador público', () => {
     expect(e.registradas).toHaveLength(1)
   })
 })
+
+describe('recusa explicada pelo explorador', () => {
+  // Aconteceu de verdade: `/address/<a>/utxo` devolveu 400 com o corpo
+  // "Too many unspent transaction outputs (>500)". A mensagem registrada dizia
+  // só "Esplora respondeu 400", e diagnosticar exigiu repetir a chamada com
+  // curl. O motivo estava no corpo o tempo todo.
+  it('traz a explicação que o explorador escreveu no corpo', async () => {
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: (async () =>
+        new Response('Too many unspent transaction outputs (>500).', {
+          status: 400,
+        })) as typeof fetch,
+    })
+    await expect(a.getUtxosForAddress!('bc1qx')).rejects.toThrow(/Too many unspent/)
+  })
+
+  it('não deixa a mensagem crescer com uma página de erro inteira', async () => {
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: (async () =>
+        new Response('<html>' + 'x'.repeat(9000) + '</html>', { status: 500 })) as typeof fetch,
+      maxRetries: 0,
+    })
+    await expect(a.tipHeight()).rejects.toThrow(
+      /^(?=[\s\S]{0,600}$)[\s\S]*$/,
+    )
+  })
+})

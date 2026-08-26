@@ -38,6 +38,9 @@ interface EsploraUtxo {
  */
 const VALE_ESPERAR = new Set([429, 503])
 
+/** Quanto do corpo de erro cabe na mensagem. */
+const TRECHO_DE_CORPO = 200
+
 const TENTATIVAS_PADRAO = 4
 const ESPERA_INICIAL_MS = 500
 const ESPERA_MAXIMA_MS = 30_000
@@ -94,8 +97,19 @@ export function createEsploraAdapter(
       if (res.ok) return res
 
       if (!VALE_ESPERAR.has(res.status)) {
+        // O explorador costuma escrever o motivo no corpo — "Too many unspent
+        // transaction outputs (>500)" foi um caso real. Sem trazê-lo, o log
+        // registra só o número, e diagnosticar exige repetir a chamada à mão.
+        const motivo = (await res.text().catch(() => '')).trim().slice(0, TRECHO_DE_CORPO)
         throw new Error(
-          'Esplora respondeu ' + res.status + ' em ' + path + ' (' + host + ')',
+          'Esplora respondeu ' +
+            res.status +
+            ' em ' +
+            path +
+            ' (' +
+            host +
+            ')' +
+            (motivo ? ': ' + motivo : ''),
         )
       }
 

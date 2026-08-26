@@ -213,6 +213,7 @@ export function registerWalletRoutes(
                  WHERE a.wallet_id = w.id ORDER BY a.id LIMIT 1
               ) END AS address,
               w.sync_progress AS "syncProgress", w.sync_height AS "syncHeight",
+              w.sync_error AS "syncError",
               b.is_public AS "backendIsPublic", b.url AS "backendUrl",
               p.score AS "privacyScore", p.grade AS "privacyGrade",
               p.scanned_at AS "privacyScannedAt",

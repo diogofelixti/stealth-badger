@@ -13,6 +13,8 @@ export interface SyncResult {
   tipHeight: number
   /** endereços que o backend confirmou inalterados e não foram reconferidos */
   skipped: number
+  /** endereços que o backend recusou servir; a carteira fica degradada */
+  ilegiveis: string[]
 }
 
 interface WalletRow {
@@ -115,7 +117,7 @@ export async function syncWallet(
   // Uma carteira já sincronizada não volta a "importando" a cada ciclo: o selo
   // ficaria piscando o tempo todo, e o usuário leria como se a carteira
   // estivesse sempre no meio de uma importação que nunca acaba.
-  const reconferindo = wallet.sync_state === 'synced'
+  const reconferindo = wallet.sync_state === 'synced' || wallet.sync_state === 'degraded'
   const anunciar = async (progress: number): Promise<void> => {
     if (!reconferindo) await setState(walletId, 'importing', { progress })
   }
@@ -195,6 +197,9 @@ export async function syncWallet(
       throw new Error('adapter sem listagem de UTXO por endereço')
     }
 
+    const ilegiveis: string[] = []
+    let motivoDaRecusa: string | null = null
+
     for (const a of scanned.filter(s => s.used)) {
       if (a.unchanged) {
         // O backend afirmou que nada mudou neste endereço: pedir a lista de
@@ -202,9 +207,25 @@ export async function syncWallet(
         skipped += 1
         continue
       }
+
+      // Um endereço que o backend recusa servir não invalida os outros. O
+      // mempool.space, por exemplo, recusa `/utxo` de endereço com mais de 500
+      // saídas não gastas — recusa permanente, e nem defeito nosso nem dele.
+      // Abortar a volta perderia o que dava para ver nos outros endereços.
+      let utxos
+      try {
+        utxos = await adapter.getUtxosForAddress(a.address)
+      } catch (err) {
+        ilegiveis.push(a.address)
+        motivoDaRecusa ??= (err as Error).message
+        continue
+      }
+
+      // Só depois de ler com sucesso: um endereço marcado como consultado sem
+      // que a leitura tenha dado certo faria seus UTXOs conhecidos serem
+      // declarados gastos, e o saldo sumiria sozinho.
       consultados.add(addressIds.get(a.address)!)
 
-      const utxos = await adapter.getUtxosForAddress(a.address)
       for (const u of utxos) {
         const key = u.txid + ':' + u.vout
         seen.add(key)
@@ -248,17 +269,33 @@ export async function syncWallet(
 
     // O status só é gravado depois que os eventos da volta entraram. Gravar
     // antes faria um ciclo que morre no meio deixar o endereço marcado como
-    // conferido, e o ciclo seguinte o pularia para sempre.
+    // conferido, e o ciclo seguinte o pularia para sempre. Endereço ilegível
+    // fica sem status para ser tentado de novo na volta seguinte.
+    const legiveis = new Set(ilegiveis)
     for (const a of scanned) {
+      if (legiveis.has(a.address)) continue
       await pool.query(
         'UPDATE addresses SET status = $3 WHERE wallet_id = $1 AND address = $2',
         [walletId, a.address, a.status],
       )
     }
 
-    await setState(walletId, 'synced', { progress: 100, height: tipHeight })
+    if (ilegiveis.length > 0) {
+      // `degraded` é o estado que o schema já previa para o que é vigiado em
+      // parte: o watchtower continua funcionando, mas não sobre tudo.
+      await setState(walletId, 'degraded', {
+        progress: 100,
+        height: tipHeight,
+        error:
+          ilegiveis.length +
+          ' endereço(s) o backend recusou servir. ' +
+          motivoDaRecusa,
+      })
+    } else {
+      await setState(walletId, 'synced', { progress: 100, height: tipHeight })
+    }
 
-    return { newEvents, reorgAt, tipHeight, skipped }
+    return { newEvents, reorgAt, tipHeight, skipped, ilegiveis }
   } catch (err) {
     await setState(walletId, 'error', { error: (err as Error).message })
     throw err

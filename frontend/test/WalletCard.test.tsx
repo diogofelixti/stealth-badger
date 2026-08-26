@@ -9,6 +9,7 @@ const catalogo = {
   'wallet.syncError': 'Falha na sincronização',
   'balance.utxos': '{n} UTXOs',
   'wallet.watchedAddress': 'endereço avulso',
+  'wallet.syncDegraded': 'Vigiando em parte',
   'privacy.score': 'Privacidade {score}/100 · {grade}',
   'privacy.scan': 'Analisar privacidade',
   'privacy.scanning': 'analisando...',
@@ -20,7 +21,7 @@ const base: Wallet = {
   fingerprint: 'c81b04af', syncState: 'synced', syncProgress: 100,
   syncHeight: 319233, balanceSats: '412850', utxoCount: 4, frozenCount: 0,
   backendIsPublic: true, backendUrl: 'https://mempool.space/signet/api',
-  kind: 'xpub', address: null,
+  kind: 'xpub', address: null, syncError: null,
   privacyScore: null, privacyGrade: null, privacyScannedAt: null,
 }
 
@@ -145,5 +146,72 @@ describe('WalletCard', () => {
     }
     const { container } = render(<WalletCard wallet={avulso} catalog={catalogo} lang="pt" />)
     expect(container.querySelector('[data-wallet-kind="address"]')).not.toBeNull()
+  })
+
+  // `degraded` é a carteira que o watchtower vigia em parte: um endereço que o
+  // backend recusa servir não a torna quebrada. Mostrar como erro assustaria
+  // sem motivo; não mostrar nada esconderia que há um ponto cego.
+  it('avisa que vigia em parte, dizendo o motivo, quando degradada', () => {
+    const degradada: Wallet = {
+      ...base,
+      syncState: 'degraded',
+      syncError: '1 endereço(s) o backend recusou servir. Too many unspent',
+    }
+    render(<WalletCard wallet={degradada} catalog={catalogo} lang="pt" />)
+    expect(screen.getByText(/vigiando em parte/i)).toBeDefined()
+    expect(screen.getByText(/Too many unspent/)).toBeDefined()
+  })
+
+  it('continua mostrando o saldo do que conseguiu ler', () => {
+    const degradada: Wallet = { ...base, syncState: 'degraded', syncError: 'x' }
+    render(<WalletCard wallet={degradada} catalog={catalogo} lang="pt" />)
+    expect(screen.getByText(/412\.850/)).toBeDefined()
+  })
+
+  // Zero que não foi lido não é zero: é "não sei". O cartão já recusa mostrar
+  // saldo parcial como definitivo na primeira importação, e a mesma regra vale
+  // aqui — mostrar 0 sats ao lado de "vigiando em parte" convida a ler o
+  // número como fato.
+  it('não anuncia zero quando não conseguiu ler nenhum endereço', () => {
+    const cega: Wallet = {
+      ...base,
+      syncState: 'degraded',
+      syncError: 'recusou servir',
+      balanceSats: '0',
+      utxoCount: 0,
+    }
+    render(<WalletCard wallet={cega} catalog={catalogo} lang="pt" />)
+    expect(screen.queryByText(/^0 sats$/)).toBeNull()
+    expect(screen.getByText('———')).toBeDefined()
+  })
+
+  // Não saber o saldo não é estar importando. Dizer "importando 100%" numa
+  // carteira degradada promete que o número vai chegar, e ele não vai — a
+  // recusa do backend é permanente.
+  it('não finge que está importando quando na verdade não conseguiu ler', () => {
+    const cega: Wallet = {
+      ...base,
+      syncState: 'degraded',
+      syncError: 'recusou servir',
+      balanceSats: '0',
+      utxoCount: 0,
+    }
+    const { container } = render(<WalletCard wallet={cega} catalog={catalogo} lang="pt" />)
+    expect(screen.queryByText(/importando/i)).toBeNull()
+    expect(container.querySelector('[data-progress]')).toBeNull()
+  })
+
+  // Saldo parcial é verdade: é o que existe nos endereços que deu para ler, e
+  // o aviso ao lado já diz que não é tudo. Esconder perderia informação real.
+  it('mostra o saldo parcial quando conseguiu ler alguma coisa', () => {
+    const parcial: Wallet = {
+      ...base,
+      syncState: 'degraded',
+      syncError: 'recusou servir',
+      balanceSats: '412850',
+      utxoCount: 4,
+    }
+    render(<WalletCard wallet={parcial} catalog={catalogo} lang="pt" />)
+    expect(screen.getByText(/412\.850/)).toBeDefined()
   })
 })

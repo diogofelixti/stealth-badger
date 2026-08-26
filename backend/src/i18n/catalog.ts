@@ -85,6 +85,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallet.importingNote':
       'Varrendo a cadeia de change. O saldo total acima ainda não inclui esta carteira.',
     'wallet.syncError': 'Falha na sincronização',
+    'wallet.syncDegraded': 'Vigiando em parte',
     'auth.tagline': 'Watchtower de privacidade para Bitcoin',
     'auth.email': 'e-mail',
     'auth.password': 'senha (mínimo 12 caracteres)',
@@ -198,6 +199,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallet.importingNote':
       'Scanning the change chain. The total above does not include this wallet yet.',
     'wallet.syncError': 'Sync failed',
+    'wallet.syncDegraded': 'Watching partially',
     'auth.tagline': 'Bitcoin privacy watchtower',
     'auth.email': 'email',
     'auth.password': 'password (at least 12 characters)',

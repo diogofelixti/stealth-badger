@@ -310,3 +310,87 @@ describe('syncWallet de endereço avulso', () => {
     expect(enderecoId).toBeGreaterThan(0)
   })
 })
+
+describe('endereço que o backend não sabe servir', () => {
+  // Caso real: o mempool.space recusa `/utxo` de endereço com mais de 500
+  // saídas não gastas — "Too many unspent transaction outputs". A recusa é
+  // permanente e não é defeito nem nosso nem dele.
+  //
+  // Hoje isso derruba a carteira inteira para `error`, e ela repete a falha a
+  // cada trinta segundos para sempre. O schema já prevê `degraded` justamente
+  // para o que é vigiado em parte.
+  function adapterQueRecusaUtxo(recusados: Set<string>): ChainAdapter {
+    return {
+      ...adapterWith({ [firstAddress]: [{ txid: 'aa', height: 100, blockHash: 'h100' }] }, {}),
+      getUtxosForAddress: async (a: string) => {
+        if (recusados.has(a)) {
+          throw new Error('Esplora respondeu 400 em /address/' + a + '/utxo: Too many unspent')
+        }
+        return a === firstAddress ? [{ txid: 'aa', vout: 0, value: 900, height: 100 }] : []
+      },
+    }
+  }
+
+  it('marca a carteira como degradada, e não como quebrada', async () => {
+    await syncWallet(walletId, adapterQueRecusaUtxo(new Set([firstAddress])))
+    const { rows } = await pool.query<{ sync_state: string; sync_error: string }>(
+      'SELECT sync_state, sync_error FROM wallets WHERE id = $1',
+      [walletId],
+    )
+    expect(rows[0]!.sync_state).toBe('degraded')
+    expect(rows[0]!.sync_error).toMatch(/Too many unspent/)
+  })
+
+  // Uma carteira com trinta endereços, um deles ilegível, continua valendo
+  // pelos outros vinte e nove. Abortar tudo perderia o que dava para ver.
+  it('continua com os outros endereços em vez de abortar a volta', async () => {
+    const outro = deriveAddress(
+      parseExtendedKey(ZPUB).canonicalXpub, 'p2wpkh', 'mainnet', 0, 1,
+    ).address
+    const adapter: ChainAdapter = {
+      ...adapterWith(
+        {
+          [firstAddress]: [{ txid: 'aa', height: 100, blockHash: 'h100' }],
+          [outro]: [{ txid: 'bb', height: 100, blockHash: 'h100' }],
+        },
+        {},
+      ),
+      getUtxosForAddress: async (a: string) => {
+        if (a === firstAddress) throw new Error('Esplora respondeu 400: Too many unspent')
+        return a === outro ? [{ txid: 'bb', vout: 0, value: 700, height: 100 }] : []
+      },
+    }
+    await syncWallet(walletId, adapter)
+    expect(await walletBalance(walletId)).toBe(700)
+  })
+
+  // O endereço ilegível não pode ser lido como "sem UTXO nenhum": os UTXOs
+  // conhecidos dele seriam declarados gastos, e o saldo sumiria sozinho.
+  it('não declara gasto o UTXO de endereço que não conseguiu ler', async () => {
+    await syncWallet(
+      walletId,
+      adapterWith(
+        { [firstAddress]: [{ txid: 'aa', height: 100, blockHash: 'h100' }] },
+        { [firstAddress]: [{ txid: 'aa', vout: 0, value: 5000, height: 100 }] },
+      ),
+    )
+    expect(await walletBalance(walletId)).toBe(5000)
+
+    await syncWallet(walletId, adapterQueRecusaUtxo(new Set([firstAddress])))
+    expect(await walletBalance(walletId)).toBe(5000)
+  })
+
+  it('volta para sincronizada quando o endereço passa a ser legível', async () => {
+    await syncWallet(walletId, adapterQueRecusaUtxo(new Set([firstAddress])))
+    await syncWallet(
+      walletId,
+      adapterWith({ [firstAddress]: [{ txid: 'aa', height: 100, blockHash: 'h100' }] }, {}),
+    )
+    const { rows } = await pool.query<{ sync_state: string; sync_error: string | null }>(
+      'SELECT sync_state, sync_error FROM wallets WHERE id = $1',
+      [walletId],
+    )
+    expect(rows[0]!.sync_state).toBe('synced')
+    expect(rows[0]!.sync_error).toBeNull()
+  })
+})

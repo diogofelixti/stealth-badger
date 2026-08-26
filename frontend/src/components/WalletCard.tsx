@@ -42,6 +42,13 @@ export function WalletCard({
     wallet.syncHeight === null &&
     (wallet.syncState === 'importing' || wallet.syncState === 'pending')
 
+  // Zero que não foi lido não é zero, é "não sei". Uma carteira degradada sem
+  // nenhum UTXO legível não tem saldo conhecido — e mostrar 0 ao lado do aviso
+  // de "vigiando em parte" convida a ler o número como fato. Com saldo
+  // parcial, o número é verdade: é o que existe no que deu para ler.
+  const saldoDesconhecido =
+    wallet.syncState === 'degraded' && wallet.utxoCount === 0
+
   return (
     <article
       data-wallet-kind={wallet.kind}
@@ -68,7 +75,10 @@ export function WalletCard({
               {render(catalog, 'wallet.importing', { progress: wallet.syncProgress }, lang)}
             </span>
           </div>
-          <div className="mb-[9px] h-[3px] overflow-hidden rounded-sm bg-raised">
+          <div
+            data-progress={wallet.syncProgress}
+            className="mb-[9px] h-[3px] overflow-hidden rounded-sm bg-raised"
+          >
             <div
               className="h-full"
               style={{ width: `${wallet.syncProgress}%`, background: 'var(--sb-warning)' }}
@@ -76,6 +86,19 @@ export function WalletCard({
           </div>
           <p className="font-prose text-xs leading-relaxed text-muted">
             {render(catalog, 'wallet.importingNote', {}, lang)}
+          </p>
+        </>
+      ) : saldoDesconhecido ? (
+        <>
+          {/* Nada foi lido: o saldo não é zero, é desconhecido. E não está a
+              caminho — a recusa do backend é permanente, então prometer
+              progresso seria mentir sobre o futuro além do presente. */}
+          <p className="mb-1 text-xl font-medium text-faint">———</p>
+          <p className="text-xs uppercase tracking-label text-faint">
+            {wallet.kind === 'address'
+              ? render(catalog, 'wallet.watchedAddress', {}, lang)
+              : wallet.scriptType}{' '}
+            · {wallet.network}
           </p>
         </>
       ) : (
@@ -171,10 +194,33 @@ export function WalletCard({
         {host(wallet.backendUrl)}
       </p>
 
+      {/* Degradada não é quebrada: o watchtower vigia, só não tudo. Pintar de
+          vermelho assustaria sem motivo; não mostrar nada esconderia o ponto
+          cego, que é pior. */}
+      {wallet.syncState === 'degraded' && (
+        <div className="mt-3">
+          <p className="text-xs uppercase tracking-label" style={{ color: 'var(--sb-warning)' }}>
+            {render(catalog, 'wallet.syncDegraded', {}, lang)}
+          </p>
+          {wallet.syncError && (
+            <p className="font-prose text-xs leading-relaxed text-muted">
+              {wallet.syncError}
+            </p>
+          )}
+        </div>
+      )}
+
       {wallet.syncState === 'error' && (
-        <p className="mt-3 text-xs uppercase tracking-label" style={{ color: 'var(--sb-critical)' }}>
-          {render(catalog, 'wallet.syncError', {}, lang)}
-        </p>
+        <div className="mt-3">
+          <p className="text-xs uppercase tracking-label" style={{ color: 'var(--sb-critical)' }}>
+            {render(catalog, 'wallet.syncError', {}, lang)}
+          </p>
+          {wallet.syncError && (
+            <p className="font-prose text-xs leading-relaxed text-muted">
+              {wallet.syncError}
+            </p>
+          )}
+        </div>
       )}
     </article>
   )

@@ -462,4 +462,27 @@ describe('POST /api/wallets com endereço avulso', () => {
     expect(lista.json()[0]).toMatchObject({ kind: 'xpub' })
     expect(lista.json()[0].address).toBeNull()
   })
+
+  it('entrega à tela o motivo da degradação, e não só o estado', async () => {
+    const { app, cookie } = await logado()
+    const criada = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Doações', address: ENDERECO },
+    })
+    await pool.query(
+      `UPDATE wallets SET sync_state = 'degraded', sync_error = 'Too many unspent' WHERE id = $1`,
+      [Number(criada.json().id)],
+    )
+    const lista = await app.inject({
+      method: 'GET',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+    })
+    expect(lista.json()[0]).toMatchObject({
+      syncState: 'degraded',
+      syncError: 'Too many unspent',
+    })
+  })
 })

@@ -34,6 +34,7 @@ export interface Wallet {
   syncState: SyncState
   syncProgress: number
   syncHeight: number | null
+  syncError: string | null
   balanceSats: string
   utxoCount: number
   frozenCount: number

@@ -844,6 +844,47 @@ script no formato de carteira, porque sugeriria que o watchtower vigia mais do q
 
 Conferido em navegador com um endereço tirado de um bloco recente da signet.
 
+## Décima primeira rodada — 26/08, o backend que recusa servir
+
+Cadastrar um endereço público de signet para testar o recurso novo derrubou a carteira
+para `error`. O endereço tem **33.446 transações**, e o `mempool.space` responde `400` no
+`/utxo` dele: *"Too many unspent transaction outputs (>500). Contact support to raise
+limits."* Recusa legítima, permanente, e nem defeito nosso nem dele.
+
+Isso expôs três coisas.
+
+### O log não dizia o motivo, de novo
+
+A mensagem era `Esplora respondeu 400 em /address/<a>/utxo`. O motivo estava no corpo da
+resposta o tempo todo, e diagnosticar exigiu repetir a chamada com `curl`. É a terceira
+vez nesta semana que a causa vem num campo que não estava sendo lido — no scanner era
+`stdout`, no Electrum era `AggregateError.errors`, aqui era o corpo HTTP. Vale como
+padrão: **quando integrar com processo ou serviço externo, procurar onde ele escreve o
+motivo antes de dar a integração por pronta.**
+
+### `error` era o estado errado
+
+Um endereço que o backend recusa servir não torna a carteira quebrada — torna-a vigiada
+em parte, e o schema já previa `degraded` para exatamente isso, sem nada nunca o usar.
+Agora a falha por endereço é isolada: os outros continuam sendo lidos, a carteira fica
+`degraded` com o motivo, e volta a `synced` sozinha se o endereço passar a ser legível.
+
+O ponto delicado: o endereço ilegível **não** entra no conjunto dos consultados. Se
+entrasse, seus UTXOs conhecidos seriam lidos como "sumiram da lista" e declarados gastos
+— o saldo desapareceria sozinho, em silêncio, que é o pior defeito possível num
+watchtower. E o status dele não é gravado, para ser tentado de novo na volta seguinte.
+
+### E a tela mentia um zero
+
+O cartão mostrava **"0 sats"** para uma carteira cujo único endereço não pôde ser lido.
+Zero que não foi lido não é zero, é "não sei" — e o cartão já recusava mostrar saldo
+parcial como definitivo na primeira importação, pela mesma razão. Agora mostra `———`,
+sem fingir que uma importação está em curso: a recusa é permanente, e barra de progresso
+prometeria um número que não vai chegar.
+
+Saldo parcial continua aparecendo, porque é verdade: é o que existe nos endereços que
+deu para ler, e o aviso ao lado já diz que não é tudo.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
