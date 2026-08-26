@@ -156,3 +156,136 @@ describe('resumo de endereço no Electrum', () => {
     expect(recebido).toHaveLength(64)
   })
 })
+
+describe('transporte TCP do Electrum', () => {
+  /**
+   * Sobe um servidor que fala o protocolo de verdade — JSON-RPC delimitado por
+   * quebra de linha. O transporte real nunca é exercido pelos testes de cima,
+   * e é nele que estão as partes que quebram calado: juntar pedaços de um
+   * chunk, separar linhas e casar resposta com pedido pelo id.
+   */
+  async function servidorFalso(
+    responder: (linha: string, escrever: (texto: string) => void) => void,
+    espia: { aoAbrir?: () => void; aoFechar?: () => void } = {},
+  ): Promise<{ porta: number; fechar: () => Promise<void> }> {
+    const { createServer } = await import('node:net')
+    const server = createServer(socket => {
+      espia.aoAbrir?.()
+      socket.on('close', () => espia.aoFechar?.())
+      let buffer = ''
+      socket.on('data', chunk => {
+        buffer += chunk.toString('utf8')
+        let quebra: number
+        while ((quebra = buffer.indexOf('\n')) !== -1) {
+          const linha = buffer.slice(0, quebra)
+          buffer = buffer.slice(quebra + 1)
+          responder(linha, texto => socket.write(texto))
+        }
+      })
+    })
+    await new Promise<void>(pronto => server.listen(0, '127.0.0.1', pronto))
+    const porta = (server.address() as { port: number }).port
+    return {
+      porta,
+      fechar: () => new Promise<void>(pronto => server.close(() => pronto())),
+    }
+  }
+
+  it('remonta a resposta partida em vários pedaços', async () => {
+    const s = await servidorFalso((linha, escrever) => {
+      const { id } = JSON.parse(linha) as { id: number }
+      const resposta = JSON.stringify({ id, result: { height: 319333, hex: '00' } })
+      // o TCP não preserva fronteira de mensagem: um JSON pode chegar em dois
+      // pedaços, e o transporte tem de esperar a quebra de linha
+      escrever(resposta.slice(0, 10))
+      setTimeout(() => escrever(resposta.slice(10) + '\n'), 10)
+    })
+    try {
+      const a = createElectrumAdapter({
+        host: '127.0.0.1', port: s.porta, network: 'signet',
+      })
+      expect(await a.tipHeight()).toBe(319333)
+      a.close!()
+    } finally {
+      await s.fechar()
+    }
+  })
+
+  it('ignora notificação de assinatura sem confundi-la com resposta', async () => {
+    const s = await servidorFalso((linha, escrever) => {
+      const { id } = JSON.parse(linha) as { id: number }
+      // notificação chega sem id e não responde a pedido nenhum
+      escrever(JSON.stringify({ method: 'blockchain.headers.subscribe', params: [{}] }) + '\n')
+      escrever(JSON.stringify({ id, result: { height: 42 } }) + '\n')
+    })
+    try {
+      const a = createElectrumAdapter({
+        host: '127.0.0.1', port: s.porta, network: 'signet',
+      })
+      expect(await a.tipHeight()).toBe(42)
+      a.close!()
+    } finally {
+      await s.fechar()
+    }
+  })
+
+  it('propaga o erro que o servidor devolve, nomeando o servidor', async () => {
+    const s = await servidorFalso((linha, escrever) => {
+      const { id, method } = JSON.parse(linha) as { id: number; method: string }
+      if (method === 'blockchain.headers.subscribe') {
+        escrever(JSON.stringify({ id, result: { height: 7 } }) + '\n')
+        return
+      }
+      escrever(JSON.stringify({ id, error: { message: 'altura fora do alcance' } }) + '\n')
+    })
+    try {
+      const a = createElectrumAdapter({
+        host: '127.0.0.1', port: s.porta, network: 'signet',
+      })
+      await expect(a.blockHashAt(999999999)).rejects.toThrow(/altura fora do alcance/)
+      // erro de protocolo é resposta, não queda: a conexão continua servindo
+      expect(await a.tipHeight()).toBe(7)
+      a.close!()
+    } finally {
+      await s.fechar()
+    }
+  })
+
+  it('falha com mensagem acionável quando não há servidor na porta', async () => {
+    const a = createElectrumAdapter({
+      host: '127.0.0.1', port: 1, network: 'signet',
+    })
+    await expect(a.tipHeight()).rejects.toThrow()
+  })
+
+  it('fecha a conexão quando é dispensado', async () => {
+    // Sem isto o worker vaza um socket por carteira a cada ciclo: `tick` monta
+    // um adapter novo toda volta, e um servidor Electrum acumularia as
+    // conexões até esgotar os descritores.
+    let abertas = 0
+    let encerradas = 0
+    const s = await servidorFalso(
+      (linha, escrever) => {
+        const { id } = JSON.parse(linha) as { id: number }
+        escrever(JSON.stringify({ id, result: { height: 1 } }) + '\n')
+      },
+      {
+        aoAbrir: () => { abertas += 1 },
+        aoFechar: () => { encerradas += 1 },
+      },
+    )
+    try {
+      const a = createElectrumAdapter({
+        host: '127.0.0.1', port: s.porta, network: 'signet',
+      })
+      await a.tipHeight()
+      expect(abertas).toBe(1)
+
+      a.close!()
+      await new Promise(pronto => setTimeout(pronto, 50))
+      expect(encerradas).toBe(1)
+    } finally {
+      await s.fechar()
+    }
+  })
+})

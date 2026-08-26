@@ -33,6 +33,37 @@ describe('loadConfig', () => {
     )
   })
 
+  it('vigia pelo Esplora público quando nada é dito', () => {
+    process.env.MASTER_KEY_HEX = VALID_KEY
+    delete process.env.CHAIN_BACKEND
+    delete process.env.PUBLIC_BACKEND
+    const cfg = loadConfig()
+    expect(cfg.backendKind).toBe('esplora')
+    expect(cfg.publicBackend).toBe(true)
+  })
+
+  it('aponta para o servidor Electrum quando CHAIN_BACKEND pede', () => {
+    process.env.MASTER_KEY_HEX = VALID_KEY
+    process.env.CHAIN_BACKEND = 'electrum'
+    process.env.ELECTRUM_URL = 'electrum://127.0.0.1:50001'
+    const cfg = loadConfig()
+    expect(cfg.backendKind).toBe('electrum')
+    expect(cfg.backendUrl).toBe('electrum://127.0.0.1:50001')
+  })
+
+  it('assume postura soberana no Electrum, que é infraestrutura do próprio usuário', () => {
+    process.env.MASTER_KEY_HEX = VALID_KEY
+    process.env.CHAIN_BACKEND = 'electrum'
+    delete process.env.PUBLIC_BACKEND
+    expect(loadConfig().publicBackend).toBe(false)
+  })
+
+  it('lança erro nomeando o valor inválido quando CHAIN_BACKEND é inválido', () => {
+    process.env.MASTER_KEY_HEX = VALID_KEY
+    process.env.CHAIN_BACKEND = 'nao-existe'
+    expect(() => loadConfig()).toThrow('CHAIN_BACKEND inválido: nao-existe')
+  })
+
   it('lança erro nomeando o valor inválido quando NETWORK é inválida', () => {
     process.env.MASTER_KEY_HEX = VALID_KEY
     process.env.NETWORK = 'nao-existe'
@@ -51,7 +82,7 @@ describe('loadConfig', () => {
 
     expect(config.port).toBe(3000)
     expect(config.network).toBe('signet')
-    expect(config.esploraUrl).toBe('https://mempool.space/signet/api')
+    expect(config.backendUrl).toBe('https://mempool.space/signet/api')
     expect(config.publicBackend).toBe(true)
   })
 

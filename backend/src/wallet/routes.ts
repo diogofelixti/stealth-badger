@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import type { ChainAdapter } from '../chain/types'
-import { createEsploraAdapter } from '../chain/esplora'
+import { createAdapter, type BackendRow } from '../chain/adapter'
 import { loadConfig } from '../config'
 import { seal } from '../crypto/secretbox'
 import { pool } from '../db/pool'
@@ -13,7 +13,7 @@ import {
 } from './descriptor'
 
 export interface WalletRouteOptions {
-  adapterFactory?: (backend: { url: string; isPublic: boolean }) => ChainAdapter
+  adapterFactory?: (backend: BackendRow) => ChainAdapter
 }
 
 /**
@@ -33,11 +33,11 @@ async function ensureBackend(network: Network): Promise<number> {
   const cfg = loadConfig()
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO backends (user_id, kind, url, is_public, network)
-     VALUES (NULL, 'esplora', $1, $2, $3)
+     VALUES (NULL, $1, $2, $3, $4)
      ON CONFLICT (user_id, url, network)
-     DO UPDATE SET is_public = EXCLUDED.is_public
+     DO UPDATE SET is_public = EXCLUDED.is_public, kind = EXCLUDED.kind
      RETURNING id`,
-    [cfg.esploraUrl, cfg.publicBackend, network],
+    [cfg.backendKind, cfg.backendUrl, cfg.publicBackend, network],
   )
   return Number(rows[0]!.id)
 }
@@ -46,10 +46,7 @@ export function registerWalletRoutes(
   app: FastifyInstance,
   opts: WalletRouteOptions = {},
 ): void {
-  const adapterFactory =
-    opts.adapterFactory ??
-    ((b: { url: string; isPublic: boolean }) =>
-      createEsploraAdapter(b.url, { isPublic: b.isPublic }))
+  const adapterFactory = opts.adapterFactory ?? createAdapter
 
   app.post<{ Body: CreateWalletBody }>('/api/wallets', async (req, reply) => {
     if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
@@ -88,13 +85,20 @@ export function registerWalletRoutes(
     let scriptType = parsed.scriptType
     if (parsed.scriptTypeAmbiguous) {
       const adapter = adapterFactory({
-        url: cfg.esploraUrl,
+        kind: cfg.backendKind,
+        url: cfg.backendUrl,
         isPublic: cfg.publicBackend,
+        network,
       })
-      scriptType =
-        (await detectScriptType(parsed.canonicalXpub, network, adapter).catch(
-          () => null,
-        )) ?? PADRAO_QUANDO_NAO_DA_PARA_SABER
+      try {
+        scriptType =
+          (await detectScriptType(parsed.canonicalXpub, network, adapter).catch(
+            () => null,
+          )) ?? PADRAO_QUANDO_NAO_DA_PARA_SABER
+      } finally {
+        // adapter aberto só para esta consulta; com Electrum é um socket
+        adapter.close?.()
+      }
     }
 
     const backendId = await ensureBackend(network)

@@ -43,4 +43,10 @@ export interface ChainAdapter {
   registerDescriptor?(descriptor: string): Promise<void>
   rescanFrom?(height: number): Promise<void>
   subscribe?(scripthash: string, onChange: () => void): () => void
+  /**
+   * Encerra a conexão que o adapter mantém aberta, quando ele mantém alguma.
+   * O Esplora fala HTTP e não tem o que fechar; o Electrum segura um socket, e
+   * sem isto o worker vazaria um por carteira a cada ciclo.
+   */
+  close?(): void
 }

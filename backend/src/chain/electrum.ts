@@ -6,6 +6,14 @@ import { electrumScripthash } from '../wallet/derive'
 import type { Network } from '../wallet/descriptor'
 import type { AddressStatus, ChainAdapter, ChainCapabilities, TxRef, Utxo } from './types'
 
+/**
+ * Erro que o próprio servidor devolveu na resposta — bloco inexistente,
+ * parâmetro recusado. É resposta legítima, não conexão quebrada: derrubar o
+ * socket por causa dela custaria uma reconexão a cada consulta de altura fora
+ * do alcance.
+ */
+class ElectrumRpcError extends Error {}
+
 interface Transport {
   call(method: string, params: unknown[]): Promise<unknown>
   close(): void
@@ -61,7 +69,7 @@ function tcpTransport(host: string, port: number): ConnectFn {
             const waiting = pending.get(msg.id)
             if (!waiting) continue
             pending.delete(msg.id)
-            if (msg.error) waiting.fail(new Error(msg.error.message))
+            if (msg.error) waiting.fail(new ElectrumRpcError(msg.error.message))
             else waiting.ok(msg.result)
           }
         })
@@ -102,8 +110,13 @@ export function createElectrumAdapter(opts: ElectrumOptions): ChainAdapter {
       return await transport.call(method, params)
     } catch (err) {
       // insistir numa conexão já quebrada faria toda consulta seguinte falhar
-      // com a mesma causa até o processo reiniciar
-      transport = null
+      // com a mesma causa até o processo reiniciar. Fechar antes de soltar a
+      // referência importa: soltá-la sozinha deixaria o socket aberto e sem
+      // dono, que é vazamento silencioso.
+      if (!(err instanceof ElectrumRpcError)) {
+        transport?.close()
+        transport = null
+      }
       throw new Error(
         `Electrum ${opts.host}:${opts.port} falhou em ${method}: ${(err as Error).message}`,
       )
@@ -162,6 +175,11 @@ export function createElectrumAdapter(opts: ElectrumOptions): ChainAdapter {
         // por altura quando precisa, ao custo de uma chamada extra
         blockHash: null,
       }))
+    },
+
+    close() {
+      transport?.close()
+      transport = null
     },
 
     async getUtxosForAddress(address: string): Promise<Utxo[]> {

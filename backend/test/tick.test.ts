@@ -97,4 +97,29 @@ describe('tick', () => {
     const segunda = await pool.query<{ count: string }>('SELECT count(*) FROM alerts')
     expect(segunda.rows[0]!.count).toBe(primeira.rows[0]!.count)
   })
+
+  it('fecha o adapter ao fim do ciclo, mesmo quando a sincronização falha', async () => {
+    // O ciclo monta um adapter por carteira. Se não o fechar, o Electrum
+    // acumula um socket a cada 30 segundos até esgotar os descritores — e o
+    // ciclo que falha é justamente o que mais se repete.
+    let fechados = 0
+    const quebrado: ChainAdapter = {
+      ...adapterWithDust(),
+      tipHeight: async () => {
+        throw new Error('servidor fora do ar')
+      },
+      close: () => {
+        fechados += 1
+      },
+    }
+    await tick({ adapterFactory: () => quebrado })
+    expect(fechados).toBe(1)
+  })
+
+  it('fecha o adapter depois de um ciclo bem-sucedido', async () => {
+    let fechados = 0
+    const adapter: ChainAdapter = { ...adapterWithDust(), close: () => { fechados += 1 } }
+    await tick({ adapterFactory: () => adapter })
+    expect(fechados).toBe(1)
+  })
 })

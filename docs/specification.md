@@ -315,10 +315,32 @@ exemplo — jamais reais.
 |---|---|
 | `MASTER_KEY_HEX` | 32 bytes em hex. Cifra os xpubs em repouso |
 | `NETWORK` | `mainnet`, `signet` ou `testnet`. Define que chaves o sistema aceita |
-| `ESPLORA_URL` | backend de cadeia |
+| `CHAIN_BACKEND` | `esplora` ou `electrum` |
+| `ESPLORA_URL` | backend de cadeia quando `CHAIN_BACKEND=esplora` |
+| `ELECTRUM_URL` | `electrum://host:porta` quando `CHAIN_BACKEND=electrum` |
 | `PUBLIC_BACKEND` | governa o aviso persistente de privacidade |
 
-### 11.1 Custódia do xpub
+### 11.1 Dois backends de cadeia
+
+**Esplora**, por HTTP, é o caminho do explorador público — cômodo e observável por
+terceiro. **Electrum**, JSON-RPC por TCP, é o caminho de quem já roda infraestrutura:
+um adapter só atende Electrs, Fulcrum e Floresta, porque o florestad embute um
+servidor Electrum.
+
+O tipo do backend é dado do banco, não escolha costurada em cada ponto de uso: o
+motor de sincronização e o cadastro de carteira montam o adapter pelo mesmo caminho,
+a partir da coluna `backends.kind`.
+
+O adapter Electrum recebe **endereço** e deriva o scripthash internamente. A
+alternativa — expor scripthash na interface — vazaria detalhe do protocolo Electrum
+até o motor de sincronização, e custaria a um Esplora ter de conhecê-lo.
+
+`PUBLIC_BACKEND` sem valor assume público no Esplora e soberano no Electrum, que é o
+uso corrente dos dois. Quem aponta para um Esplora próprio, ou para um servidor
+Electrum de terceiro, precisa dizer — é o aviso de privacidade da tela que depende
+disso.
+
+### 11.2 Custódia do xpub
 
 O xpub é cifrado com **AES-256-GCM** sob a chave-mestra do servidor.
 
@@ -337,7 +359,6 @@ Escrito para ser lido antes que alguém pergunte.
 
 | Item | Situação |
 |---|---|
-| **Adapter Electrum** (Electrs, Fulcrum, Floresta) | interface pronta, adapter não escrito. Hoje só há Esplora |
 | **`registerDescriptor` / `rescanFrom`** | caminho de Bitcoin Core e Floresta; previstos na interface, sem implementação |
 | **Alertas `score_dropped` e `kyc_origin`** | dependem da integração com `am-i-exposed` |
 | **Coin control** (rótulos, tags, regras de gasto, BIP-329) | modelado, não construído |
@@ -349,6 +370,10 @@ Escrito para ser lido antes que alguém pergunte.
 - **`utxo_spent` é gravado na altura da ponta e sem a transação que gastou.** Coin
   control precisará desse dado.
 - **O adapter Esplora não tem backoff contra o `429`** do explorador público.
+- **O adapter Electrum não foi exercido contra um servidor Electrum de verdade.**
+  O protocolo é coberto por um servidor de teste local que fala JSON-RPC por TCP —
+  incluindo resposta partida em vários pedaços, notificação sem id e erro devolvido
+  pelo servidor — mas nenhum Electrs, Fulcrum ou florestad rodou contra ele ainda.
 - **A varredura continua sequencial.** Um ciclo pergunta por um endereço de cada vez,
   e o tempo é dominado pela latência do explorador público. Paralelizar cortaria o
   tempo, mas concentraria a rajada — e o adapter ainda não tem backoff para o `429`.
@@ -367,7 +392,7 @@ deduplicação de alerta, detecção de reorg, gap limit, projeção de UTXO, de
 cifra em repouso e reconexão do listener SSE.
 
 ```bash
-cd backend && npm test     # 20 arquivos, 156 testes
+cd backend && npm test     # 22 arquivos, 184 testes
 npx tsc --noEmit           # sem erros
 ```
 

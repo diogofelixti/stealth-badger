@@ -1,5 +1,6 @@
 import type { ChainAdapter } from '../chain/types'
-import { createEsploraAdapter } from '../chain/esplora'
+import type { Network } from '../wallet/descriptor'
+import { createAdapter, type BackendRow } from '../chain/adapter'
 import { pool } from '../db/pool'
 import { activeEvents } from '../events/log'
 import { alertsForEvent } from '../alerts/rules'
@@ -15,22 +16,21 @@ export interface TickReport {
 const DUST_THRESHOLD = 1000
 
 interface TickOptions {
-  adapterFactory?: (backend: { url: string; isPublic: boolean }) => ChainAdapter
+  adapterFactory?: (backend: BackendRow) => ChainAdapter
 }
 
 export async function tick(opts: TickOptions = {}): Promise<TickReport> {
-  const factory =
-    opts.adapterFactory ??
-    ((b: { url: string; isPublic: boolean }) =>
-      createEsploraAdapter(b.url, { isPublic: b.isPublic }))
+  const factory = opts.adapterFactory ?? createAdapter
 
   const { rows: wallets } = await pool.query<{
     id: string
     user_id: string
+    kind: string
     url: string
     is_public: boolean
+    network: Network
   }>(
-    `SELECT w.id, w.user_id, b.url, b.is_public
+    `SELECT w.id, w.user_id, b.kind, b.url, b.is_public, b.network
        FROM wallets w JOIN backends b ON b.id = w.backend_id
       ORDER BY w.id`,
   )
@@ -42,12 +42,24 @@ export async function tick(opts: TickOptions = {}): Promise<TickReport> {
     const walletId = Number(w.id)
     const userId = Number(w.user_id)
 
+    const adapter = factory({
+      kind: w.kind,
+      url: w.url,
+      isPublic: w.is_public,
+      network: w.network,
+    })
+
     let result
     try {
-      result = await syncWallet(walletId, factory({ url: w.url, isPublic: w.is_public }))
+      result = await syncWallet(walletId, adapter)
     } catch (err) {
       console.error('falha ao sincronizar carteira ' + walletId + ': ' + (err as Error).message)
       continue
+    } finally {
+      // O Electrum segura um socket. Sem fechar aqui, o worker acumula uma
+      // conexão por carteira a cada volta — e a volta que falha é a que mais
+      // se repete.
+      adapter.close?.()
     }
     walletsSynced += 1
 

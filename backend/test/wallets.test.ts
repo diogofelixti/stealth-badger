@@ -296,4 +296,36 @@ describe('POST /api/wallets — tipo de script ambíguo', () => {
 
     expect(res.json().scriptType).toBe('p2wpkh')
   })
+
+  it('fecha o adapter que abriu para descobrir o tipo de script', async () => {
+    // A descoberta monta um adapter só para consultar a cadeia. Com Electrum
+    // isso é um socket, e cada cadastro deixaria um pendurado.
+    process.env.NETWORK = 'signet'
+    let fechados = 0
+    const app = buildApp({
+      adapterFactory: () => ({
+        ...adapterQueConhece(enderecosSegwitDo(TPUB)),
+        close: () => { fechados += 1 },
+      }),
+    })
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'g@h.co', password: 'senha-longa-de-teste', language: 'pt' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'g@h.co', password: 'senha-longa-de-teste' },
+    })
+    const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre', key: TPUB },
+    })
+    expect(fechados).toBe(1)
+  })
 })
