@@ -148,3 +148,113 @@ describe('resumo de endereço', () => {
     expect(depois.status).not.toBe(antes.status)
   })
 })
+
+describe('limite de taxa do explorador público', () => {
+  /** Devolve 429 nas primeiras `vezes` chamadas, depois responde de verdade. */
+  function fetchQueLimita(vezes: number, corpo = '319233', retryAfter?: string) {
+    let chamadas = 0
+    const f = async () => {
+      chamadas += 1
+      if (chamadas <= vezes) {
+        return new Response('rate limited', {
+          status: 429,
+          headers: retryAfter ? { 'retry-after': retryAfter } : {},
+        })
+      }
+      return new Response(corpo, { status: 200 })
+    }
+    return f as unknown as typeof fetch
+  }
+
+  function esperas() {
+    const registradas: number[] = []
+    return {
+      registradas,
+      dormir: async (ms: number) => {
+        registradas.push(ms)
+      },
+    }
+  }
+
+  // Um 429 hoje derruba a sincronização inteira e a carteira aparece em
+  // `error` na tela. O explorador público limita justamente quando a carteira
+  // é grande, que é quando vigiar importa mais.
+  it('repete a consulta quando o explorador responde 429', async () => {
+    const { dormir } = esperas()
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: fetchQueLimita(2),
+      sleepFn: dormir,
+    })
+    expect(await a.tipHeight()).toBe(319233)
+  })
+
+  it('espera mais a cada tentativa, em vez de martelar o explorador', async () => {
+    const e = esperas()
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: fetchQueLimita(3),
+      sleepFn: e.dormir,
+    })
+    await a.tipHeight()
+    expect(e.registradas).toHaveLength(3)
+    expect(e.registradas[1]).toBeGreaterThan(e.registradas[0]!)
+    expect(e.registradas[2]).toBeGreaterThan(e.registradas[1]!)
+  })
+
+  // Quando o servidor diz quanto esperar, discutir com ele é o caminho mais
+  // curto para ser bloqueado de vez.
+  it('obedece o Retry-After que o explorador manda', async () => {
+    const e = esperas()
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: fetchQueLimita(1, '319233', '7'),
+      sleepFn: e.dormir,
+    })
+    await a.tipHeight()
+    expect(e.registradas[0]).toBe(7000)
+  })
+
+  it('desiste depois do limite de tentativas, dizendo que foi limite de taxa', async () => {
+    const e = esperas()
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: fetchQueLimita(99),
+      sleepFn: e.dormir,
+      maxRetries: 3,
+    })
+    await expect(a.tipHeight()).rejects.toThrow(/limite de taxa|429/i)
+    expect(e.registradas).toHaveLength(3)
+  })
+
+  // Endereço inexistente não melhora esperando: repetir só atrasa o erro e
+  // gasta a cota que o 429 já está disputando.
+  it('não repete erro que não é de limite de taxa', async () => {
+    const e = esperas()
+    let chamadas = 0
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: (async () => {
+        chamadas += 1
+        return new Response('not found', { status: 404 })
+      }) as typeof fetch,
+      sleepFn: e.dormir,
+    })
+    await expect(a.tipHeight()).rejects.toThrow(/404/)
+    expect(chamadas).toBe(1)
+    expect(e.registradas).toHaveLength(0)
+  })
+
+  // 503 é o explorador dizendo que está sobrecarregado agora. Vale a mesma
+  // paciência do 429.
+  it('também espera quando o explorador diz que está indisponível', async () => {
+    const e = esperas()
+    let chamadas = 0
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: (async () => {
+        chamadas += 1
+        return chamadas === 1
+          ? new Response('overloaded', { status: 503 })
+          : new Response('319233', { status: 200 })
+      }) as typeof fetch,
+      sleepFn: e.dormir,
+    })
+    expect(await a.tipHeight()).toBe(319233)
+    expect(e.registradas).toHaveLength(1)
+  })
+})
