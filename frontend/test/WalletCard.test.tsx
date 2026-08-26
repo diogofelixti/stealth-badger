@@ -55,4 +55,26 @@ describe('WalletCard', () => {
     render(<WalletCard wallet={comErro} catalog={catalogo} lang="pt" />)
     expect(screen.getByText(/falha na sincronização/i)).toBeDefined()
   })
+
+  // Com backend por carteira, o selo do topo passa a falar da sessão inteira.
+  // Quem quer saber por onde *esta* carteira é vigiada precisa ler no cartão —
+  // e é isso que torna visível o contraste entre uma carteira exposta e uma
+  // soberana lado a lado.
+  it('nomeia o backend que vigia esta carteira', () => {
+    render(<WalletCard wallet={base} catalog={catalogo} lang="pt" />)
+    expect(screen.getByText(/mempool\.space/)).toBeDefined()
+  })
+
+  it('distingue no cartão a carteira soberana da exposta', () => {
+    const soberana: Wallet = {
+      ...base,
+      backendIsPublic: false,
+      backendUrl: 'electrum://127.0.0.1:50001',
+    }
+    const { container } = render(<WalletCard wallet={soberana} catalog={catalogo} lang="pt" />)
+    expect(container.querySelector('[data-wallet-posture="sovereign"]')).not.toBeNull()
+
+    const exposta = render(<WalletCard wallet={base} catalog={catalogo} lang="pt" />)
+    expect(exposta.container.querySelector('[data-wallet-posture="public"]')).not.toBeNull()
+  })
 })

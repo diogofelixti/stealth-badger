@@ -67,6 +67,16 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'auth.logout': 'Sair',
     'privacy.public': 'Explorador público',
     'privacy.sovereign': 'Soberano',
+    'privacy.severalHosts': '{n} backends',
+    'backends.title': 'Vigiar por',
+    'backends.global': 'configurado no servidor',
+    'backends.own': 'seu',
+    'backends.addToggle': '+ outro backend',
+    'backends.urlPlaceholder': 'https://... ou electrum://host:50001',
+    'backends.isPublic': 'É um serviço público de terceiro',
+    'backends.publicNote':
+      'Um backend público enxerga quais endereços você consulta. O aviso no topo fica aceso enquanto qualquer carteira usar um.',
+    'backends.save': 'Adicionar backend',
   },
   en: {
     'alert.funds_received.title': 'Funds received',
@@ -128,5 +138,15 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'auth.logout': 'Sign out',
     'privacy.public': 'Public explorer',
     'privacy.sovereign': 'Sovereign',
+    'privacy.severalHosts': '{n} backends',
+    'backends.title': 'Watch through',
+    'backends.global': 'server default',
+    'backends.own': 'yours',
+    'backends.addToggle': '+ another backend',
+    'backends.urlPlaceholder': 'https://... or electrum://host:50001',
+    'backends.isPublic': "It is someone else's public service",
+    'backends.publicNote':
+      'A public backend sees which addresses you look up. The banner at the top stays lit while any wallet uses one.',
+    'backends.save': 'Add backend',
   },
 }

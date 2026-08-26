@@ -526,6 +526,32 @@ e tratado. Comportamento correto.
 Observação sem ação: a tela de login veste a listra âmbar incondicionalmente, antes de
 existir postura a declarar, enquanto o painel vazio usa a linha neutra.
 
+## Quinta rodada — 26/08, seleção de backend
+
+Feita porque o passo 5 do roteiro do pitch depende dela. `GET`/`POST /api/backends`,
+`backendId` opcional no cadastro de carteira, seletor no formulário e o backend
+nomeado em cada cartão.
+
+Três decisões que valem registro:
+
+- **A postura anunciada no topo passou a ser agregada.** Era a da primeira carteira da
+  lista, o que viraria mentira assim que duas discordassem. Agora basta uma carteira
+  passando por explorador público para a postura ser pública — a exposição existe
+  independentemente de qual carteira veio primeiro.
+- **Backend inexistente e backend de outro usuário recebem a mesma recusa**, para não
+  contar a um usuário quais ids existem no banco de outro.
+- **O backend é resolvido antes da detecção de tipo de script**, porque é ele que vai
+  responder a consulta. Detectar por um e vigiar por outro exporia os endereços a um
+  observador a mais sem necessidade.
+
+Conferido em navegador: o backend da instância aparece sozinho, o aviso de explorador
+público acende junto com a escolha, cadastrar um backend Electrum funciona e ele já
+entra selecionado, com o aviso apagando.
+
+**Limitação que fica:** a instância vigia uma rede só (`NETWORK`). Dá para contrastar
+as duas posturas, mas ambas na mesma rede — o roteiro original usava mainnet e signet
+lado a lado, e isso continua impossível.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
@@ -536,7 +562,7 @@ O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
 | 2. xpub → modo público, badge de aviso aceso | **funciona** |
 | 3. `am-i-exposed`: score e achados | **não existe** — integração não feita |
 | 4. Tabela de UTXO com tags de proveniência, dust congelado | **não existe** — `utxos.frozen` está no schema e nada o escreve |
-| 5. Segunda carteira em modo soberano, lado a lado com a pública | **impossível hoje** — o backend é global, vem do `.env`, e o `NETWORK` único faz o cadastro recusar chave de outra rede |
+| 5. Segunda carteira em modo soberano, lado a lado com a pública | **possível desde 26/08**, na mesma rede — falta um servidor Electrum de verdade rodando. `NETWORK` único ainda impede mainnet e signet juntas |
 | 6. Transação real no signet → alerta no celular | **funciona** — é o que foi validado ponta a ponta |
 | 7. Exportar BIP-329 e abrir no Sparrow | **não existe** |
 | 8. Roadmap | falar |
@@ -557,10 +583,6 @@ sobre privacidade, não sobre saldo.
 
 ### Em execução
 
-- **Seleção de backend pela tela** — decidida em 26/08 (ver §4 do design). Sem ela o
-  passo 5 do pitch não roda. O schema já prevê backend por usuário
-  (`backends.user_id`, `NULL` = global); faltam rota, seleção no cadastro de carteira e
-  tela
 - **Integração do `am-i-exposed`** — risco nomeado nº 1 do design, com spike previsto
   para terça de manhã e não executado. Timebox de duas horas: se não rodar sob Node 20
   nesse prazo, corta e o roteiro alternativo assume. Habilita `score_dropped` e

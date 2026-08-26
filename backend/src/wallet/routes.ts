@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { ChainAdapter } from '../chain/types'
 import { createAdapter, type BackendRow } from '../chain/adapter'
+import { backendDoUsuario, ensureBackendGlobal } from '../chain/backends'
 import { loadConfig } from '../config'
 import { seal } from '../crypto/secretbox'
 import { pool } from '../db/pool'
@@ -27,20 +28,11 @@ interface CreateWalletBody {
   label: string
   key: string
   gapLimit?: number
+  /** backend escolhido na tela; ausente usa o configurado na instância */
+  backendId?: number
 }
 
-async function ensureBackend(network: Network): Promise<number> {
-  const cfg = loadConfig()
-  const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO backends (user_id, kind, url, is_public, network)
-     VALUES (NULL, $1, $2, $3, $4)
-     ON CONFLICT (user_id, url, network)
-     DO UPDATE SET is_public = EXCLUDED.is_public, kind = EXCLUDED.kind
-     RETURNING id`,
-    [cfg.backendKind, cfg.backendUrl, cfg.publicBackend, network],
-  )
-  return Number(rows[0]!.id)
-}
+
 
 export function registerWalletRoutes(
   app: FastifyInstance,
@@ -79,17 +71,41 @@ export function registerWalletRoutes(
 
     const network: Network = cfg.network
 
+    // O backend é resolvido antes da detecção de tipo de script porque é ele
+    // que responderá a consulta: detectar por um backend e vigiar por outro
+    // seria perguntar a cadeia em dois lugares sem motivo — e, se um deles for
+    // público, expor os endereços a mais um observador do que o necessário.
+    let backend: BackendRow & { id: number }
+    if (req.body.backendId !== undefined) {
+      const escolhido = await backendDoUsuario(
+        req.userId,
+        Number(req.body.backendId),
+        network,
+      )
+      if (!escolhido) {
+        return reply.code(400).send({
+          error:
+            `backend ${req.body.backendId} não existe ou não é seu. ` +
+            'Consulte GET /api/backends para os disponíveis.',
+        })
+      }
+      backend = { ...escolhido, network }
+    } else {
+      backend = {
+        id: await ensureBackendGlobal(network),
+        kind: cfg.backendKind,
+        url: cfg.backendUrl,
+        isPublic: cfg.publicBackend,
+        network,
+      }
+    }
+
     // `xpub`/`tpub` não dizem o tipo de script: quem exporta por descriptor
     // usa a mesma codificação para legado, segwit e taproot. Assumir errado
     // não dá erro — a carteira sincroniza e mostra saldo zero para sempre.
     let scriptType = parsed.scriptType
     if (parsed.scriptTypeAmbiguous) {
-      const adapter = adapterFactory({
-        kind: cfg.backendKind,
-        url: cfg.backendUrl,
-        isPublic: cfg.publicBackend,
-        network,
-      })
+      const adapter = adapterFactory(backend)
       try {
         scriptType =
           (await detectScriptType(parsed.canonicalXpub, network, adapter).catch(
@@ -101,7 +117,7 @@ export function registerWalletRoutes(
       }
     }
 
-    const backendId = await ensureBackend(network)
+    const backendId = backend.id
     const { rows } = await pool.query<{ id: string }>(
       `INSERT INTO wallets
          (user_id, label, xpub_encrypted, xpub_fingerprint, script_type,

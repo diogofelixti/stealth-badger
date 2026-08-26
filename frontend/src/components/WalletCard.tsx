@@ -2,6 +2,14 @@ import type { Catalog, Lang, Wallet } from '../lib/api'
 import { formatSats } from '../lib/format'
 import { render } from '../lib/i18n'
 
+function host(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
+}
+
 export function WalletCard({
   wallet,
   catalog,
@@ -58,6 +66,25 @@ export function WalletCard({
           </p>
         </>
       )}
+
+      {/* Por onde *esta* carteira é vigiada. O selo do topo fala da sessão
+          inteira e não distingue uma carteira da outra; aqui é onde o
+          contraste entre exposta e soberana fica visível lado a lado. */}
+      <p
+        data-wallet-posture={wallet.backendIsPublic ? 'public' : 'sovereign'}
+        className="mt-[10px] flex items-center gap-[6px] text-xs text-faint"
+      >
+        <span
+          aria-hidden="true"
+          className="inline-block h-[6px] w-[6px] shrink-0 rounded-full"
+          style={{
+            background: wallet.backendIsPublic
+              ? 'var(--sb-public)'
+              : 'var(--sb-sovereign)',
+          }}
+        />
+        {host(wallet.backendUrl)}
+      </p>
 
       {wallet.syncState === 'error' && (
         <p className="mt-3 text-xs uppercase tracking-label" style={{ color: 'var(--sb-critical)' }}>

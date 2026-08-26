@@ -322,7 +322,41 @@ exemplo — jamais reais.
 | `ELECTRUM_URL` | `electrum://host:porta` quando `CHAIN_BACKEND=electrum` |
 | `PUBLIC_BACKEND` | governa o aviso persistente de privacidade |
 
-### 11.1 Dois backends de cadeia
+### 11.1 O backend é escolhido por carteira
+
+`CHAIN_BACKEND` e companhia definem o backend **da instância** — o que a tela oferece
+por padrão e o que uma carteira usa quando nada é dito. Além dele, cada usuário
+cadastra os seus:
+
+| Rota | Efeito |
+|---|---|
+| `GET /api/backends` | lista o backend da instância mais os do usuário. Cria o da instância se ainda não existir, para que a tela nunca receba lista vazia |
+| `POST /api/backends` | cadastra backend do usuário. Valida o esquema contra o protocolo — `http(s)://` para Esplora, `electrum://` para Electrum |
+| `POST /api/wallets` | aceita `backendId`. Ausente, usa o da instância. De outro usuário, recusa |
+
+Backend inexistente e backend de outra pessoa recebem **a mesma recusa**, de propósito:
+distinguir os dois contaria a um usuário quais ids existem no banco de outro.
+
+O backend é resolvido **antes** da detecção de tipo de script, porque é ele que
+responderá a consulta. Detectar por um e vigiar por outro perguntaria à cadeia em dois
+lugares sem motivo — e, se um deles for público, exporia os endereços a mais um
+observador do que o necessário.
+
+#### A postura anunciada passa a ser agregada
+
+Com backend por carteira, o selo do topo não pode mais ser o da primeira carteira da
+lista: seria mentira assim que duas discordassem. A regra é conservadora e vale para a
+sessão inteira — **basta uma** carteira passando por explorador público para que a
+postura anunciada seja pública, porque a exposição existe. Quando mais de um explorador
+expõe, a linha conta quantos em vez de eleger um.
+
+Cada cartão de carteira nomeia o seu próprio backend. É ali que o contraste entre uma
+carteira exposta e uma soberana fica visível lado a lado.
+
+> **Limitação:** a instância ainda vigia **uma rede só** (`NETWORK`). Dá para contrastar
+> as duas posturas — explorador público contra nó próprio — mas ambas na mesma rede.
+
+### 11.2 Dois backends de cadeia
 
 **Esplora**, por HTTP, é o caminho do explorador público — cômodo e observável por
 terceiro. **Electrum**, JSON-RPC por TCP, é o caminho de quem já roda infraestrutura:
@@ -342,7 +376,7 @@ uso corrente dos dois. Quem aponta para um Esplora próprio, ou para um servidor
 Electrum de terceiro, precisa dizer — é o aviso de privacidade da tela que depende
 disso.
 
-### 11.2 Custódia do xpub
+### 11.3 Custódia do xpub
 
 O xpub é cifrado com **AES-256-GCM** sob a chave-mestra do servidor.
 
@@ -362,7 +396,6 @@ Escrito para ser lido antes que alguém pergunte.
 | Item | Situação |
 |---|---|
 | **`registerDescriptor` / `rescanFrom`** | caminho de Bitcoin Core e Floresta; previstos na interface, sem implementação |
-| **Escolher o backend de cadeia pela interface** | hoje é `CHAIN_BACKEND` no `.env`, um backend global para toda a instância. O schema já prevê backend por usuário (`backends.user_id`) |
 | **Vigiar endereço avulso**, fora de carteira | `addresses`, `chain_events`, `utxos` e `alerts` são todos ancorados em `wallet_id` |
 | **Busca de endereços** | não há rota nem tela |
 | **Alertas sobre endereços sancionados** | fora de escopo por decisão; ver §4 do design |

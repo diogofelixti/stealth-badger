@@ -36,6 +36,18 @@ export interface Wallet {
   backendUrl: string
 }
 
+export type BackendKind = 'esplora' | 'electrum'
+
+export interface Backend {
+  id: number
+  kind: BackendKind
+  url: string
+  isPublic: boolean
+  network: string
+  /** `global` é o backend da instância; `own`, o que o usuário cadastrou */
+  scope: 'global' | 'own'
+}
+
 export interface Me {
   email: string
   isAdmin: boolean
@@ -69,10 +81,16 @@ export const api = {
   logout: () => request<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
   me: () => request<Me>('/api/auth/me'),
   wallets: () => request<Wallet[]>('/api/wallets'),
-  addWallet: (label: string, key: string) =>
+  addWallet: (label: string, key: string, backendId?: number) =>
     request<Wallet>('/api/wallets', {
       method: 'POST',
-      body: JSON.stringify({ label, key }),
+      body: JSON.stringify({ label, key, backendId }),
+    }),
+  backends: () => request<Backend[]>('/api/backends'),
+  addBackend: (kind: BackendKind, url: string, isPublic: boolean) =>
+    request<Backend>('/api/backends', {
+      method: 'POST',
+      body: JSON.stringify({ kind, url, isPublic }),
     }),
   alerts: () => request<Alert[]>('/api/alerts'),
   catalog: (lang: Lang) => request<Catalog>(`/api/i18n/${lang}`),

@@ -29,6 +29,39 @@ function host(url: string): string {
   }
 }
 
+/**
+ * A postura anunciada no topo vale para a sessão inteira.
+ *
+ * Com backend por carteira, ela deixa de ser "a postura da primeira carteira"
+ * — que seria mentira assim que duas carteiras discordassem. O que o usuário
+ * precisa saber é se existe exposição: **basta uma** carteira passando por
+ * explorador público para que a resposta honesta seja pública.
+ *
+ * Quando mais de um explorador expõe, a linha conta quantos em vez de eleger
+ * um deles, porque nomear só o primeiro esconderia os outros.
+ */
+function postura(
+  wallets: Wallet[],
+  catalog: Catalog,
+  lang: Lang,
+): { isPublic: boolean; host: string; label: string } | null {
+  if (wallets.length === 0) return null
+
+  const expostas = wallets.filter(w => w.backendIsPublic)
+  const isPublic = expostas.length > 0
+  const relevantes = isPublic ? expostas : wallets
+  const hosts = [...new Set(relevantes.map(w => host(w.backendUrl)))]
+
+  return {
+    isPublic,
+    host:
+      hosts.length === 1
+        ? hosts[0]!
+        : render(catalog, 'privacy.severalHosts', { n: hosts.length }, lang),
+    label: render(catalog, isPublic ? 'privacy.public' : 'privacy.sovereign', {}, lang),
+  }
+}
+
 export function Dashboard({
   me,
   catalog,
@@ -73,7 +106,7 @@ export function Dashboard({
     (maior, w) => (w.syncHeight !== null && (maior === null || w.syncHeight > maior) ? w.syncHeight : maior),
     null,
   )
-  const primeira = wallets[0]
+  const posturaAtual = postura(wallets, catalog, lang)
 
   // Só depois de carregar: enquanto o fetch corre, `wallets` também está
   // vazio, e piscar o formulário seria pior que não tê-lo.
@@ -83,20 +116,7 @@ export function Dashboard({
 
   return (
     <Shell
-      backend={
-        primeira
-          ? {
-              isPublic: primeira.backendIsPublic,
-              host: host(primeira.backendUrl),
-              label: render(
-                catalog,
-                primeira.backendIsPublic ? 'privacy.public' : 'privacy.sovereign',
-                {},
-                lang,
-              ),
-            }
-          : null
-      }
+      backend={posturaAtual}
       actions={
         <>
           <LangToggle lang={lang} onChange={onLang} />
