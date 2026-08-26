@@ -147,14 +147,61 @@ A cada tick, para cada carteira:
 5. Reprojeta os UTXOs.
 6. Atualiza `sync_state` e `sync_height`.
 
-### 6.1 Estados da carteira
+### 6.1 Só se reconfere o que mudou
+
+Perguntar tudo de novo a cada 30 segundos é caro para quem vigia e abusivo para o
+explorador público. O adapter oferece um **resumo barato** do endereço:
+
+```ts
+getAddressStatus?(address: string): Promise<{ used: boolean; status: string | null }>
+```
+
+`status` é **opaco** — só se compara por igualdade com o guardado em
+`addresses.status`. No Esplora ele é montado dos seis contadores de `/address/:a`:
+transações, saídas criadas e saídas gastas, na cadeia e no mempool. Os seis juntos
+são necessários: gastar não muda `tx_count` sozinho, e confirmar move a contagem de
+um lado para o outro sem mexer no total.
+
+Status repetido significa que nada aconteceu naquele endereço, e a lista de UTXO
+dele não é pedida de novo.
+
+Três consequências que o código trata explicitamente:
+
+- **Sumiço deixa de bastar para declarar gasto.** Antes, um UTXO conhecido que não
+  aparecesse na lista virava `utxo_spent`; com endereços pulados, isso esvaziaria a
+  carteira inteira num ciclo silencioso. Agora o gasto exige que o endereço tenha
+  sido **de fato perguntado** naquela volta — o que também cobre o caso, já
+  existente, do endereço que sai da janela do gap.
+- **O status é gravado depois dos eventos**, para que um ciclo interrompido no meio
+  não deixe o endereço marcado como conferido e pulado para sempre.
+- **Reorg descarta os status guardados**, que passariam a descrever uma cadeia que
+  não existe mais.
+
+Um backend sem `getAddressStatus` cai no caminho antigo, pelo histórico completo, e
+nada é pulado.
+
+Medido contra a signet, na mesma carteira de 77 endereços e 31 usados:
+
+| | requisições | tráfego | tempo |
+|---|---|---|---|
+| varrendo tudo | 109 | 11.029 KB | 62 s |
+| reconferindo o que mudou | 79 | 21 KB | 18–27 s |
+
+O tráfego cai porque `/address/:a/txs` devolve as transações inteiras enquanto
+`/address/:a` devolve só os contadores. Os scripts da medição estão em
+`backend/scripts/`.
+
+### 6.2 Estados da carteira
 
 `pending` → `importing` → `synced`, ou `degraded` / `error`.
+
+Carteira já sincronizada **não volta a `importing`** para reconferir: o selo ficaria
+piscando a cada ciclo, e o usuário leria como uma importação que nunca termina.
 
 Falha do backend marca a carteira como `error` e grava `sync_error`. A falha é
 **isolada por carteira**: uma carteira quebrada não impede as outras de sincronizar.
 
-### 6.2 Reorg
+### 6.3 Reorg
 
 Reorganização **nunca apaga evento**. O sistema grava um evento `reorg_detected` e
 marca os eventos afetados com `rolled_back_by`. Consultas de estado ignoram eventos
@@ -302,12 +349,9 @@ Escrito para ser lido antes que alguém pergunte.
 - **`utxo_spent` é gravado na altura da ponta e sem a transação que gastou.** Coin
   control precisará desse dado.
 - **O adapter Esplora não tem backoff contra o `429`** do explorador público.
-- **Cada ciclo revarre todos os endereços da carteira, sem sincronização
-  incremental.** Medido contra a signet, uma carteira com 30 UTXOs e ~40 endereços
-  leva de 7 a 32 segundos por ciclo, num intervalo de 30 — ou seja, ela passa a maior
-  parte do tempo em `importing`, e o selo de estado oscila. O saldo exibido não é
-  afetado: uma carteira que já sincronizou uma vez mantém o número à vista enquanto
-  reconfere. O custo real está no volume de consultas ao explorador.
+- **A varredura continua sequencial.** Um ciclo pergunta por um endereço de cada vez,
+  e o tempo é dominado pela latência do explorador público. Paralelizar cortaria o
+  tempo, mas concentraria a rajada — e o adapter ainda não tem backoff para o `429`.
 - **Mensagens de erro da API saem só em português**, embora a interface seja bilíngue.
 - **A interface é de duas telas** — login e um dashboard único. Não há navegação nem
   menus; não há uma terceira tela para onde ir.
@@ -323,8 +367,17 @@ deduplicação de alerta, detecção de reorg, gap limit, projeção de UTXO, de
 cifra em repouso e reconexão do listener SSE.
 
 ```bash
-cd backend && npm test     # 18 arquivos, 123 testes
+cd backend && npm test     # 20 arquivos, 156 testes
 npx tsc --noEmit           # sem erros
+```
+
+A suíte trunca o banco inteiro entre os casos, e por isso **recusa rodar contra um
+banco que não termine em `_test`**. O vitest monta a URL sozinho a partir do `.env`;
+o banco é criado uma vez:
+
+```bash
+docker exec coin-controll-postgres-1 \
+  psql -U badger -d postgres -c 'CREATE DATABASE stealth_badger_test OWNER badger'
 ```
 
 ### 13.1 Verificação ponta a ponta executada em 25/08/2026
