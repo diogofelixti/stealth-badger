@@ -937,6 +937,25 @@ escolhe a análise conforme o tipo. O retrato que ele devolve é guardado como v
 traduzir campo a campo para a forma de carteira obrigaria a inventar os que não existem
 de um lado.
 
+### O push no celular, conferido de ponta a ponta
+
+Dois caminhos verificados:
+
+- **ntfy local** (perfil do Compose): a notificação chega, com título, corpo e tag. Mas
+  ele escuta em `127.0.0.1`, e **um celular não alcança isso** — serve para conferir a
+  integração, não para a demonstração;
+- **ntfy.sh público**, que é o caminho que serve ao telefone: canal cadastrado com
+  tópico aleatório, teste disparado, mensagem lida de volta no `ntfy.sh`, canal
+  removido. Funciona.
+
+Faltava isso documentado em qualquer lugar. Entrou no `.env.example` e no README.
+
+### Análise de endereço avulso, conferida contra a signet
+
+O endereço de 33.446 transações falha também dentro do scanner — `HTTP 400`, mesmo
+limite do explorador. Num endereço normal: **score 100, nota A+**, com
+`h8-no-reuse`, `h9-clean`, `spending-never-spent` e `h10-p2wpkh`.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.

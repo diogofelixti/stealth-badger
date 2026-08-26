@@ -125,6 +125,23 @@ Tudo em `.env`, documentado em [`.env.example`](.env.example):
 | `ESPLORA_URL` / `ELECTRUM_URL` | endereço do backend de cadeia |
 | `PUBLIC_BACKEND` | governa o aviso permanente de privacidade |
 
+### Avisos no celular
+
+O watchtower serve para avisar quando você **não** está olhando a tela. Na interface,
+cadastre um canal **ntfy** com um tópico longo e difícil de adivinhar, e assine o mesmo
+tópico no aplicativo ntfy do celular.
+
+Há um botão de **testar** ao lado do canal: ele dispara uma notificação de verdade. Use
+antes de precisar — descobrir que o push não chega no momento em que ele importaria é
+tarde demais.
+
+> Quem souber o tópico recebe seus alertas. Ele nunca é devolvido pela API depois de
+> cadastrado, justamente para não se espalhar por log de proxy ou captura de tela.
+
+O perfil `ntfy` do Compose sobe um servidor local, mas ele escuta em `127.0.0.1` e um
+celular não alcança isso. Para receber no telefone, use o `ntfy.sh` público ou publique
+o servidor local na sua rede.
+
 ## Onde o Bitcoin participa do fluxo
 
 Não como tema, e sim como funcionamento:
