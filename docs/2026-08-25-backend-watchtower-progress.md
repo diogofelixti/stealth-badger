@@ -756,6 +756,49 @@ Um terceiro detalhe, menor e da mesma família: a mensagem de erro terminava em
 que não achou a transação. Conselho errado gruda mais que conselho ausente — manda
 procurar no lugar errado. A dica agora só aparece quando é ela que resolve.
 
+## Nona rodada — 26/08, robustez contra a infraestrutura de terceiro
+
+Três defeitos, e os três só apareceram tentando falar com serviço real.
+
+### O `429` derrubava a sincronização inteira
+
+O explorador público limita a taxa justamente quando a carteira é grande — que é
+quando vigiar importa mais — e a carteira aparecia em `error` na tela. Agora `429` e
+`503` são repetidos com espera que dobra a cada tentativa; quando o servidor manda
+`Retry-After`, é ele que decide, porque discutir com quem está limitando é o caminho
+mais curto para ser bloqueado de vez. A espera ganha ruído aleatório: sem ele, várias
+carteiras sincronizando juntas voltariam no mesmo instante e reproduziriam a rajada que
+causou o limite. Erro que não melhora esperando continua falhando de primeira.
+
+### A tentativa de validar o Electrum contra servidor real
+
+Achei um servidor Electrum público de signet que responde: `ElectrumX 1.19.0`,
+protocolo 1.4. **A validação não foi concluída** — depois de algumas conexões seguidas
+o servidor parou de responder, e parou também para um socket cru em `bash`, o que
+descarta defeito nosso. Não insisti: martelar servidor de terceiro para provar um ponto
+é exatamente o comportamento que este projeto critica.
+
+Mas a tentativa pagou por si, porque revelou dois defeitos:
+
+**Conexão pendurava em host com IPv6 quebrado.** O host resolvia para IPv4 e IPv6, e o
+`connect` do Node ficava preso na família que não responde. Com `autoSelectFamily` e um
+segundo de paciência por família, passou a conectar em 300 ms. Não é hipótese de
+laboratório: rede doméstica e contêiner com IPv6 mal configurado é o caso comum.
+
+**O erro chegava mudo.** Um `connect` que falha nas duas famílias devolve
+`AggregateError` com `message` **vazia** e as causas em `errors`. O log registrava
+`falhou em blockchain.headers.subscribe: ` e mais nada. É o mesmo defeito que o scanner
+teve, em outro lugar, e diagnosticar de novo exigiu abrir um socket à mão.
+
+### Chamada sem limite de tempo congelava o worker para sempre
+
+O caso que derrubou a validação virou teste: **um servidor que aceita o socket e fica
+calado**. Sem limite, a promessa nunca resolvia nem rejeitava — o ciclo de
+sincronização congelaria para sempre, sem erro, sem log, sem nada na tela. É a pior
+forma de falhar, porque não se anuncia. Agora cada chamada tem relógio próprio, limpo
+nos dois desfechos, e tempo esgotado derruba a conexão: servidor que ficou calado uma
+vez não merece confiança na consulta seguinte.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
@@ -802,10 +845,11 @@ sobre privacidade, não sobre saldo.
 
 ### Técnicas
 
-- **O adapter Electrum nunca falou com um servidor Electrum de verdade.** O protocolo
-  está coberto por um servidor de teste local — resposta partida em pedaços,
-  notificação sem id, erro devolvido pelo servidor — mas nenhum Electrs, Fulcrum ou
-  florestad rodou contra ele
+- **O adapter Electrum ainda não completou uma consulta contra servidor real.**
+  Tentado em 26/08 contra um ElectrumX público de signet: conectou e negociou, mas o
+  servidor passou a não responder depois de algumas conexões. O protocolo segue coberto
+  por servidor de teste local — resposta partida em pedaços, notificação sem id, erro
+  devolvido pelo servidor, e servidor que aceita e fica calado
 - **Uma falha isolada na suíte do frontend**, em `Dashboard > anuncia postura pública`,
   numa execução entre quinze. Não reproduziu depois, e a máquina construía imagem
   Docker no mesmo instante. Fica anotada em vez de dada por resolvida: intermitência

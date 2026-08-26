@@ -18,6 +18,9 @@ interface Transport {
   call(method: string, params: unknown[]): Promise<unknown>
   close(): void
 }
+
+/** Servidor aceitou a conexão e não respondeu no prazo. */
+class ElectrumTimeoutError extends Error {}
 type ConnectFn = () => Promise<Transport>
 
 export interface ElectrumOptions {
@@ -26,6 +29,8 @@ export interface ElectrumOptions {
   network: Network
   isPublic?: boolean
   connect?: ConnectFn
+  /** limite de espera por resposta; padrão de 20 s */
+  timeoutMs?: number
 }
 
 interface ElectrumHistory {
@@ -40,11 +45,61 @@ interface ElectrumUnspent {
   height: number
 }
 
+/**
+ * Quanto esperar por uma família de endereços antes de tentar a outra.
+ *
+ * Um host com registro AAAA e IPv6 quebrado — situação comum em rede
+ * doméstica e em contêiner — faz o `connect` pendurar até o timeout do
+ * sistema. Com isto o Node tenta a outra família em um segundo. Medido contra
+ * um servidor Electrum público de signet: pendurava indefinidamente, passou a
+ * conectar em 300 ms.
+ */
+const ESPERA_POR_FAMILIA_MS = 1_000
+
+/**
+ * Quanto esperar por uma resposta antes de dar a chamada por perdida.
+ *
+ * Um servidor que aceita o socket e fica calado é caso real, não hipótese: foi
+ * o que um servidor Electrum público fez depois de algumas conexões seguidas.
+ * Sem limite, a promessa nunca resolve nem rejeita, e o ciclo do worker
+ * congela para sempre — sem erro, sem log, sem nada na tela.
+ */
+const LIMITE_DE_RESPOSTA_MS = 20_000
+
+/**
+ * Descreve por que a conexão ou a chamada falhou.
+ *
+ * Um `connect` que falha nas duas famílias de endereço devolve `AggregateError`
+ * com `message` **vazia** e as causas em `errors`. Sem abrir esse array, o log
+ * registra "falhou em blockchain.headers.subscribe: " e nada mais — foi
+ * exatamente o que aconteceu, e diagnosticar exigiu abrir um socket à mão.
+ */
+export function causaDaFalha(err: unknown): string {
+  const e = err as { message?: string; code?: string; errors?: unknown[] }
+
+  if (Array.isArray(e?.errors) && e.errors.length > 0) {
+    const causas = e.errors.map(c => causaDaFalha(c)).filter(Boolean)
+    if (causas.length > 0) return causas.join(' · ')
+  }
+
+  const mensagem = (e?.message ?? '').trim()
+  if (mensagem) return mensagem
+  if (e?.code) return e.code
+  return 'causa não informada'
+}
+
 /** JSON-RPC delimitado por quebra de linha sobre TCP. */
-function tcpTransport(host: string, port: number): ConnectFn {
+function tcpTransport(host: string, port: number, timeoutMs: number): ConnectFn {
   return () =>
     new Promise<Transport>((resolve, reject) => {
-      const socket: Socket = createConnection({ host, port }, () => {
+      const socket: Socket = createConnection(
+        {
+          host,
+          port,
+          autoSelectFamily: true,
+          autoSelectFamilyAttemptTimeout: ESPERA_POR_FAMILIA_MS,
+        },
+        () => {
         let buffer = ''
         let nextId = 1
         const pending = new Map<
@@ -83,13 +138,37 @@ function tcpTransport(host: string, port: number): ConnectFn {
           call(method, params) {
             const id = nextId++
             return new Promise((ok, fail) => {
-              pending.set(id, { ok, fail })
+              // O relógio é por chamada, e é limpo nos dois desfechos: sem
+              // isso, uma resposta que chega atrasada encontraria o pedido já
+              // resolvido, e o temporizador seguiria de pé segurando o
+              // processo.
+              const relogio = setTimeout(() => {
+                pending.delete(id)
+                fail(
+                  new ElectrumTimeoutError(
+                    'tempo esgotado: sem resposta em ' + timeoutMs + 'ms para ' + method,
+                  ),
+                )
+              }, timeoutMs)
+              relogio.unref?.()
+
+              pending.set(id, {
+                ok: v => {
+                  clearTimeout(relogio)
+                  ok(v)
+                },
+                fail: e => {
+                  clearTimeout(relogio)
+                  fail(e)
+                },
+              })
               socket.write(`${JSON.stringify({ id, method, params })}\n`)
             })
           },
           close: () => socket.destroy(),
         })
-      })
+        },
+      )
       socket.on('error', reject)
     })
 }
@@ -101,7 +180,8 @@ function addressToScripthash(address: string, network: Network): string {
 }
 
 export function createElectrumAdapter(opts: ElectrumOptions): ChainAdapter {
-  const connect = opts.connect ?? tcpTransport(opts.host, opts.port)
+  const timeoutMs = opts.timeoutMs ?? LIMITE_DE_RESPOSTA_MS
+  const connect = opts.connect ?? tcpTransport(opts.host, opts.port, timeoutMs)
   let transport: Transport | null = null
 
   async function call(method: string, params: unknown[] = []): Promise<unknown> {
@@ -113,12 +193,15 @@ export function createElectrumAdapter(opts: ElectrumOptions): ChainAdapter {
       // com a mesma causa até o processo reiniciar. Fechar antes de soltar a
       // referência importa: soltá-la sozinha deixaria o socket aberto e sem
       // dono, que é vazamento silencioso.
+      // Erro de protocolo é resposta e não derruba a conexão. Tempo esgotado
+      // derruba: um servidor que ficou calado uma vez não merece confiança
+      // para a próxima consulta.
       if (!(err instanceof ElectrumRpcError)) {
         transport?.close()
         transport = null
       }
       throw new Error(
-        `Electrum ${opts.host}:${opts.port} falhou em ${method}: ${(err as Error).message}`,
+        `Electrum ${opts.host}:${opts.port} falhou em ${method}: ${causaDaFalha(err)}`,
       )
     }
   }

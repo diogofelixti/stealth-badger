@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createElectrumAdapter } from '../src/chain/electrum'
+import { causaDaFalha, createElectrumAdapter } from '../src/chain/electrum'
 
 /** Transporte falso: responde por método, sem abrir socket. */
 function fakeTransport(handlers: Record<string, (params: unknown[]) => unknown>) {
@@ -286,6 +286,102 @@ describe('transporte TCP do Electrum', () => {
       expect(encerradas).toBe(1)
     } finally {
       await s.fechar()
+    }
+  })
+})
+
+describe('causaDaFalha', () => {
+  // Conectar a um host com IPv6 quebrado devolve um AggregateError cuja
+  // `message` é string vazia — as causas moram em `errors`. O adapter
+  // registrava "falhou em blockchain.headers.subscribe: " e ponto, sem dizer
+  // nada. Diagnosticar exigiu abrir um socket à mão.
+  it('abre o AggregateError, que vem com mensagem vazia', () => {
+    const erro = new AggregateError(
+      [
+        Object.assign(new Error('connect ETIMEDOUT 2401:2500::1:50001'), { code: 'ETIMEDOUT' }),
+        Object.assign(new Error('connect ECONNREFUSED 153.126.143.201:50001'), { code: 'ECONNREFUSED' }),
+      ],
+      '',
+    )
+    const texto = causaDaFalha(erro)
+    expect(texto).toMatch(/ETIMEDOUT/)
+    expect(texto).toMatch(/ECONNREFUSED/)
+  })
+
+  it('usa o código quando o erro não traz mensagem alguma', () => {
+    const erro = Object.assign(new Error(''), { code: 'ENOTFOUND' })
+    expect(causaDaFalha(erro)).toMatch(/ENOTFOUND/)
+  })
+
+  it('repassa a mensagem quando ela existe', () => {
+    expect(causaDaFalha(new Error('altura fora do alcance'))).toBe('altura fora do alcance')
+  })
+
+  it('não devolve string vazia, aconteça o que acontecer', () => {
+    expect(causaDaFalha(new AggregateError([], ''))).not.toBe('')
+    expect(causaDaFalha(undefined)).not.toBe('')
+  })
+})
+
+describe('servidor que aceita e não responde', () => {
+  // Aconteceu de verdade: um servidor Electrum público parou de responder
+  // depois de algumas conexões seguidas, aceitando o socket e ficando calado.
+  // Sem limite de tempo, `call` nunca resolve nem rejeita — e o ciclo de
+  // sincronização do worker congela para sempre, sem erro, sem log, sem nada
+  // na tela. É a pior forma de falhar.
+  it('desiste da chamada depois do limite, em vez de esperar para sempre', async () => {
+    const { createServer } = await import('node:net')
+    const abertos: { destroy: () => void }[] = []
+    const mudo = createServer(socket => {
+      // aceita a conexão e nunca responde
+      abertos.push(socket)
+    })
+    await new Promise<void>(pronto => mudo.listen(0, '127.0.0.1', pronto))
+    const porta = (mudo.address() as { port: number }).port
+
+    try {
+      const a = createElectrumAdapter({
+        host: '127.0.0.1',
+        port: porta,
+        network: 'signet',
+        timeoutMs: 300,
+      })
+      const t0 = Date.now()
+      await expect(a.tipHeight()).rejects.toThrow(/tempo|timeout/i)
+      expect(Date.now() - t0).toBeLessThan(3000)
+      a.close!()
+    } finally {
+      for (const socket of abertos) socket.destroy()
+      await new Promise<void>(pronto => mudo.close(() => pronto()))
+    }
+  })
+
+  it('não deixa a chamada seguinte herdar o silêncio da anterior', async () => {
+    const { createServer } = await import('node:net')
+    let responder = false
+    const servidor = createServer(socket => {
+      socket.on('data', chunk => {
+        if (!responder) return
+        const { id } = JSON.parse(chunk.toString().trim()) as { id: number }
+        socket.write(JSON.stringify({ id, result: { height: 5 } }) + '\n')
+      })
+    })
+    await new Promise<void>(pronto => servidor.listen(0, '127.0.0.1', pronto))
+    const porta = (servidor.address() as { port: number }).port
+
+    try {
+      const a = createElectrumAdapter({
+        host: '127.0.0.1',
+        port: porta,
+        network: 'signet',
+        timeoutMs: 300,
+      })
+      await expect(a.tipHeight()).rejects.toThrow(/tempo|timeout/i)
+      responder = true
+      expect(await a.tipHeight()).toBe(5)
+      a.close!()
+    } finally {
+      await new Promise<void>(pronto => servidor.close(() => pronto()))
     }
   })
 })
