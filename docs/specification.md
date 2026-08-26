@@ -279,7 +279,7 @@ Cada `scan tx` custa segundos contra a cadeia, então `tx_scans` deduplica por
 `(carteira, txid)` — o que uma transação confirmada revela não muda — e cada análise
 manual processa no máximo **cinco** transações, da mais recente para a mais antiga.
 
-**Por que poeira é crítica e reuso é atenção:** crítico se reserva ao que ainda dá para
+**Por que dust é crítico e reuso é atenção:** crítico se reserva ao que ainda dá para
 evitar. Poeira plantada pede ação imediata — não gastar aquele UTXO. Reuso de endereço
 já aconteceu e o dano é permanente; avisa, mas não disputa atenção com o que ainda tem
 conserto.
@@ -479,7 +479,7 @@ Escrito para ser lido antes que alguém pergunte.
 | **Alertas sobre endereços sancionados** | fora de escopo por decisão; ver §4 do design |
 | **Coin control** (rótulos, tags, regras de gasto, BIP-329) | modelado, não construído |
 | **Fingerprints de transação** | não construído |
-| **Limiar de poeira configurável** | fixo em 1000 sats; não há tabela `alert_rules` |
+| **Limiar de dust configurável** | fixo em 1000 sats; não há tabela `alert_rules` |
 
 ### 12.2 Limitações conhecidas do que existe
 

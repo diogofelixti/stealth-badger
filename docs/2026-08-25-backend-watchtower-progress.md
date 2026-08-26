@@ -302,7 +302,7 @@ Falta a conferência visual humana em `http://localhost:5173`.
   sem handler no cliente do `pg` derrubava o processo inteiro. Coberto por
   `backend/test/sse.test.ts`.
 - `address_reused` passou de `critical` para `warning`, alinhado ao painel
-  aprovado: crítico fica reservado à poeira plantada, que ainda dá para evitar.
+  aprovado: crítico fica reservado ao dust plantado, que ainda dá para evitar.
 - Vite passou a escutar em todas as interfaces, para conferência de outra
   máquina da rede local.
 

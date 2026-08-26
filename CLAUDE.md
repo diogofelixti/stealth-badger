@@ -62,6 +62,21 @@ discutida do zero.
 
 ---
 
+## Jargão de Bitcoin não se traduz
+
+Vale no catálogo bilíngue **e em toda a prosa** — README, especificação, diário de
+bordo, comentário de código, mensagem de commit.
+
+`dust` não vira "poeira". `faucet` não vira "torneira". `change` não vira "troco".
+`address reuse` não vira "reutilização de endereço" quando é o nome do alerta.
+
+Traduzir jargão custa reconhecimento: quem opera Bitcoin procura o termo que conhece, e
+a versão vertida para o português faz o texto parecer escrito por quem está de fora. O
+teste `não traduz termo consagrado de Bitcoin no catálogo português` cobre o catálogo;
+a prosa depende de quem escreve.
+
+---
+
 ## Stack
 
 TypeScript ponta a ponta.

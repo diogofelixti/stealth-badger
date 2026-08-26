@@ -13,15 +13,14 @@
   <a href="#o-que-ele-faz">Recursos</a> •
   <a href="#início-rápido">Início rápido</a> •
   <a href="#arquitetura">Arquitetura</a> •
-  <a href="#limitações-honestas">Limitações</a>
+  <a href="#capturas">Capturas</a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Bitcoin-watch--only-F7931A?style=flat-square&logo=bitcoin&logoColor=white" alt="Watch-only">
   <img src="https://img.shields.io/badge/Docker-compose%20up-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
-  <img src="https://img.shields.io/badge/TypeScript-ponta%20a%20ponta-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
-  <img src="https://img.shields.io/badge/testes-343%20passando-2ea44f?style=flat-square" alt="343 testes">
   <img src="https://img.shields.io/badge/rede-signet%20%C2%B7%20testnet%20%C2%B7%20mainnet-6f42c1?style=flat-square" alt="Redes">
+  <img src="https://img.shields.io/badge/licen%C3%A7a-MIT-2ea44f?style=flat-square" alt="Licença MIT">
 </p>
 
 <br>
@@ -35,7 +34,7 @@
 ## O problema
 
 Quem usa Bitcoin perde privacidade por descuido silencioso: reaproveita um endereço,
-consolida UTXOs de origens que deveriam ficar separadas, gasta uma poeira que alguém
+consolida UTXOs de origens que deveriam ficar separadas, gasta um dust que alguém
 plantou justamente para rastreá-lo.
 
 **Nada disso dispara aviso.** Quando a pessoa descobre, o vazamento já está gravado na
@@ -44,11 +43,7 @@ blockchain, permanentemente.
 Existem boas ferramentas de diagnóstico pontual — você roda, lê o relatório, fecha. Falta
 algo que **vigie de forma contínua e avise a tempo**.
 
-> **Alertar sobre privacidade, e não sobre saldo, é a tese do produto.**
-> Saldo qualquer explorador mostra.
-
-**Público:** quem guarda Bitcoin em carteira própria, já entende que endereço não se
-reaproveita, e não tem como vigiar isso todo dia na mão.
+> **Saldo qualquer explorador mostra. Privacidade, ninguém vigia.**
 
 ## O que ele faz
 
@@ -112,8 +107,8 @@ docker compose up -d --build
 A interface fica em **http://localhost:8080**. Crie uma conta na primeira tela e cole a
 chave pública estendida da carteira que você quer vigiar.
 
-Para experimentar sem risco, use a **signet** (padrão do `.env.example`) e uma torneira
-como a [signetfaucet.com](https://signetfaucet.com).
+Para experimentar, use a **signet** e um faucet como o
+[signetfaucet.com](https://signetfaucet.com).
 
 > ⚠️ **Perder o `MASTER_KEY_HEX` torna os xpubs cadastrados irrecuperáveis.** Ele nunca é
 > versionado.
@@ -137,7 +132,7 @@ Não como tema, e sim como funcionamento:
 
 - **Derivação HD** — BIP-32/44/49/84/86, validada contra os vetores da BIP-84, com o tipo
   de script descoberto pela cadeia quando a chave não o declara
-- **UTXOs e mempool** — o produto inteiro é uma projeção do conjunto de UTXOs; alerta
+- **UTXOs e mempool** — o sistema inteiro é uma projeção do conjunto de UTXOs; alerta
   distingue mempool, 1 confirmação e 6
 - **Blocos e transações** — detecção de reorganização de cadeia comparando hash de bloco
   na altura registrada
@@ -162,7 +157,7 @@ Perfis opcionais do Compose para `ntfy` (push) e `tor`.
 | Peça | Por que existe |
 |---|---|
 | **postgres** | `LISTEN/NOTIFY` empurra o alerta para o feed sem polling, `JSONB` guarda payload de evento sem uma tabela por tipo, e `user_id` isola os inquilinos desde a primeira migração |
-| **backend** | o watchtower precisa vigiar com o usuário deslogado; sem processo permanente não existe produto, só um relatório sob demanda |
+| **backend** | o watchtower precisa vigiar com o usuário deslogado; sem processo permanente não existe vigilância, só um relatório sob demanda |
 | **worker no mesmo processo** | um watchtower de uma carteira não justifica fila nem segundo container; separar seria arquitetura para um problema que não temos |
 | **frontend separado** | o painel é servido como estático e o feed chega por SSE; acoplá-lo ao backend não traria nada e tiraria o cache |
 | **nginx** | TLS e roteamento, e `proxy_buffering off` no endpoint de SSE — sem isso o feed ao vivo quebra em silêncio |
@@ -184,66 +179,29 @@ motor decide o caminho.
 
 ## Capturas
 
-**Painel** — o aviso de explorador público preso ao topo, saldo projetado do log de
-eventos, e o feed ao vivo:
-
+<details>
+<summary><strong>Painel</strong> — aviso de explorador público preso ao topo, saldo projetado do log de eventos e o feed ao vivo</summary>
+<br>
 <p align="center">
-  <img src="docs/screenshots/painel.png" alt="Painel com feed de alertas ao vivo">
+  <img src="docs/screenshots/painel.png" alt="Painel com feed de alertas ao vivo" width="900">
 </p>
+</details>
 
-**Análise de privacidade** — score, nota e o que o scanner viu, com a recomendação de cada
-achado:
-
+<details>
+<summary><strong>Análise de privacidade</strong> — score, nota e o que o scanner viu, com a recomendação de cada achado</summary>
+<br>
 <p align="center">
-  <img src="docs/screenshots/privacidade.png" alt="Achados da análise de privacidade">
+  <img src="docs/screenshots/privacidade.png" alt="Achados da análise de privacidade" width="900">
 </p>
+</details>
 
-## Testes
-
-Critério de avaliação e entrega obrigatória. O TDD foi aplicado onde a falha é
-**silenciosa** — o caso em que o bug não se anuncia: deduplicação de alerta, detecção de
-reorg, gap limit, projeção de UTXO, derivação HD, cifra em repouso, BIP-329 e reconexão do
-listener SSE.
-
-```bash
-cd backend  && npm test && npx tsc --noEmit   # 279 testes
-cd frontend && npm test && npx tsc --noEmit   #  64 testes
-```
-
-A suíte trunca o banco entre os casos e por isso **recusa rodar contra um banco cujo nome
-não termine em `_test`**. O vitest monta a URL sozinho a partir do `.env`; o banco é criado
-uma vez:
-
-```bash
-docker exec coin-controll-postgres-1 \
-  psql -U badger -d postgres -c 'CREATE DATABASE stealth_badger_test OWNER badger'
-```
-
-## Limitações honestas
-
-O que **não** existe, escrito antes que alguém pergunte:
-
-- **Nenhum alerta prova origem.** O que o scanner reconhece na base de entidades e o que
-  ele apenas deduz da forma da transação são coisas diferentes, e o texto do alerta
-  preserva a diferença: *"tem forma compatível com"* nunca vira *"é"*.
-- **O adapter Electrum nunca falou com um servidor Electrum de verdade.** O protocolo está
-  coberto por um servidor de teste local, incluindo resposta partida em pedaços e erro
-  devolvido pelo servidor, mas nenhum Electrs, Fulcrum ou florestad rodou contra ele.
-- **Uma instância vigia uma rede só.** Dá para contrastar explorador público e nó próprio,
-  mas ambos na mesma rede.
-- **A análise de origem só dispara pelo botão**, não pelo worker, e processa no máximo
-  cinco transações por vez.
-- **`utxo_spent` é gravado na altura da ponta e sem a transação que gastou.**
-- **A varredura é sequencial** e o adapter Esplora não tem backoff contra o `429` do
-  explorador público.
-- **Mensagens de erro da API saem só em português**, embora a interface seja bilíngue.
-- **Vigiar endereço avulso**, fora de uma carteira, não existe — apesar de a descrição do
-  produto prometer "endereços e carteiras".
-- **`registerDescriptor` / `rescanFrom`**, o caminho do Bitcoin Core, estão previstos na
-  interface e sem implementação.
-
-A lista completa, com a razão de cada uma, está na
-[especificação](docs/specification.md#12-o-que-ainda-não-existe).
+<details>
+<summary><strong>Coin control</strong> — rótulo, tags e congelamento por UTXO, com dust destacado e ida e volta em BIP-329</summary>
+<br>
+<p align="center">
+  <img src="docs/screenshots/coin-control.png" alt="Tabela de UTXOs com rótulos e congelamento" width="900">
+</p>
+</details>
 
 ## Documentação
 
@@ -274,3 +232,7 @@ A análise de privacidade se apoia no [`am-i-exposed`](https://github.com/Copexi
 [`lumen-fingerprints`](https://fungi-protocol.github.io/lumen-fingerprints/).
 
 Projeto do hackathon **Bitcoin Vibe Builder**, dos [bitcoinCoders](https://discord.com/invite/e5qUsNWgQg).
+
+## Licença
+
+[MIT](LICENSE).
