@@ -1,6 +1,7 @@
 import type { Catalog, Lang, Wallet } from '../lib/api'
 import { formatSats } from '../lib/format'
 import { render } from '../lib/i18n'
+import { PrivacyPanel } from './PrivacyPanel'
 
 /** Verde acima de 80, âmbar acima de 50, vermelho abaixo. */
 function corDoScore(score: number): string {
@@ -114,6 +115,10 @@ export function WalletCard({
             </button>
           ))}
       </div>
+
+      {wallet.privacyScore !== null && (
+        <PrivacyPanel walletId={wallet.id} catalog={catalog} lang={lang} />
+      )}
 
       {/* Por onde *esta* carteira é vigiada. O selo do topo fala da sessão
           inteira e não distingue uma carteira da outra; aqui é onde o
