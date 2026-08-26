@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { confirmationState, dedupeKey } from '../src/alerts/dedupe'
-import { alertsForEvent, alertsForScan } from '../src/alerts/rules'
+import { alertsForEvent, alertsForOrigin, alertsForScan } from '../src/alerts/rules'
 import { saveAlert } from '../src/alerts/store'
 import { pool } from '../src/db/pool'
 import type { StoredEvent } from '../src/events/log'
@@ -196,5 +196,63 @@ describe('alertsForScan — queda de privacy score', () => {
   it('não amarra o alerta a evento de cadeia, porque não nasceu de um', () => {
     const [a] = alertsForScan({ score: 80, grade: 'B' }, atual, ctx)
     expect(a!.eventId).toBeNull()
+  })
+})
+
+describe('alertsForOrigin — origem dos fundos', () => {
+  const ctx = { userId: 7, walletId: 3, eventId: 99, txid: 'ab'.repeat(32) }
+
+  it('não alerta quando a transação não aponta origem nenhuma', () => {
+    expect(alertsForOrigin([], ctx)).toEqual([])
+  })
+
+  it('alerta dizendo a espécie e em que o scanner se baseou', () => {
+    const [a] = alertsForOrigin(
+      [{ kind: 'exchange', basis: 'behavior', confidence: 'medium', findingId: 'x' }],
+      ctx,
+    )
+    expect(a).toMatchObject({ type: 'kyc_origin', severity: 'warning', walletId: 3 })
+    expect(a!.params).toMatchObject({
+      kind: '@entity.exchange',
+      basis: '@basis.behavior',
+      confidence: '@confidence.medium',
+    })
+  })
+
+  // Diferente da queda de score, esta origem é sobre uma transação concreta
+  // que entrou na carteira: amarrar ao evento é o que permite a tela ligar o
+  // aviso ao UTXO que chegou.
+  it('amarra o alerta ao evento de cadeia que trouxe os fundos', () => {
+    const [a] = alertsForOrigin(
+      [{ kind: 'exchange', basis: 'behavior', confidence: 'medium', findingId: 'x' }],
+      ctx,
+    )
+    expect(a!.eventId).toBe(99)
+  })
+
+  it('gera um alerta por espécie quando a transação aponta mais de uma', () => {
+    const alertas = alertsForOrigin(
+      [
+        { kind: 'exchange', basis: 'behavior', confidence: 'medium', findingId: 'x' },
+        { kind: 'ofac', basis: 'database', confidence: 'high', findingId: 'y' },
+      ],
+      ctx,
+    )
+    expect(alertas).toHaveLength(2)
+    expect(alertas.map(a => a.params.kind)).toEqual(['@entity.exchange', '@entity.ofac'])
+  })
+
+  it('deduplica por transação e espécie, para reanalisar não repetir o aviso', () => {
+    const origem = {
+      kind: 'exchange' as const,
+      basis: 'behavior' as const,
+      confidence: 'medium',
+      findingId: 'x',
+    }
+    const [a] = alertsForOrigin([origem], ctx)
+    const [b] = alertsForOrigin([origem], ctx)
+    expect(a!.dedupeKey).toBe(b!.dedupeKey)
+    expect(a!.dedupeKey).toContain('exchange')
+    expect(a!.dedupeKey).toContain(ctx.txid)
   })
 })

@@ -664,6 +664,68 @@ A conferência achou dois defeitos que teste de unidade não pegaria sozinho:
   continuaria mostrando o rótulo antigo e o usuário concluiria que o arquivo não foi
   lido. Os dois viraram teste antes de virar correção.
 
+## Oitava rodada — 26/08, `score_dropped` e `kyc_origin`
+
+Os dois últimos tipos da taxonomia da §8.1. Também os dois primeiros alertas que **não
+nascem de evento de cadeia**.
+
+### O que a investigação desmentiu
+
+Eu tinha dito que alertar sobre corretora e sobre endereço sancionado eram coisas de
+peso diferente, e que sanção estava fora de alcance por exigir decidir procedência de
+lista e jurisdição. **Estava errado sobre o custo.** O scanner já carrega a base e já
+computa `entity-ofac-match`; surfacear um achado que ele produz, com atribuição, é
+outra coisa que construir um produto de sanções. A decisão mudou por isso, e não por
+insistência.
+
+Duas descobertas que mudaram o projeto da funcionalidade:
+
+- **`scan xpub` não produz achado de entidade nenhum.** A varredura de carteira só
+  emite ids `wallet-*` — reuso, dust, tipo de script, consolidação. Quem mandou os
+  fundos só aparece em `scan tx`. Sem verificar isso antes, o `kyc_origin` teria sido
+  construído sobre um relatório que nunca conteria a informação;
+- **`scan tx` custa 5 segundos**, contra 78 da carteira, e — surpresa — emitiu
+  `entity-behavior-exchange` **na signet**. É heurística de forma da transação, não
+  consulta a base, então funciona numa rede onde não existe entidade conhecida. O
+  alerta é demonstrável.
+
+### Afirmar e suspeitar não podem virar a mesma frase
+
+O scanner separa correspondência em base (`entity-known-input`, `entity-ofac-match`) de
+heurística de comportamento (`entity-behavior-*`, `exchange-withdrawal-pattern`), e
+declara a própria confiança em cada achado. Achatar isso faria o watchtower afirmar o
+que ninguém verificou.
+
+A classificação carrega as duas dimensões — espécie e base — e a confiança do scanner
+é repassada sem retoque. O texto sai por referência ao catálogo, então lê:
+
+> A transação cd2f1a9b0e77… **tem forma compatível com** saque em lote de exchange.
+> Confiança declarada pelo scanner: média.
+
+> A transação ab0011ff2288… **foi reconhecida pela base de entidades do scanner como**
+> endereço em lista de sanções (OFAC). Confiança declarada pelo scanner: alta.
+
+Correspondência em base vence heurística quando as duas apontam para a mesma espécie:
+dizer "possível padrão de corretora" quando o scanner reconheceu a entidade
+subestimaria o que ele sabe.
+
+### Decisões de gatilho
+
+- **`score_dropped` tem limiar de 5 pontos.** O scanner reavalia a carteira inteira a
+  cada execução, e um ou dois pontos são ruído de heurística. Alertar sobre ruído
+  ensina o usuário a ignorar o alerta, que é o pior resultado possível;
+- **primeira análise não gera queda.** Tratar a ausência de anterior como "era 100"
+  produziria alerta em toda carteira recém-cadastrada;
+- **`event_id` fica nulo no `score_dropped`** — ele não nasceu de evento, e amarrá-lo a
+  um seria inventar uma causa que ninguém verificou. No `kyc_origin` ele aponta para o
+  `utxo_created` que trouxe os fundos, porque ali existe uma causa concreta;
+- **teto de 5 transações por clique.** Cada `scan tx` custa segundos; sem teto uma
+  carteira com trinta depósitos gastaria minutos no primeiro clique e o usuário
+  concluiria que travou. A fila avança da mais recente para a mais antiga, então o que
+  fica de fora é o passado distante;
+- **`tx_scans` deduplica por (carteira, txid).** O que uma transação confirmada revela
+  não muda: reanalisar gastaria o explorador do usuário e repetiria o mesmo aviso.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.

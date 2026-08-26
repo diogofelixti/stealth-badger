@@ -80,27 +80,17 @@ export function cliRunner(timeoutMs: number, comando = 'am-i-exposed'): ScanRunn
   }
 }
 
-export async function scanWallet(opts: ScanOptions): Promise<PrivacyScan> {
-  const timeoutMs = opts.timeoutMs ?? 240_000
-  const runner = opts.runner ?? cliRunner(timeoutMs)
-  const descriptor = descriptorFor(opts.canonicalXpub, opts.scriptType)
-
-  const args = [
-    '--json',
-    '--network',
-    opts.network,
-    // Sem --api o scanner consulta o explorador público dele. Os endereços da
-    // carteira ficariam expostos a um segundo observador que o usuário nunca
-    // escolheu — dentro da própria ferramenta que existe para avisar sobre
-    // isso.
-    '--api',
-    opts.backendUrl,
-    'scan',
-    'xpub',
-    descriptor,
-  ]
-  if (opts.gapLimit !== undefined) args.push('--gap-limit', String(opts.gapLimit))
-
+/**
+ * Roda o scanner e devolve o JSON já interpretado.
+ *
+ * Compartilhado pelas duas varreduras porque as duas falham do mesmo jeito:
+ * binário ausente, saída que não é JSON, e a URL de terceiro no campo `links`
+ * que não pode ser guardada nem exibida.
+ */
+async function rodar(
+  args: string[],
+  runner: ScanRunner,
+): Promise<Record<string, unknown>> {
   let saida: string
   try {
     saida = await runner(args)
@@ -112,20 +102,85 @@ export async function scanWallet(opts: ScanOptions): Promise<PrivacyScan> {
     )
   }
 
-  let bruto: {
+  try {
+    return JSON.parse(saida) as Record<string, unknown>
+  } catch {
+    throw new Error(
+      'o scanner devolveu algo que não é JSON; saída começa com: ' + saida.slice(0, 120),
+    )
+  }
+}
+
+/** Argumentos comuns às duas varreduras. */
+function argumentosBase(network: Network, backendUrl: string): string[] {
+  return [
+    '--json',
+    '--network',
+    network,
+    // Sem --api o scanner consulta o explorador público dele. Os endereços
+    // ficariam expostos a um segundo observador que o usuário nunca escolheu —
+    // dentro da própria ferramenta que existe para avisar sobre isso.
+    '--api',
+    backendUrl,
+  ]
+}
+
+export interface TxScanOptions {
+  txid: string
+  network: Network
+  backendUrl: string
+  runner?: ScanRunner
+  timeoutMs?: number
+}
+
+export interface TxScan {
+  findings: PrivacyFinding[]
+  scannerVersion: string
+}
+
+/**
+ * Analisa uma transação isolada.
+ *
+ * É onde vivem os achados de entidade — quem mandou os fundos. A varredura de
+ * carteira não os produz: ela só emite achados `wallet-*`, sobre a forma da
+ * carteira, e nada sobre a procedência do que entrou nela.
+ */
+export async function scanTransaction(opts: TxScanOptions): Promise<TxScan> {
+  const timeoutMs = opts.timeoutMs ?? 120_000
+  const runner = opts.runner ?? cliRunner(timeoutMs)
+
+  const bruto = await rodar(
+    [...argumentosBase(opts.network, opts.backendUrl), 'scan', 'tx', opts.txid],
+    runner,
+  )
+
+  // `links` traz a transação numa URL de site de terceiro; fica de fora do que
+  // é guardado, pela mesma razão do xpub na varredura de carteira.
+  return {
+    findings: (bruto.findings as PrivacyFinding[]) ?? [],
+    scannerVersion: (bruto.version as string) ?? 'desconhecida',
+  }
+}
+
+export async function scanWallet(opts: ScanOptions): Promise<PrivacyScan> {
+  const timeoutMs = opts.timeoutMs ?? 240_000
+  const runner = opts.runner ?? cliRunner(timeoutMs)
+  const descriptor = descriptorFor(opts.canonicalXpub, opts.scriptType)
+
+  const args = [
+    ...argumentosBase(opts.network, opts.backendUrl),
+    'scan',
+    'xpub',
+    descriptor,
+  ]
+  if (opts.gapLimit !== undefined) args.push('--gap-limit', String(opts.gapLimit))
+
+  const bruto = (await rodar(args, runner)) as {
     version?: string
     score?: number
     grade?: string
     walletInfo?: WalletInfo
     findings?: PrivacyFinding[]
-  }
-  try {
-    bruto = JSON.parse(saida)
-  } catch {
-    throw new Error(
-      'o scanner devolveu algo que não é JSON; saída começa com: ' +
-        saida.slice(0, 120),
-    )
   }
 
   if (typeof bruto.score !== 'number' || !bruto.walletInfo) {

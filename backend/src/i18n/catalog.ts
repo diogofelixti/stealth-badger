@@ -12,6 +12,22 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'alert.funds_received.body': '{value} sats, {state}.',
     'alert.funds_spent.title': 'Fundos gastos',
     'alert.funds_spent.body': 'O UTXO {txid}:{vout} foi consumido.',
+    'alert.kyc_origin.title': 'Origem dos fundos',
+    'alert.kyc_origin.body':
+      'A transação {txid} {basis} {kind}. Confiança declarada pelo scanner: ' +
+      '{confidence}. Fundos de origem conhecida ligam sua identidade a tudo que ' +
+      'você gastar junto com eles.',
+    'basis.database': 'foi reconhecida pela base de entidades do scanner como',
+    'basis.behavior': 'tem forma compatível com',
+    'entity.exchange': 'saque em lote de exchange',
+    'entity.darknet': 'serviço de darknet',
+    'entity.gambling': 'serviço de gambling',
+    'entity.ofac': 'endereço em lista de sanções (OFAC)',
+    'entity.known': 'entidade conhecida',
+    'confidence.high': 'alta',
+    'confidence.medium': 'média',
+    'confidence.low': 'baixa',
+    'confidence.deterministic': 'determinística',
     'alert.score_dropped.title': 'Privacidade piorou',
     'alert.score_dropped.body':
       'O score desta carteira caiu de {from} para {to}, {drop} pontos, e a nota ' +
@@ -103,6 +119,22 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'alert.funds_received.body': '{value} sats, {state}.',
     'alert.funds_spent.title': 'Funds spent',
     'alert.funds_spent.body': 'UTXO {txid}:{vout} was consumed.',
+    'alert.kyc_origin.title': 'Where the funds came from',
+    'alert.kyc_origin.body':
+      'Transaction {txid} {basis} {kind}. Confidence declared by the scanner: ' +
+      '{confidence}. Funds with a known origin link your identity to whatever ' +
+      'you spend alongside them.',
+    'basis.database': 'was matched by the scanner entity database as',
+    'basis.behavior': 'has the shape of',
+    'entity.exchange': 'an exchange batch withdrawal',
+    'entity.darknet': 'a darknet service',
+    'entity.gambling': 'a gambling service',
+    'entity.ofac': 'an address on a sanctions list (OFAC)',
+    'entity.known': 'a known entity',
+    'confidence.high': 'high',
+    'confidence.medium': 'medium',
+    'confidence.low': 'low',
+    'confidence.deterministic': 'deterministic',
     'alert.score_dropped.title': 'Privacy got worse',
     'alert.score_dropped.body':
       "This wallet's score fell from {from} to {to}, {drop} points, and the grade " +

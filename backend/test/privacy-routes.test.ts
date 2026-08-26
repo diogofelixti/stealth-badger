@@ -3,6 +3,8 @@ import { buildApp } from '../src/app'
 import { pool } from '../src/db/pool'
 import type { PrivacyScan } from '../src/privacy/scan'
 import { aguardarScan } from '../src/privacy/andamento'
+import { appendEvent } from '../src/events/log'
+import { projectWallet } from '../src/events/project'
 import { resetDb } from './helpers/db'
 
 const ZPUB =
@@ -41,8 +43,14 @@ beforeEach(async () => {
   process.env.NETWORK = 'mainnet'
 })
 
-async function comCarteira(scanner?: () => Promise<PrivacyScan>) {
-  const app = buildApp(scanner ? { scanner } : {})
+async function comCarteira(
+  scanner?: () => Promise<PrivacyScan>,
+  txScanner?: () => Promise<{ findings: unknown[]; scannerVersion: string }>,
+) {
+  const app = buildApp({
+    ...(scanner ? { scanner } : {}),
+    ...(txScanner ? { txScanner: txScanner as never } : {}),
+  })
   await app.inject({
     method: 'POST',
     url: '/api/auth/register',
@@ -270,5 +278,146 @@ describe('GET /api/wallets com privacidade', () => {
     expect(
       alertas.json().filter((a: { type: string }) => a.type === 'score_dropped'),
     ).toHaveLength(0)
+  })
+})
+
+describe('kyc_origin — origem dos fundos', () => {
+  const TXID = 'cd'.repeat(32)
+
+  const achadoDeCorretora = {
+    id: 'entity-behavior-exchange',
+    severity: 'low',
+    confidence: 'medium',
+    title: 'Exchange batch withdrawal pattern detected',
+    description: 'd',
+    recommendation: 'r',
+    scoreImpact: 0,
+    params: {},
+  }
+
+  async function comFundos(txScanner: () => Promise<{ findings: unknown[]; scannerVersion: string }>) {
+    const montado = await comCarteira(async () => RESULTADO, txScanner)
+    const a = await pool.query<{ id: string }>(
+      `INSERT INTO addresses (wallet_id, chain, idx, derivation_path, address, scripthash)
+       VALUES ($1,0,0,'0/0','bc1qexemplo','ff') RETURNING id`,
+      [montado.walletId],
+    )
+    await appendEvent({
+      walletId: montado.walletId,
+      type: 'utxo_created',
+      height: 100,
+      blockHash: 'bb',
+      txid: TXID,
+      vout: 0,
+      payload: { addressId: Number(a.rows[0]!.id), valueSats: 500000 },
+    })
+    await projectWallet(montado.walletId)
+    return montado
+  }
+
+  it('alerta quando a transação que trouxe fundos parece vir de corretora', async () => {
+    const { app, cookie, walletId } = await comFundos(async () => ({
+      findings: [achadoDeCorretora],
+      scannerVersion: '0.34.2',
+    }))
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${walletId}/scan`,
+      cookies: { sb_session: cookie },
+    })
+    await aguardarScan(walletId)
+
+    const alertas = await app.inject({
+      method: 'GET',
+      url: '/api/alerts',
+      cookies: { sb_session: cookie },
+    })
+    const origem = alertas.json().find((a: { type: string }) => a.type === 'kyc_origin')
+    expect(origem).toBeDefined()
+    expect(origem.params).toMatchObject({
+      kind: '@entity.exchange',
+      basis: '@basis.behavior',
+    })
+  })
+
+  it('não alerta quando a transação não aponta origem nenhuma', async () => {
+    const { app, cookie, walletId } = await comFundos(async () => ({
+      findings: [],
+      scannerVersion: '0.34.2',
+    }))
+    await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${walletId}/scan`,
+      cookies: { sb_session: cookie },
+    })
+    await aguardarScan(walletId)
+
+    const alertas = await app.inject({
+      method: 'GET',
+      url: '/api/alerts',
+      cookies: { sb_session: cookie },
+    })
+    expect(
+      alertas.json().filter((a: { type: string }) => a.type === 'kyc_origin'),
+    ).toHaveLength(0)
+  })
+
+  // Cada `scan tx` custa segundos contra a cadeia. Reanalisar a mesma
+  // transação a cada clique gastaria o explorador do usuário à toa e
+  // repetiria o mesmo aviso.
+  it('não reanalisa transação que já foi analisada', async () => {
+    let chamadas = 0
+    const { app, cookie, walletId } = await comFundos(async () => {
+      chamadas += 1
+      return { findings: [achadoDeCorretora], scannerVersion: '0.34.2' }
+    })
+
+    for (const _ of [1, 2]) {
+      await app.inject({
+        method: 'POST',
+        url: `/api/wallets/${walletId}/scan`,
+        cookies: { sb_session: cookie },
+      })
+      await aguardarScan(walletId)
+    }
+    expect(chamadas).toBe(1)
+  })
+
+  // Uma carteira com trinta depósitos gastaria minutos analisando tudo no
+  // primeiro clique. O teto faz a primeira análise terminar, e as seguintes
+  // avançam a fila.
+  it('respeita um teto de transações analisadas por vez', async () => {
+    let chamadas = 0
+    const { app, cookie, walletId } = await comFundos(async () => {
+      chamadas += 1
+      return { findings: [], scannerVersion: '0.34.2' }
+    })
+
+    const enderecos = await pool.query<{ id: string }>(
+      'SELECT id FROM addresses WHERE wallet_id = $1',
+      [walletId],
+    )
+    for (let i = 0; i < 12; i += 1) {
+      await appendEvent({
+        walletId,
+        type: 'utxo_created',
+        height: 100 + i,
+        blockHash: 'bb',
+        txid: String(i).padStart(2, '0').repeat(32),
+        vout: 0,
+        payload: { addressId: Number(enderecos.rows[0]!.id), valueSats: 1000 },
+      })
+    }
+    await projectWallet(walletId)
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${walletId}/scan`,
+      cookies: { sb_session: cookie },
+    })
+    await aguardarScan(walletId)
+    expect(chamadas).toBeLessThanOrEqual(5)
+    expect(chamadas).toBeGreaterThan(0)
   })
 })

@@ -1,4 +1,5 @@
 import type { StoredEvent } from '../events/log'
+import type { AchadoDeOrigem } from '../privacy/origem'
 import { confirmationState, dedupeKey } from './dedupe'
 
 export type Severity = 'info' | 'warning' | 'critical'
@@ -140,4 +141,47 @@ export function alertsForScan(
       eventId: null,
     },
   ]
+}
+
+export interface OriginAlertContext {
+  userId: number
+  walletId: number
+  /** evento `utxo_created` que trouxe os fundos desta transação */
+  eventId: number
+  txid: string
+}
+
+/**
+ * Alerta sobre de onde vieram os fundos.
+ *
+ * A frase é montada por referência ao catálogo — espécie, base e confiança
+ * viram `@chave` — justamente para que o texto possa dizer "possível" quando o
+ * scanner se baseou em comportamento e afirmar quando houve correspondência
+ * numa base. O watchtower repassa o que o scanner viu; ele não promove
+ * heurística a fato.
+ */
+export function alertsForOrigin(
+  origens: AchadoDeOrigem[],
+  ctx: OriginAlertContext,
+): AlertCandidate[] {
+  return origens.map(origem => ({
+    userId: ctx.userId,
+    walletId: ctx.walletId,
+    type: 'kyc_origin',
+    // Warning, e não crítico: crítico é reservado ao que pede ação imediata
+    // para evitar dano — dust plantado, reuso de endereço. Origem já
+    // aconteceu, e o que ela pede é cuidado ao gastar, não pressa.
+    severity: 'warning',
+    params: {
+      kind: '@entity.' + origem.kind,
+      basis: '@basis.' + origem.basis,
+      confidence: '@confidence.' + origem.confidence,
+      txid: ctx.txid.slice(0, 12) + '...',
+    },
+    // Por transação e espécie: reanalisar a mesma transação não repete o
+    // aviso, mas duas espécies diferentes na mesma transação aparecem as duas.
+    dedupeKey:
+      'wallet:' + ctx.walletId + ':origin:' + ctx.txid + ':' + origem.kind,
+    eventId: ctx.eventId,
+  }))
 }

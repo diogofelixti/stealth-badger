@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { descriptorFor, scanWallet, type ScanRunner } from '../src/privacy/scan'
+import {
+  descriptorFor,
+  scanTransaction,
+  scanWallet,
+  type ScanRunner,
+} from '../src/privacy/scan'
 
 const XPUB =
   'tpubDCxX2sYFS5bDkSe5GKKYHjBW7tgyN1R3UchpLJvdbf54ohxeGRtd8MbDUe1cguVHe4vnK68DsuD5MXjxi9EXx16rb9EnNsaF5KT99CinaJz'
@@ -126,5 +131,82 @@ describe('scanWallet', () => {
   it('falha em vez de inventar quando a saída não é o JSON esperado', async () => {
     const lixo: ScanRunner = async () => 'nem json é'
     await expect(scanWallet({ ...base, runner: lixo })).rejects.toThrow(/scanner/i)
+  })
+})
+
+const SAIDA_TX = JSON.stringify({
+  version: '0.34.2',
+  network: 'signet',
+  score: 8,
+  grade: 'F',
+  findings: [
+    {
+      id: 'entity-behavior-exchange',
+      severity: 'low',
+      confidence: 'medium',
+      title: 'Exchange batch withdrawal pattern detected',
+      description: 'd',
+      recommendation: 'r',
+      scoreImpact: 0,
+      params: { type: 'exchange-batch' },
+    },
+  ],
+  links: { analysis: 'https://am-i.exposed/#tx=abc' },
+})
+
+describe('scanTransaction', () => {
+  const TXID = 'ab'.repeat(32)
+  const base = {
+    txid: TXID,
+    network: 'signet' as const,
+    backendUrl: 'http://meu-esplora:3002',
+  }
+
+  it('lê os achados da transação', async () => {
+    const scan = await scanTransaction({ ...base, runner: async () => SAIDA_TX })
+    expect(scan.findings).toHaveLength(1)
+    expect(scan.findings[0]!.id).toBe('entity-behavior-exchange')
+    expect(scan.scannerVersion).toBe('0.34.2')
+  })
+
+  it('pede a análise da transação, e não da carteira', async () => {
+    let recebidos: string[] = []
+    await scanTransaction({
+      ...base,
+      runner: async args => {
+        recebidos = args
+        return SAIDA_TX
+      },
+    })
+    expect(recebidos).toContain('scan')
+    expect(recebidos).toContain('tx')
+    expect(recebidos).toContain(TXID)
+  })
+
+  // Mesma razão da varredura de carteira: sem dizer por onde consultar, o
+  // scanner vai ao explorador público dele e expõe a transação a mais um
+  // observador.
+  it('consulta pelo mesmo backend que vigia a carteira', async () => {
+    let recebidos: string[] = []
+    await scanTransaction({
+      ...base,
+      runner: async args => {
+        recebidos = args
+        return SAIDA_TX
+      },
+    })
+    expect(recebidos[recebidos.indexOf('--api') + 1]).toBe('http://meu-esplora:3002')
+    expect(recebidos[recebidos.indexOf('--network') + 1]).toBe('signet')
+  })
+
+  it('descarta o link que carrega a transação para fora', async () => {
+    const scan = await scanTransaction({ ...base, runner: async () => SAIDA_TX })
+    expect(JSON.stringify(scan)).not.toContain('am-i.exposed')
+  })
+
+  it('falha em vez de inventar quando a saída não é o JSON esperado', async () => {
+    await expect(
+      scanTransaction({ ...base, runner: async () => 'nem json é' }),
+    ).rejects.toThrow(/scanner/i)
   })
 })
