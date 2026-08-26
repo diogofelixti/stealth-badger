@@ -52,6 +52,16 @@ export async function projectWallet(walletId: number): Promise<void> {
         [walletId, u.txid, u.vout, u.addressId, u.valueSats, u.height, u.spentAtTxid],
       )
     }
+    // O congelamento é do usuário e vive em `utxo_marks`, fora da projeção.
+    // Aqui ele é apenas copiado de volta, para que as consultas que já leem
+    // `utxos.frozen` continuem verdadeiras depois da reconstrução.
+    await client.query(
+      `UPDATE utxos u SET frozen = m.frozen
+         FROM utxo_marks m
+        WHERE m.wallet_id = u.wallet_id AND m.txid = u.txid AND m.vout = u.vout
+          AND u.wallet_id = $1`,
+      [walletId],
+    )
     await client.query('COMMIT')
   } catch (err) {
     await client.query('ROLLBACK')
