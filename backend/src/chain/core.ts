@@ -19,6 +19,16 @@ interface UnspentDoCore {
 
 /** `wpkh([abcd1234/0/7]02ff…)#chk` → `0/7` */
 const CAMINHO_NO_DESCRIPTOR = /\[[0-9a-fA-F]{8}((?:\/\d+'?)+)\]/
+const RESCAN_POLL_MS = process.env.NODE_ENV === 'test' ? 1 : 2_000
+const RESCAN_WAIT_MS = 600_000
+
+interface WalletInfo {
+  scanning?: false | { duration?: number; progress?: number }
+}
+
+interface DescriptorList {
+  descriptors?: { desc: string }[]
+}
 
 /**
  * Cadeia e índice, a partir da origem da chave que o `desc` carrega.
@@ -95,6 +105,28 @@ export function createCoreAdapter(opts: CoreOptions): ChainAdapter {
     ])
   }
 
+  async function descriptorJaImportado(desc: string): Promise<boolean> {
+    try {
+      const lista = (await rpc('listdescriptors', [], wallet)) as DescriptorList
+      return (lista.descriptors ?? []).some(d => d.desc === desc)
+    } catch {
+      return false
+    }
+  }
+
+  async function aguardarRescanParar(): Promise<void> {
+    const inicio = Date.now()
+    while (Date.now() - inicio < RESCAN_WAIT_MS) {
+      const info = (await rpc('getwalletinfo', [], wallet)) as WalletInfo
+      if (!info.scanning) return
+      await new Promise(resolve => setTimeout(resolve, RESCAN_POLL_MS))
+    }
+    throw new Error(
+      'Bitcoin Core ainda está escaneando a carteira de observação depois de ' +
+        Math.round(RESCAN_WAIT_MS / 1000) + 's',
+    )
+  }
+
   return {
     capabilities: () => caps,
 
@@ -112,6 +144,7 @@ export function createCoreAdapter(opts: CoreOptions): ChainAdapter {
       // O Core recusa descriptor sem checksum. Pedi-lo ao próprio nó é mais
       // seguro que calculá-lo aqui, e é o que a RPC oferece.
       const info = (await rpc('getdescriptorinfo', [descriptor])) as { descriptor: string }
+      if (await descriptorJaImportado(info.descriptor)) return
 
       // `range` não é opcional para descriptor com curinga: sem ele o Core
       // recusa com "Descriptor is ranged, please specify the range". Mil é o
@@ -121,21 +154,35 @@ export function createCoreAdapter(opts: CoreOptions): ChainAdapter {
       // achou.
       // `timestamp: 0` é o que dispara a varredura desde o gênesis; por isso o
       // motor não chama `rescanFrom` em seguida.
-      const resultado = (await rpc(
-        'importdescriptors',
-        [
+      const importar = async () =>
+        (await rpc(
+          'importdescriptors',
           [
-            {
-              desc: info.descriptor,
-              timestamp: 0,
-              active: false,
-              internal: false,
-              range: [0, 999] as [number, number],
-            },
+            [
+              {
+                desc: info.descriptor,
+                timestamp: 0,
+                active: false,
+                internal: false,
+                range: [0, 999] as [number, number],
+              },
+            ],
           ],
-        ],
-        wallet,
-      )) as { success: boolean; error?: { message: string } }[]
+          wallet,
+        )) as { success: boolean; error?: { message: string } }[]
+
+      let resultado
+      try {
+        resultado = await importar()
+      } catch (err) {
+        const mensagem = (err as Error).message
+        if (!/currently rescanning|fetch failed|timeout|aborted/i.test(mensagem)) {
+          throw err
+        }
+        await aguardarRescanParar()
+        if (await descriptorJaImportado(info.descriptor)) return
+        resultado = await importar()
+      }
 
       const falha = resultado.find(r => !r.success)
       if (falha) {

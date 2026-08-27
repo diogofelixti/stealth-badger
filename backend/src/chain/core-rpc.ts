@@ -43,7 +43,10 @@ async function credencialDoCookie(caminho: string): Promise<string> {
 
 function transporteHttp(url: string, opts: RpcOptions): RpcTransport {
   const base = url.replace(/\/+$/, '')
-  const timeoutMs = opts.timeoutMs ?? 30_000
+  // `importdescriptors` e `rescanblockchain` podem bloquear enquanto o Core
+  // varre a cadeia. Trinta segundos basta para consulta comum, mas marca uma
+  // carteira saudável como erro no primeiro registro contra um nó real.
+  const timeoutMs = opts.timeoutMs ?? 600_000
 
   return async (caminho, corpo) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }

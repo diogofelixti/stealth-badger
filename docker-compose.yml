@@ -20,6 +20,10 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://badger:${POSTGRES_PASSWORD}@postgres:5432/stealth_badger
+    volumes:
+      - /mnt/dados2/signet/.cookie:/bitcoin/.cookie:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

@@ -10,6 +10,7 @@ function rpcFalso(
     registro?.chamadas.push({ method, params, wallet })
     const r = respostas[method]
     if (r === undefined) throw new Error(`Bitcoin Core falhou em ${method}: não simulado`)
+    if (r instanceof Error) throw r
     return typeof r === 'function' ? (r as (p: unknown[], w?: string) => unknown)(params, wallet) : r
   }
 }
@@ -168,6 +169,75 @@ describe('adapter Bitcoin Core', () => {
         wallet: 'vigia',
       })
       await expect(a.registerDescriptor!(DESCRIPTOR)).rejects.toThrow(/descriptor inválido/)
+    })
+
+    it('espera o rescan em andamento e não reimporta descriptor já aceito', async () => {
+      let tentativasDeImport = 0
+      let consultasDeDescriptor = 0
+      let consultasDeWallet = 0
+      const r = { chamadas: [] as { method: string; params: unknown[]; wallet?: string }[] }
+      const a = createCoreAdapter({
+        rpc: rpcFalso(
+          {
+            listwallets: ['vigia'],
+            getdescriptorinfo: () => ({ descriptor: DESCRIPTOR + '#abcd1234' }),
+            listdescriptors: () => {
+              consultasDeDescriptor += 1
+              return {
+                descriptors:
+                  consultasDeDescriptor > 1
+                    ? [{ desc: DESCRIPTOR + '#abcd1234' }]
+                    : [],
+              }
+            },
+            importdescriptors: () => {
+              tentativasDeImport += 1
+              throw new Error(
+                'Bitcoin Core falhou em importdescriptors: Wallet is currently rescanning.',
+              )
+            },
+            getwalletinfo: () => {
+              consultasDeWallet += 1
+              return consultasDeWallet === 1
+                ? { scanning: { duration: 10, progress: 0.5 } }
+                : { scanning: false }
+            },
+          },
+          r,
+        ),
+        wallet: 'vigia',
+      })
+
+      await a.registerDescriptor!(DESCRIPTOR)
+
+      expect(tentativasDeImport).toBe(1)
+      expect(r.chamadas.filter(c => c.method === 'getwalletinfo')).toHaveLength(2)
+    })
+
+    it('trata queda da conexão durante import como rescan pendente no Core', async () => {
+      let consultasDeDescriptor = 0
+      const a = createCoreAdapter({
+        rpc: rpcFalso({
+          listwallets: ['vigia'],
+          getdescriptorinfo: () => ({ descriptor: DESCRIPTOR + '#abcd1234' }),
+          listdescriptors: () => {
+            consultasDeDescriptor += 1
+            return {
+              descriptors:
+                consultasDeDescriptor > 1
+                  ? [{ desc: DESCRIPTOR + '#abcd1234' }]
+                  : [],
+            }
+          },
+          importdescriptors: () => {
+            throw new Error('fetch failed')
+          },
+          getwalletinfo: () => ({ scanning: false }),
+        }),
+        wallet: 'vigia',
+      })
+
+      await expect(a.registerDescriptor!(DESCRIPTOR)).resolves.toBeUndefined()
     })
   })
 

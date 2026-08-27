@@ -136,6 +136,7 @@ Tudo em `.env`, documentado em [`.env.example`](.env.example):
 | `CHAIN_BACKEND` | `esplora`, `electrum` ou `core` |
 | `ESPLORA_URL` / `ELECTRUM_URL` / `CORE_URL` | endereço do backend de cadeia |
 | `CORE_COOKIE_PATH` | caminho do `.cookie` do bitcoind, quando o backend é `core` |
+| `CORE_RPC_TIMEOUT_MS` | timeout das chamadas RPC longas do Core, como registro e rescan |
 | `PUBLIC_BACKEND` | governa o aviso permanente de privacidade |
 
 ### Avisos no celular

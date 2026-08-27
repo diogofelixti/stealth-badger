@@ -1342,10 +1342,42 @@ Não depende de transação nova chegar na hora, que é a única parte fora do n
 - O saldo real do endereço mainnet não foi conferido contra uma sincronização de explorador nesta rodada; o item 0 fechou o contrato e a regressão de mistura de redes, mas não rodou um ciclo de cadeia real para esse endereço.
 - O Item 1 ainda não foi iniciado; a prova contra bitcoind e Fulcrum local continua sendo a próxima rodada por ordem do backlog.
 
+## Rodada 23 — Item 1.1: Bitcoin Core real, pelo RPC
+
+### O que foi conferido
+
+- O `docker-compose.yml` passou a montar `/mnt/dados2/signet/.cookie` como `/bitcoin/.cookie:ro` no backend e a expor `host.docker.internal`.
+- O `.env` real foi apontado para `CHAIN_BACKEND=core`, `CORE_URL=http://host.docker.internal:38332`, `CORE_COOKIE_PATH=/bitcoin/.cookie` e `PUBLIC_BACKEND=false`.
+- De dentro do container, `/bitcoin/.cookie` ficou legível e a API continuou saudável em `GET /api/health`.
+- Backend Core cadastrado pela API: `id=18`, `network=signet`, `is_public=false`.
+- Carteira de observação criada no Core: `stealth-badger-5`.
+- Descriptors importados:
+  - recebimento: `wpkh(.../0/*)`, `range [0,1001]`, `next_index 2`;
+  - troco: `wpkh(.../1/*)`, `range [0,999]`, `next_index 0`.
+- `bitcoin-cli -signet -datadir=/mnt/dados2 getblockcount` mediu **319594**.
+- `getblockhash 319594` mediu `000000067d357c2732361d59a7f659ab84270e9caccfd79a214b02e5df3b65fb`.
+- A carteira `Core signet vpub item 1` sincronizou em `sync_height=319594`, com **2 UTXOs** e **11.000 sats**.
+- Os dois UTXOs vieram do endereço `tb1qcr8te4kr609gcawutmrza0j4xv80jy8zmfp6l0`, derivation path `0/0`.
+- Segundo ciclo manteve `chain_events=2`; não duplicou evento.
+- A resposta da API devolveu `backendIsPublic=false`, que é o dado que apaga o aviso permanente de explorador público na tela.
+
+### O que quebrou a premissa
+
+- O erro de permissão era operacional: o container não tinha o cookie montado. Montar o arquivo direto em `/bitcoin/.cookie:ro` resolveu sem abrir o diretório do nó para escrita.
+- `importdescriptors` contra Core real não cabe no timeout de 30s. O Core continuava escaneando, mas o backend abortava a chamada e marcava a carteira como `error`.
+- Depois do timeout/restart, repetir a importação enquanto o Core ainda escaneava devolvia `Wallet is currently rescanning`. O adapter agora espera o rescan terminar e reconhece descriptor já importado.
+- Em outra rodada, a conexão HTTP também caiu como `fetch failed` enquanto o Core continuava trabalhando. O adapter trata esse caso como rescan pendente e valida o descriptor depois.
+
+### O que ficou de dívida
+
+- O cadastro da API ainda não aceita descriptor textual `wpkh(...)`; para declarar native segwit foi usado o `vpub` equivalente. O `tpub` cru continua ambíguo e foi corretamente cadastrado como `p2pkh`.
+- A conferência do Fulcrum local, item 1.2, ainda falta.
+- A carteira de teste `stealth-badger-4`, criada pela primeira tentativa ambígua, foi abortada/removida do banco, mas continuou carregada no Core.
+
 ## Estado em 27/08
 
-- backend: 37 arquivos de teste, **418 testes**
-- frontend: 12 arquivos de teste, **96 testes**
+- backend: 37 arquivos de teste, **426 testes**
+- frontend: 12 arquivos de teste, **97 testes**
 - `npx tsc --noEmit` limpo nos dois
 - três backends de cadeia: Esplora, Electrum e **Bitcoin Core**, escolhidos por carteira
 - o resto igual ao estado de 26/08, abaixo

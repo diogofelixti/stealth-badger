@@ -27,6 +27,7 @@ export interface BackendRow {
 
 /** Onde o cookie do bitcoind fica, quando não é dito. */
 const COOKIE_PADRAO = process.env.CORE_COOKIE_PATH
+const CORE_RPC_TIMEOUT_MS = Number(process.env.CORE_RPC_TIMEOUT_MS ?? 600_000)
 
 /**
  * Monta o adapter que a linha de `backends` descreve.
@@ -63,6 +64,7 @@ export function createAdapter(b: BackendRow): ChainAdapter {
       rpc: criarRpc({
         url: b.url,
         ...(COOKIE_PADRAO ? { cookiePath: COOKIE_PADRAO } : {}),
+        ...(Number.isFinite(CORE_RPC_TIMEOUT_MS) ? { timeoutMs: CORE_RPC_TIMEOUT_MS } : {}),
       }),
       // uma carteira de observação por carteira vigiada
       wallet: 'stealth-badger-' + b.walletId,
