@@ -266,10 +266,21 @@ export const api = {
     auth?: { mode: 'cookie' | 'userpass'; cookiePath?: string; user?: string; password?: string }
   }) =>
     request<Backend>('/api/backends', { method: 'POST', body: JSON.stringify(corpo) }),
-  alerts: (params: { limit?: number; cursor?: string } = {}) => {
+  alerts: (
+    params: {
+      limit?: number
+      cursor?: string
+      type?: string
+      severity?: string
+      walletId?: number
+    } = {},
+  ) => {
     const q = new URLSearchParams()
     if (params.limit) q.set('limit', String(params.limit))
     if (params.cursor) q.set('cursor', params.cursor)
+    if (params.type) q.set('type', params.type)
+    if (params.severity) q.set('severity', params.severity)
+    if (params.walletId) q.set('walletId', String(params.walletId))
     const busca = q.toString()
     return request<PaginaDeAlertas>('/api/alerts' + (busca ? '?' + busca : ''))
   },

@@ -1,7 +1,8 @@
 import { StrictMode, useCallback, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import { api, type Catalog, type Lang, type Me } from './lib/api'
-import { Dashboard } from './pages/Dashboard'
+import { Rotas } from './Rotas'
 import { Login } from './pages/Login'
 import './styles/index.css'
 
@@ -56,13 +57,15 @@ function App() {
   if (!carregado) return null
 
   return me ? (
-    <Dashboard
-      me={me}
-      catalog={catalog}
-      lang={lang}
-      onLang={trocarIdioma}
-      onSaiu={() => setMe(null)}
-    />
+    <BrowserRouter>
+      <Rotas
+        me={me}
+        catalog={catalog}
+        lang={lang}
+        onLang={trocarIdioma}
+        onSaiu={() => setMe(null)}
+      />
+    </BrowserRouter>
   ) : (
     <Login
       catalog={catalog}

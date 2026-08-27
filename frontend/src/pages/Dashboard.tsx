@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, type Alert, type Backend, type Catalog, type Lang, type Me, type Wallet } from '../lib/api'
-import { Shell } from '../components/Shell'
+import { api, type Alert, type Backend, type Catalog, type Lang, type Wallet } from '../lib/api'
 import { AlertFeed } from '../components/AlertFeed'
 import { AddWallet } from '../components/AddWallet'
-import { LangToggle } from '../components/LangToggle'
 import { WalletCard } from '../components/WalletCard'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { AlertDetail } from '../components/AlertDetail'
@@ -26,47 +24,6 @@ function contabilizadas(wallets: Wallet[]): Wallet[] {
   return wallets.filter(w => w.syncHeight !== null)
 }
 
-function host(url: string): string {
-  try {
-    return new URL(url).host
-  } catch {
-    return url
-  }
-}
-
-/**
- * A postura anunciada no topo vale para a sessão inteira.
- *
- * Com backend por carteira, ela deixa de ser "a postura da primeira carteira"
- * — que seria mentira assim que duas carteiras discordassem. O que o usuário
- * precisa saber é se existe exposição: **basta uma** carteira passando por
- * explorador público para que a resposta honesta seja pública.
- *
- * Quando mais de um explorador expõe, a linha conta quantos em vez de eleger
- * um deles, porque nomear só o primeiro esconderia os outros.
- */
-function postura(
-  wallets: Wallet[],
-  catalog: Catalog,
-  lang: Lang,
-): { isPublic: boolean; host: string; label: string } | null {
-  if (wallets.length === 0) return null
-
-  const expostas = wallets.filter(w => w.backendIsPublic)
-  const isPublic = expostas.length > 0
-  const relevantes = isPublic ? expostas : wallets
-  const hosts = [...new Set(relevantes.map(w => host(w.backendUrl)))]
-
-  return {
-    isPublic,
-    host:
-      hosts.length === 1
-        ? hosts[0]!
-        : render(catalog, 'privacy.severalHosts', { n: hosts.length }, lang),
-    label: render(catalog, isPublic ? 'privacy.public' : 'privacy.sovereign', {}, lang),
-  }
-}
-
 function hostDaFonte(url: string): string {
   try {
     return new URL(url).host
@@ -75,18 +32,19 @@ function hostDaFonte(url: string): string {
   }
 }
 
+/**
+ * O painel: saldo, carteiras e feed.
+ *
+ * Não desenha a casca. Listra, selo, cabeçalho e navegação moram no `Layout`,
+ * onde toda rota os herda — uma tela que montasse a própria casca poderia
+ * esquecer o aviso de privacidade, que é o princípio 2 do projeto.
+ */
 export function Dashboard({
-  me,
   catalog,
   lang,
-  onLang,
-  onSaiu,
 }: {
-  me: Me
   catalog: Catalog
   lang: Lang
-  onLang: (l: Lang) => void
-  onSaiu: () => void
 }) {
   const [wallets, setWallets] = useState<Wallet[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
@@ -179,7 +137,6 @@ export function Dashboard({
     (maior, w) => (w.syncHeight !== null && (maior === null || w.syncHeight > maior) ? w.syncHeight : maior),
     null,
   )
-  const posturaAtual = postura(wallets, catalog, lang)
 
   // Só depois de carregar: enquanto o fetch corre, `wallets` também está
   // vazio, e piscar o formulário seria pior que não tê-lo.
@@ -188,18 +145,7 @@ export function Dashboard({
   const separador = <span style={{ color: 'var(--sb-border)' }}>|</span>
 
   return (
-    <Shell
-      backend={posturaAtual}
-      actions={
-        <>
-          <LangToggle lang={lang} onChange={onLang} />
-          <span className="text-xs text-faint">{me.email}</span>
-          <Button variant="ghost" onClick={() => void api.logout().then(onSaiu)}>
-            {render(catalog, 'auth.logout', {}, lang)}
-          </Button>
-        </>
-      }
-    >
+    <>
       {/* O peso das duas colunas é o inverso do que era: à esquerda saldo,
           carteiras, busca, canais e cartões; à direita uma lista. A esquerda
           cresce com a janela, o feed fica em 360px. */}
@@ -412,6 +358,6 @@ export function Dashboard({
           )}
         </section>
       </div>
-    </Shell>
+    </>
   )
 }

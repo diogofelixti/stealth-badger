@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import type { Alert, Catalog, Me, Wallet } from '../src/lib/api'
+import type { Alert, Catalog, Wallet } from '../src/lib/api'
 
 const wallets = vi.fn<(arquivadas?: boolean) => Promise<Wallet[]>>()
 const alerts = vi.fn<() => Promise<{ items: Alert[]; nextCursor: string | null }>>()
@@ -50,8 +50,6 @@ const CATALOGO: Catalog = {
   'privacy.severalHosts': '{n} backends',
 }
 
-const ME: Me = { email: 'quem@exemplo.local', isAdmin: true, language: 'pt' }
-
 const CARTEIRA: Wallet = {
   id: 1,
   label: 'Cofre',
@@ -72,13 +70,7 @@ const CARTEIRA: Wallet = {
 
 function montar() {
   return render(
-    <Dashboard
-      me={ME}
-      catalog={CATALOGO}
-      lang="pt"
-      onLang={() => {}}
-      onSaiu={() => {}}
-    />,
+    <Dashboard catalog={CATALOGO} lang="pt" />,
   )
 }
 
@@ -208,59 +200,6 @@ describe('Dashboard — saldo durante a ressincronização', () => {
   })
 })
 
-describe('Dashboard — postura com backends diferentes', () => {
-  const soberana: Wallet = {
-    ...CARTEIRA,
-    id: 2,
-    label: 'No meu nó',
-    backendIsPublic: false,
-    backendUrl: 'electrum://127.0.0.1:50001',
-  }
-
-  // A postura anunciada no topo vale para a sessão inteira, e o que ela
-  // precisa dizer é se existe exposição — não qual carteira veio primeiro na
-  // lista. Basta uma carteira passando por explorador público para que a
-  // resposta honesta seja "público".
-  it('anuncia postura pública quando qualquer carteira vigia por explorador', async () => {
-    wallets.mockResolvedValue([soberana, CARTEIRA])
-    const { container } = montar()
-
-    await waitFor(() => expect(screen.getByText(/saldo total/i)).toBeDefined())
-    expect(container.querySelector('[role="status"][data-posture="public"]')).not.toBeNull()
-  })
-
-  it('nomeia o explorador que expõe, não o backend da primeira carteira', async () => {
-    wallets.mockResolvedValue([soberana, CARTEIRA])
-    const { container } = montar()
-
-    // olha dentro do selo do topo de propósito: cada cartão também nomeia o
-    // seu backend, e um getByText solto encontraria os dois
-    await waitFor(() => expect(screen.getByText(/saldo total/i)).toBeDefined())
-    const selo = container.querySelector('[role="status"][data-posture]')!
-    expect(selo.textContent).toMatch(/mempool\.space/)
-    expect(selo.textContent).not.toMatch(/127\.0\.0\.1/)
-  })
-
-  it('só anuncia soberano quando nenhuma carteira passa por explorador público', async () => {
-    wallets.mockResolvedValue([soberana])
-    const { container } = montar()
-
-    await waitFor(() => expect(screen.getByText(/saldo total/i)).toBeDefined())
-    expect(container.querySelector('[role="status"][data-posture="sovereign"]')).not.toBeNull()
-  })
-
-  it('conta os backends quando mais de um expõe, em vez de eleger um', async () => {
-    const outroPublico: Wallet = {
-      ...CARTEIRA,
-      id: 3,
-      backendUrl: 'https://blockstream.info/api',
-    }
-    wallets.mockResolvedValue([CARTEIRA, outroPublico])
-    montar()
-
-    await waitFor(() => expect(screen.getByText(/2 backends/)).toBeDefined())
-  })
-})
 
 describe('Dashboard — carteira arquivada', () => {
   // Arquivada fora da lista e fora do total: somá-la seria anunciar um saldo

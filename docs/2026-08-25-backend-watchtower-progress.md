@@ -1783,10 +1783,66 @@ Clicando no alerta `Possível dust attack` da carteira vigiada pelo Fulcrum:
 - **Não há botão de copiar o txid.** O texto está inteiro e selecionável; o botão ficou
   para depois porque exige permissão de área de transferência e um estado de "copiado".
 
+## Rodada 31 — Item 10: navegação, e a carteira numa página
+
+### O que foi construído
+
+- `react-router-dom` v6 e **cinco rotas**: `/`, `/carteiras` e `/carteiras/:id`,
+  `/alertas`, `/configuracoes`, `/acessos`.
+- `Layout.tsx`: a casca de todas elas. A listra, o selo, o cabeçalho e a barra de
+  navegação moram lá, e a `postura()` — que era do painel — subiu junto.
+- `/carteiras/:id` traz o cartão inteiro com trocar fonte, arquivar e apagar, a exportação
+  BIP-329 e **os alertas daquela carteira**, paginados.
+- `/alertas` usa os filtros que a API já respondia desde a rodada 29 e não tinham onde
+  caber: tipo, severidade e carteira.
+- `/configuracoes` reúne fontes de consulta — com o `BackendForm` do item 2 — e canais.
+- `/acessos` existe **antes** da funcionalidade, e diz o que ainda não está pronto em vez
+  de esconder. É a mesma regra do resto do produto.
+- As dezoito frases novas entraram nas duas línguas.
+
+### O que quebrou a premissa
+
+- **A API devolve `id` como texto, e a página da carteira comparava com número.**
+  `bigint` do Postgres chega no JSON como `"10"`, não `10`; o tipo do cliente diz
+  `number`, e quem confia no tipo escreve `w.id === 10`. Resultado medido no navegador:
+  `/carteiras/10` mostrava *"esta carteira não existe, ou não é sua"* para a carteira que
+  estava na tela ao lado. O teste de rota não pegou porque a fixture usava número — foi
+  corrigida para repetir o que a rede entrega, e agora há caso que falha se alguém voltar
+  a comparar por identidade.
+- **Os testes de postura do painel deixaram de fazer sentido onde estavam.** Com a casca
+  no `Layout`, quatro casos do `Dashboard.test` passaram a testar um componente que não
+  desenha mais o selo. Foram movidos para `Rotas.test`, onde agora rodam **para cada uma
+  das cinco rotas** — que é o teste chato que segura a tese do produto quando a interface
+  cresce.
+
+### O que ficou conferido, no navegador
+
+| Rota | Selo | Listra | Rolagem horizontal |
+|---|---|---|---|
+| `/` | público | público | não |
+| `/carteiras` | público | público | não |
+| `/carteiras/10` | público | público | não |
+| `/alertas` | público | público | não |
+| `/configuracoes` | público | público | não |
+| `/acessos` | público | público | não |
+
+E navegar pela barra **não recarrega a página**: uma marca posta em `window` sobreviveu à
+troca de `/` para `/alertas`, com a URL mudando.
+
+### O que ficou de dívida
+
+- **A navegação lateral não vira gaveta abaixo de `lg`.** Ela rola na horizontal, o que
+  funciona em 390px mas não é o que o backlog descreve.
+- **`/configuracoes` ainda não tem tema, preço nem taxas** — são os itens 11 e 12.
+- **O painel e o `Layout` buscam carteiras cada um.** É uma chamada a mais em `/`, e foi
+  escolha deliberada: com o painel lendo do contexto, os testes dele — que cobrem saldo
+  por rede e reconferência — teriam de ser reescritos na véspera da entrega.
+
 ## Estado em 27/08
 
 - backend: 38 arquivos de teste, **483 testes**
-- frontend: 16 arquivos de teste, **129 testes**
+- frontend: 17 arquivos de teste, **136 testes**
+- **cinco rotas**, todas dentro da `Shell`, com teste de postura em cada uma
 - migrações aplicadas: `001` a `011`
 - **a postura soberana está demonstrada**: Bitcoin Core e Fulcrum desta máquina, com o
   mesmo saldo do explorador público
