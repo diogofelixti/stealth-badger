@@ -893,3 +893,47 @@ describe('arquivar, desarquivar e apagar', () => {
     void cookie
   })
 })
+
+describe('POST /api/wallets — chave ambígua contra backend de registro real', () => {
+  // Sem `adapterFactory` injetado: este caso passa pelo `createAdapter` de
+  // verdade, que **recusa montar um adapter de Core sem saber de que carteira
+  // se trata** — e a carteira ainda não existe quando o tipo é detectado. A
+  // detecção precisa desistir aí, e não derrubar o cadastro.
+  it('cadastra sem 500 quando a fonte não pode ser perguntada', async () => {
+    process.env.NETWORK = 'signet'
+    const app = buildApp()
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'core-real@exemplo.com', password: 'senha-longa-de-teste', language: 'pt' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'core-real@exemplo.com', password: 'senha-longa-de-teste' },
+    })
+    const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+    const backend = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: {
+        preset: 'core',
+        host: '127.0.0.1',
+        port: 38332,
+        network: 'signet',
+        auth: { mode: 'cookie', cookiePath: '/nao/existe/.cookie' },
+      },
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre do nó', key: TPUB, backendId: backend.json().id },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(res.json().scriptType).toBe('p2wpkh')
+  })
+})

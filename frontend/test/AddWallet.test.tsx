@@ -41,6 +41,18 @@ const CATALOGO: Catalog = {
   'backends.own': 'seu',
   'backends.addToggle': '+ outro backend',
   'backends.urlPlaceholder': 'https://... ou electrum://host:50001',
+  'backends.preset': 'Fonte',
+  'backends.host': 'Host',
+  'backends.port': 'Porta',
+  'backends.labelField': 'Apelido (opcional)',
+  'backends.auth': 'Autenticação',
+  'backends.authCookie': 'arquivo .cookie',
+  'backends.authUserPass': 'usuário e senha',
+  'backends.cookiePath': 'Caminho do .cookie',
+  'backends.user': 'Usuário do RPC',
+  'backends.password': 'Senha do RPC',
+  'backends.credentialNote': 'A credencial é cifrada e nunca volta.',
+  'backends.dockerHint': 'Use host.docker.internal.',
   'backends.isPublic': 'É um serviço público de terceiro',
   'backends.publicNote': 'Um backend público enxerga quais endereços você consulta.',
   'backends.save': 'Adicionar backend',
@@ -119,15 +131,19 @@ describe('AddWallet — escolha de backend', () => {
     expect(screen.queryByText(/enxerga quais endereços/i)).toBeNull()
   })
 
+  // O formulário de fonte mora no `BackendForm`, que tem os testes dos campos
+  // de cada preset. Aqui interessa só a costura: o que ele cadastra entra na
+  // lista e já fica escolhido, porque quem acabou de cadastrar quer vigiar
+  // por ali.
   it('cadastra backend novo e passa a oferecê-lo já selecionado', async () => {
     addBackend.mockResolvedValue(MEU)
+    backends.mockResolvedValueOnce([GLOBAL]).mockResolvedValueOnce([GLOBAL, MEU])
     montar()
 
     await waitFor(() => expect(screen.getByText(/mempool\.space/)).toBeDefined())
     fireEvent.click(screen.getByRole('button', { name: /outro backend/i }))
-    fireEvent.change(screen.getByPlaceholderText(/electrum:\/\/host/i), {
-      target: { value: 'electrum://127.0.0.1:50001' },
-    })
+    fireEvent.change(screen.getByLabelText(/fonte/i), { target: { value: 'fulcrum' } })
+    fireEvent.change(screen.getByLabelText(/host/i), { target: { value: '127.0.0.1' } })
     fireEvent.click(screen.getByRole('button', { name: /adicionar backend/i }))
 
     await waitFor(() => expect(screen.getByText(/127\.0\.0\.1/)).toBeDefined())
@@ -140,20 +156,27 @@ describe('AddWallet — escolha de backend', () => {
   // por RPC. Sem a opção no seletor, cadastrá-lo dependeria de mexer no `.env`
   // do servidor — e a postura soberana ficaria fora do alcance de quem usa a
   // instância sem administrá-la.
-  it('oferece Bitcoin Core como tipo de backend', async () => {
+  it('oferece o nó do próprio usuário como fonte', async () => {
     addBackend.mockResolvedValue({ ...MEU, kind: 'core', url: 'http://127.0.0.1:38332' })
     montar()
 
     await waitFor(() => expect(screen.getByText(/mempool\.space/)).toBeDefined())
     fireEvent.click(screen.getByRole('button', { name: /outro backend/i }))
-    fireEvent.change(screen.getByLabelText(/tipo/i), { target: { value: 'core' } })
-    fireEvent.change(screen.getByPlaceholderText(/electrum:\/\/host/i), {
-      target: { value: 'http://127.0.0.1:38332' },
+    fireEvent.change(screen.getByLabelText(/fonte/i), { target: { value: 'core' } })
+    fireEvent.change(screen.getByLabelText(/host/i), { target: { value: '127.0.0.1' } })
+    fireEvent.change(screen.getByLabelText(/caminho do \.cookie/i), {
+      target: { value: '/bitcoin/.cookie' },
     })
     fireEvent.click(screen.getByRole('button', { name: /adicionar backend/i }))
 
     await waitFor(() =>
-      expect(addBackend).toHaveBeenCalledWith('core', 'http://127.0.0.1:38332', false, 'mainnet'),
+      expect(addBackend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          preset: 'core',
+          host: '127.0.0.1',
+          auth: { mode: 'cookie', cookiePath: '/bitcoin/.cookie' },
+        }),
+      ),
     )
   })
 
@@ -280,6 +303,6 @@ describe('AddWallet — ações que não são enviar', () => {
     fireEvent.click(screen.getByText('+ outro backend'))
 
     expect(addWallet).not.toHaveBeenCalled()
-    expect(screen.getByPlaceholderText('https://... ou electrum://host:50001')).toBeDefined()
+    expect(screen.getByLabelText(/fonte/i)).toBeDefined()
   })
 })

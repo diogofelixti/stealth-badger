@@ -78,6 +78,9 @@ export interface PrivacyReport {
 export type BackendKind = 'esplora' | 'electrum' | 'core'
 
 export interface Backend {
+  preset?: string | null
+  label?: string | null
+  hasCredentials?: boolean
   id: number
   kind: BackendKind
   url: string
@@ -206,11 +209,18 @@ export const api = {
       body: JSON.stringify({ label, ...entrada, backendId }),
     }),
   backends: () => request<Backend[]>('/api/backends'),
-  addBackend: (kind: BackendKind, url: string, isPublic: boolean, network?: Network) =>
-    request<Backend>('/api/backends', {
-      method: 'POST',
-      body: JSON.stringify({ kind, url, isPublic, network }),
-    }),
+  addBackend: (corpo: {
+    preset?: string
+    kind?: BackendKind
+    host?: string
+    port?: number
+    url?: string
+    isPublic?: boolean
+    network?: Network
+    label?: string
+    auth?: { mode: 'cookie' | 'userpass'; cookiePath?: string; user?: string; password?: string }
+  }) =>
+    request<Backend>('/api/backends', { method: 'POST', body: JSON.stringify(corpo) }),
   alerts: () => request<Alert[]>('/api/alerts'),
   search: (q: string) => request<Achado[]>(`/api/search?q=${encodeURIComponent(q)}`),
   channels: () => request<Channel[]>('/api/channels'),

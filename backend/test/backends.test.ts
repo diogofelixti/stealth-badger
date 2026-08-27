@@ -278,3 +278,186 @@ describe('POST /api/wallets com backend escolhido', () => {
     expect(res.json().error).toMatch(/backend/i)
   })
 })
+
+describe('POST /api/backends — catálogo de fontes', () => {
+  // O catálogo é camada de apresentação sobre três adapters: Fulcrum, Electrs
+  // e Floresta falam o mesmo protocolo e viram o mesmo `kind`. Preset que
+  // decidisse comportamento seria um quarto adapter entrando pela porta dos
+  // fundos.
+  it('o preset do Fulcrum vira um backend electrum, com host e porta montados', async () => {
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: { preset: 'fulcrum', host: '127.0.0.1', port: 50001, network: 'signet' },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(res.json().kind).toBe('electrum')
+    expect(res.json().url).toBe('electrum://127.0.0.1:50001')
+    expect(res.json().preset).toBe('fulcrum')
+    expect(res.json().isPublic).toBe(false)
+  })
+
+  it('Electrs e Floresta chegam ao mesmo adapter do Fulcrum', async () => {
+    const { app, cookie } = await logado()
+
+    for (const [preset, host] of [['electrs', 'a.local'], ['floresta', 'b.local']] as const) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/backends',
+        cookies: { sb_session: cookie },
+        payload: { preset, host, port: 50001, network: 'signet' },
+      })
+      expect(res.json().kind).toBe('electrum')
+      expect(res.json().url).toBe(`electrum://${host}:50001`)
+    }
+  })
+
+  it('mempool.space monta a URL da rede escolhida e já vem marcado como público', async () => {
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: { preset: 'mempool', network: 'signet' },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(res.json().kind).toBe('esplora')
+    expect(res.json().url).toBe('https://mempool.space/signet/api')
+    expect(res.json().isPublic).toBe(true)
+  })
+
+  it('a mainnet do mempool.space não leva nome de rede no caminho', async () => {
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: { preset: 'mempool', network: 'mainnet' },
+    })
+
+    expect(res.json().url).toBe('https://mempool.space/api')
+  })
+
+  it('recusa porta fora da faixa', async () => {
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: { preset: 'fulcrum', host: '127.0.0.1', port: 70000, network: 'signet' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('backend.portRange')
+  })
+
+  it('recusa preset que não existe', async () => {
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: { preset: 'umbrel', host: 'x', port: 1, network: 'signet' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('backend.unknownPreset')
+  })
+
+  // O RPC do Core não é leitura inofensiva: quem o alcança pode parar o nó.
+  it('recusa Bitcoin Core sem autenticação', async () => {
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: { preset: 'core', host: '127.0.0.1', port: 38332, network: 'signet' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('backend.authRequired')
+  })
+
+  it('a credencial do Core é cifrada e nunca volta numa resposta', async () => {
+    const { app, cookie } = await logado()
+    const SENHA = 'senha-secreta-do-rpc'
+
+    const criado = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: {
+        preset: 'core',
+        host: '127.0.0.1',
+        port: 38332,
+        network: 'signet',
+        auth: { mode: 'userpass', user: 'badger', password: SENHA },
+      },
+    })
+
+    expect(criado.statusCode).toBe(201)
+    expect(criado.json().hasCredentials).toBe(true)
+    expect(JSON.stringify(criado.json())).not.toContain(SENHA)
+
+    const lista = await app.inject({
+      method: 'GET',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+    })
+    expect(JSON.stringify(lista.json())).not.toContain(SENHA)
+    expect(JSON.stringify(lista.json())).not.toContain('badger')
+    expect(lista.json().find((b: { id: number }) => b.id === criado.json().id).hasCredentials).toBe(true)
+
+    // e no banco não está em claro
+    const { rows } = await pool.query<{ credentials_encrypted: Buffer | null }>(
+      'SELECT credentials_encrypted FROM backends WHERE id = $1',
+      [criado.json().id],
+    )
+    expect(rows[0]!.credentials_encrypted!.toString('utf8')).not.toContain(SENHA)
+  })
+
+  it('o caminho do cookie também é credencial, e também não volta', async () => {
+    const { app, cookie } = await logado()
+
+    const criado = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: {
+        preset: 'core',
+        host: '127.0.0.1',
+        port: 38332,
+        network: 'signet',
+        auth: { mode: 'cookie', cookiePath: '/mnt/nó/.cookie' },
+      },
+    })
+
+    expect(criado.statusCode).toBe(201)
+    expect(criado.json().url).toBe('http://127.0.0.1:38332')
+    expect(JSON.stringify(criado.json())).not.toContain('/mnt/nó/.cookie')
+  })
+
+  it('continua aceitando kind e url crus, que é como a instância cadastra o global', async () => {
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: { kind: 'esplora', url: 'https://exemplo.local/api', isPublic: false, network: 'signet' },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(res.json().url).toBe('https://exemplo.local/api')
+  })
+})

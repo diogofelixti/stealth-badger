@@ -246,21 +246,13 @@ export function registerWalletRoutes(
       }
 
       scriptType = (declarado as ScriptType) || parsed.scriptType
-      // Sem declaração e com chave ambígua, pergunta-se à cadeia. Um backend
-      // de registro não responde por endereço e `detectScriptType` devolve
-      // `null` — daí cair no padrão, que é native segwit. Assumir legado era
-      // o que fazia uma carteira com saldo aparecer com zero.
+      // Sem declaração e com chave ambígua, pergunta-se à cadeia. Quando não
+      // há a quem perguntar, o padrão é native segwit: assumir legado era o
+      // que fazia uma carteira com saldo aparecer com zero.
       if (!declarado && parsed.scriptTypeAmbiguous) {
-        const adapter = adapterFactory(backend)
-        try {
-          scriptType =
-            (await detectScriptType(parsed.canonicalXpub, network, adapter).catch(
-              () => null,
-            )) ?? PADRAO_QUANDO_NAO_DA_PARA_SABER
-        } finally {
-          // adapter aberto só para esta consulta; com Electrum é um socket
-          adapter.close?.()
-        }
+        scriptType =
+          (await tipoPelaCadeia(adapterFactory, backend, parsed.canonicalXpub, network)) ??
+          PADRAO_QUANDO_NAO_DA_PARA_SABER
       }
 
       cifrada = seal(parsed.canonicalXpub, cfg.masterKeyHex)
@@ -471,4 +463,37 @@ async function arquivar(
     [alvo.id, arquivada ? new Date() : null],
   )
   return reply.send(rows[0])
+}
+
+/**
+ * Pergunta o tipo de script à cadeia, ou devolve `null` quando não há a quem
+ * perguntar.
+ *
+ * São dois "não dá" diferentes, e os dois terminam aqui:
+ *
+ * - o backend responde por endereço, mas nenhum candidato tem histórico —
+ *   `detectScriptType` devolve `null`, e é carteira nova;
+ * - o backend **não pode nem ser montado para a consulta**: o adapter de
+ *   Bitcoin Core exige saber de que carteira se trata, e no cadastro a
+ *   carteira ainda não existe. Antes disto, esse caso derrubava o cadastro
+ *   com 500 — medido em 27/08, cadastrando uma `tpub` pelo nó da máquina.
+ */
+async function tipoPelaCadeia(
+  adapterFactory: (backend: BackendRow) => ChainAdapter,
+  backend: BackendRow,
+  canonicalXpub: string,
+  network: Network,
+): Promise<ScriptType | null> {
+  let adapter: ChainAdapter
+  try {
+    adapter = adapterFactory(backend)
+  } catch {
+    return null
+  }
+  try {
+    return await detectScriptType(canonicalXpub, network, adapter).catch(() => null)
+  } finally {
+    // adapter aberto só para esta consulta; com Electrum é um socket
+    adapter.close?.()
+  }
 }

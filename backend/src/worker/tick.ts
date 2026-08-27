@@ -31,11 +31,13 @@ export async function tick(opts: TickOptions = {}): Promise<TickReport> {
     url: string
     is_public: boolean
     network: Network
+    credentials_encrypted: Buffer | null
   }>(
     // Carteira arquivada não é consultada. Sem este WHERE ela sumiria da tela
     // e continuaria perguntando ao explorador público de trás da cortina, que
     // é o oposto do que quem arquivou pediu.
-    `SELECT w.id, w.user_id, b.kind, b.url, b.is_public, b.network
+    `SELECT w.id, w.user_id, b.kind, b.url, b.is_public, b.network,
+            b.credentials_encrypted
        FROM wallets w JOIN backends b ON b.id = w.backend_id
       WHERE w.archived_at IS NULL
       ORDER BY w.id`,
@@ -55,6 +57,7 @@ export async function tick(opts: TickOptions = {}): Promise<TickReport> {
       network: w.network,
       // o modelo de registro precisa saber de quem é a carteira de observação
       walletId,
+      credentialsEncrypted: w.credentials_encrypted,
     })
 
     let result

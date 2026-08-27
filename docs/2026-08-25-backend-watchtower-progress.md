@@ -1563,11 +1563,84 @@ Pelo navegador, com a sessão real:
   quem tiver a sessão aberta apaga. Está coerente com o resto do produto, e fica
   registrado por ser decisão, não esquecimento.
 
+## Rodada 27 — Item 1.2 fechado pelo Fulcrum, e o item 2: catálogo de fontes
+
+### O que foi construído
+
+- **Item 1.2**: o índice do Fulcrum terminou e a mesma chave foi vigiada pelo servidor
+  Electrum desta máquina. Com ele, o item 1 inteiro fecha.
+- Migração `011_backend_credentials.sql`: `credentials_encrypted`, `preset` e `label`.
+- `chain/presets.ts`: oito entradas de catálogo sobre **três** adapters. Fulcrum, Electrs
+  e Floresta gravam `kind: 'electrum'`; mempool.space e Blockstream, `esplora`.
+- `POST /api/backends` aceita `preset` + `host`/`port`/`url`/`auth` e monta a URL, com
+  `backend.unknownPreset`, `backend.hostRequired`, `backend.portRange` e
+  `backend.authRequired` nas duas línguas. `kind` + `url` crus continuam valendo.
+- A credencial do RPC é cifrada com a mesma caixa do xpub e **nunca volta**: a resposta
+  traz só `hasCredentials`.
+- `credenciaisDoBackend()` lê a credencial da linha e só cai no `.env` quando a linha não
+  tem — e o cookie do ambiente passou a ser lido **a cada chamada**, não na carga do
+  módulo, porque o bitcoind regenera o arquivo a cada reinício.
+- `BackendForm.tsx` e `lib/presets.ts`: o formulário pergunta o que cada fonte precisa.
+
+### O que quebrou a premissa
+
+- **`<form>` dentro de `<form>`.** O `BackendForm` nasceu como formulário e vive dentro
+  do formulário de cadastro de carteira. HTML não permite aninhar, **o JSDOM permite** —
+  os seis testes do formulário passaram verdes, e no navegador o clique em "adicionar
+  backend" recarregou a página **sem chamar a API uma vez sequer**: o log do nginx não
+  registrou nenhum `POST /api/backends`. Virou `<div>` com botão comum. É a segunda vez
+  em duas rodadas que só o navegador pega o defeito.
+- **A rodada 24 abriu um 500 e ele passou por 440 testes verdes.** Ao tirar a guarda de
+  `core` da detecção de tipo de script, o cadastro passou a montar o adapter para
+  perguntar à cadeia — e `createAdapter` **recusa montar Core sem saber de que carteira
+  se trata**, porque no cadastro a carteira ainda não existe. Todo teste do caso injetava
+  `adapterFactory`, então nenhum passava pelo `createAdapter` de verdade. Medido pela API
+  rodando: `500 Internal Server Error` ao cadastrar uma `tpub` pelo nó. Agora a detecção
+  desiste em silêncio quando não há adapter a montar, e há teste **sem factory injetada**
+  que prova.
+
+### O que ficou conferido — item 1, as três fontes
+
+Mesma chave, três caminhos, no mesmo instante:
+
+| Fonte | Saldo | UTXOs | Altura | Selo |
+|---|---|---|---|---|
+| Bitcoin Core local (`host.docker.internal:38332`) | **7.552.468** | 32 | 319626 | apagado |
+| mempool.space (público) | **7.552.468** | 32 | 319626 | **aceso** |
+| Fulcrum local (`host.docker.internal:50001`) | **7.552.468** | 32 | 319626 | apagado |
+
+E o resto da tabela do item 1, pelo Fulcrum:
+
+| O que | Medido |
+|---|---|
+| handshake | `server.version` devolveu `["Fulcrum 2.1.2","1.4"]` |
+| `tipHeight` | 319626, igual ao `getblockcount` do nó |
+| `blockHashAt` | evento na altura 319378 gravou `000000124a6192e5415cdceff25a33926e95d45b80a338aee490dbe56b9f7097`, idêntico ao `getblockhash` |
+| `derivationPath` | `1/0` a `1/20` na cadeia de troco — cadeia/índice, não `84'/1'/…` |
+| segundo ciclo | 32 eventos antes, 32 depois |
+| tempo de índice | o Fulcrum levou **cerca de 3 horas** para indexar a signet nesta máquina, de 74% a 100%, oscilando entre 2 e 161 blocos/s |
+
+Item 2, conferido pela tela: cadastrei o nó desta máquina **pelo formulário, sem tocar no
+`.env`** — `preset=core`, apelido "nó desta máquina", porta 38332 sugerida pela rede,
+aviso de `host.docker.internal` aparecendo enquanto se digita `localhost`, e
+`hasCredentials=true` com a credencial em campo nenhum da resposta.
+
+### O que ficou de dívida
+
+- **A credencial guardada na linha não foi exercitada contra o nó real.** O teste unitário
+  prova a precedência sobre o `.env`, e o cadastro pela tela prova que ela é guardada
+  cifrada; falta uma carteira sincronizando por um backend cujo cookie **só** exista na
+  linha. Não foi feito agora porque cada carteira nova pelo Core custa dois rescans e
+  bloqueia o ciclo do worker — a limitação medida na rodada 24.
+- **O item 3, trocar a fonte de uma carteira já cadastrada, não foi começado.**
+
 ## Estado em 27/08
 
-- backend: 37 arquivos de teste, **440 testes**
-- frontend: 14 arquivos de teste, **112 testes**
-- migrações aplicadas: `001` a `010`
+- backend: 37 arquivos de teste, **454 testes**
+- frontend: 15 arquivos de teste, **118 testes**
+- migrações aplicadas: `001` a `011`
+- **a postura soberana está demonstrada**: Bitcoin Core e Fulcrum desta máquina, com o
+  mesmo saldo do explorador público
 - `npx tsc --noEmit` limpo nos dois
 - três backends de cadeia: Esplora, Electrum e **Bitcoin Core**, escolhidos por carteira
 - o resto igual ao estado de 26/08, abaixo
@@ -1611,8 +1684,8 @@ Pelo navegador, com a sessão real:
 - ~~**A postura soberana não foi demonstrada.**~~ **Fechada em 27/08, pelo Bitcoin Core
   desta máquina**: a mesma chave vigiada pelo nó local e por explorador público devolveu
   os mesmos 7.552.468 sats em 32 UTXOs, com o selo apagado numa e aceso na outra. O lado
-  Electrum, pelo Fulcrum local, continua pendente — é o item 1.2, e depende do índice
-  terminar
+  Electrum fechou no mesmo dia, pelo Fulcrum desta máquina, com o mesmo saldo e a mesma
+  altura — as três fontes concordam
 - **Cadastrar carteira por Bitcoin Core trava o ciclo do worker durante o primeiro
   import** — dois rescans desde o gênesis, 17 minutos medidos em 27/08, e nenhuma outra
   carteira sincroniza enquanto isso. **Limitação aceita, com decisão registrada**: na

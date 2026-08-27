@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createAdapter } from '../src/chain/adapter'
+import { credenciaisDoBackend } from '../src/chain/adapter'
+import { seal } from '../src/crypto/secretbox'
 
 const base = { isPublic: false, network: 'signet' as const }
 
@@ -77,5 +79,59 @@ describe('createAdapter', () => {
         kind: 'core', url: 'http://127.0.0.1:38332', isPublic: false, network: 'signet',
       }),
     ).toThrow(/carteira/i)
+  })
+})
+
+describe('credenciais do RPC', () => {
+  const KEY = 'd'.repeat(64)
+
+  // A credencial vive na linha do backend, cifrada. O `.env` continua servindo
+  // ao backend global da instância, que é cadastrado antes de existir usuário
+  // para guardar credencial nenhuma.
+  it('usa o usuário e a senha guardados na linha do backend', () => {
+    process.env.MASTER_KEY_HEX = KEY
+    const cifrada = seal(JSON.stringify({ user: 'badger', password: 'senha-do-rpc' }), KEY)
+
+    expect(
+      credenciaisDoBackend({
+        kind: 'core',
+        url: 'http://127.0.0.1:38332',
+        isPublic: false,
+        network: 'signet',
+        walletId: 7,
+        credentialsEncrypted: cifrada,
+      }),
+    ).toEqual({ user: 'badger', password: 'senha-do-rpc' })
+  })
+
+  it('usa o caminho do cookie guardado na linha', () => {
+    process.env.MASTER_KEY_HEX = KEY
+    const cifrada = seal(JSON.stringify({ cookiePath: '/mnt/no/.cookie' }), KEY)
+
+    expect(
+      credenciaisDoBackend({
+        kind: 'core',
+        url: 'http://127.0.0.1:38332',
+        isPublic: false,
+        network: 'signet',
+        walletId: 7,
+        credentialsEncrypted: cifrada,
+      }),
+    ).toEqual({ cookiePath: '/mnt/no/.cookie' })
+  })
+
+  it('cai no cookie do ambiente quando a linha não guarda credencial', () => {
+    process.env.MASTER_KEY_HEX = KEY
+    process.env.CORE_COOKIE_PATH = '/do/ambiente/.cookie'
+
+    expect(
+      credenciaisDoBackend({
+        kind: 'core',
+        url: 'http://127.0.0.1:38332',
+        isPublic: false,
+        network: 'signet',
+        walletId: 7,
+      }),
+    ).toEqual({ cookiePath: '/do/ambiente/.cookie' })
   })
 })

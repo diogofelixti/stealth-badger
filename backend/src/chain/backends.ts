@@ -1,7 +1,9 @@
 import { loadConfig, type BackendKind } from '../config'
+import { seal } from '../crypto/secretbox'
 import { pool } from '../db/pool'
 import { erro, type ErroDaApi } from '../http/erro'
 import type { Network } from '../wallet/descriptor'
+import { PRESETS, presetConhecido, type PresetId } from './presets'
 
 export interface BackendResumo {
   id: number
@@ -11,6 +13,122 @@ export interface BackendResumo {
   network: Network
   /** `global` é o backend da instância; `own`, o que o usuário cadastrou */
   scope: 'global' | 'own'
+  /** qual entrada do catálogo o cadastrou; apresentação, nunca comportamento */
+  preset?: PresetId | null
+  label?: string | null
+  /**
+   * Se existe credencial guardada. **O conteúdo nunca sai daqui**: quem tem a
+   * senha do RPC pode parar o nó, e um campo a mais na resposta é o tipo de
+   * vazamento que ninguém vê revisando a tela.
+   */
+  hasCredentials: boolean
+}
+
+export interface AuthDoBackend {
+  mode: 'cookie' | 'userpass'
+  cookiePath?: string
+  user?: string
+  password?: string
+}
+
+export interface EntradaDePreset {
+  preset: string
+  host?: string
+  port?: number
+  url?: string
+  isPublic?: boolean
+  label?: string
+  auth?: AuthDoBackend
+}
+
+export interface BackendMontado {
+  kind: BackendKind
+  url: string
+  isPublic: boolean
+  preset: PresetId
+  label: string | null
+  credenciais: string | null
+}
+
+/**
+ * Traduz uma escolha do catálogo em `kind` + URL, ou explica o que falta.
+ *
+ * Toda a inteligência de preset mora aqui, e só aqui: o resto do sistema vê
+ * três adapters, como sempre viu.
+ */
+export function montarDoPreset(
+  entrada: EntradaDePreset,
+  rede: Network,
+): { montado: BackendMontado } | { problema: ErroDaApi } {
+  const id = String(entrada.preset)
+  if (!presetConhecido(id)) {
+    return {
+      problema: erro(
+        'backend.unknownPreset',
+        `não conheço a fonte "${id}". Escolha uma do catálogo.`,
+        { preset: id },
+      ),
+    }
+  }
+
+  const preset = PRESETS[id]
+
+  if (preset.pede === 'host-porta') {
+    if (!entrada.host?.trim()) {
+      return { problema: erro('backend.hostRequired', 'informe o host da fonte') }
+    }
+    const porta = Number(entrada.port ?? preset.portaPadrao?.[rede])
+    if (!entrada.port && !preset.portaPadrao) {
+      return { problema: erro('backend.portRequired', 'informe a porta da fonte') }
+    }
+    if (!Number.isInteger(porta) || porta < 1 || porta > 65535) {
+      return {
+        problema: erro(
+          'backend.portRange',
+          `porta ${entrada.port} fora da faixa: use um número entre 1 e 65535`,
+          { porta: String(entrada.port) },
+        ),
+      }
+    }
+  }
+
+  if (preset.pede === 'url' && !entrada.url?.trim()) {
+    return { problema: erro('backend.urlRequired', 'endereço do backend obrigatório') }
+  }
+
+  const auth = entrada.auth
+  const temCredencial =
+    auth?.mode === 'cookie'
+      ? Boolean(auth.cookiePath?.trim())
+      : Boolean(auth?.user?.trim() && auth?.password)
+
+  if (preset.precisaAutenticar && !temCredencial) {
+    return {
+      problema: erro(
+        'backend.authRequired',
+        'o RPC do Bitcoin Core precisa de autenticação: informe o caminho do ' +
+          'arquivo .cookie do nó, ou usuário e senha do rpcauth',
+      ),
+    }
+  }
+
+  const porta = Number(entrada.port ?? preset.portaPadrao?.[rede])
+  return {
+    montado: {
+      kind: preset.kind,
+      url: preset.url({ host: entrada.host?.trim(), port: porta, url: entrada.url }, rede),
+      isPublic: entrada.isPublic ?? preset.isPublic,
+      preset: id,
+      label: entrada.label?.trim() || null,
+      credenciais: temCredencial
+        ? JSON.stringify(
+            auth!.mode === 'cookie'
+              ? { cookiePath: auth!.cookiePath!.trim() }
+              : { user: auth!.user!.trim(), password: auth!.password },
+          )
+        : null,
+    },
+  }
 }
 
 const ACEITOS: BackendKind[] = ['esplora', 'electrum', 'core']
@@ -100,8 +218,12 @@ export async function listarBackends(
     is_public: boolean
     network: Network
     user_id: string | null
+    preset: PresetId | null
+    label: string | null
+    tem_credencial: boolean
   }>(
-    `SELECT id, kind, url, is_public, network, user_id
+    `SELECT id, kind, url, is_public, network, user_id, preset, label,
+            credentials_encrypted IS NOT NULL AS tem_credencial
        FROM backends
       WHERE (user_id IS NULL OR user_id = $1)
         AND ($2::text IS NULL OR network = $2)
@@ -116,6 +238,9 @@ export async function listarBackends(
     isPublic: r.is_public,
     network: r.network,
     scope: r.user_id === null ? 'global' : 'own',
+    preset: r.preset,
+    label: r.label,
+    hasCredentials: r.tem_credencial,
   }))
 }
 
@@ -125,16 +250,36 @@ export async function criarBackend(
   url: string,
   isPublic: boolean,
   network: Network,
+  extras: { preset?: PresetId | null; label?: string | null; credenciais?: string | null } = {},
 ): Promise<BackendResumo> {
+  const cifrada = extras.credenciais
+    ? seal(extras.credenciais, loadConfig().masterKeyHex)
+    : null
+
   const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO backends (user_id, kind, url, is_public, network)
-     VALUES ($1,$2,$3,$4,$5)
+    `INSERT INTO backends (user_id, kind, url, is_public, network, preset, label,
+                           credentials_encrypted)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      ON CONFLICT (user_id, url, network)
-     DO UPDATE SET is_public = EXCLUDED.is_public, kind = EXCLUDED.kind
+     DO UPDATE SET is_public = EXCLUDED.is_public, kind = EXCLUDED.kind,
+                   preset = EXCLUDED.preset, label = EXCLUDED.label,
+                   -- credencial nova só substitui a antiga quando veio uma
+                   credentials_encrypted = COALESCE(EXCLUDED.credentials_encrypted,
+                                                    backends.credentials_encrypted)
      RETURNING id`,
-    [userId, kind, url, isPublic, network],
+    [userId, kind, url, isPublic, network, extras.preset ?? null, extras.label ?? null, cifrada],
   )
-  return { id: Number(rows[0]!.id), kind, url, isPublic, network, scope: 'own' }
+  return {
+    id: Number(rows[0]!.id),
+    kind,
+    url,
+    isPublic,
+    network,
+    scope: 'own',
+    preset: extras.preset ?? null,
+    label: extras.label ?? null,
+    hasCredentials: cifrada !== null,
+  }
 }
 
 /**

@@ -135,6 +135,27 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'error.wallet.networkMismatch':
       'Esta chave ou endereço é de {rede_da_chave}, e a fonte escolhida {nome_do_backend} vigia {rede_do_backend}.',
     'error.wallet.backendNotFound': 'O backend escolhido não existe, ou não é seu.',
+    'backends.preset': 'Fonte',
+    'backends.host': 'Host',
+    'backends.port': 'Porta',
+    'backends.labelField': 'Apelido (opcional)',
+    'backends.auth': 'Autenticação',
+    'backends.authCookie': 'arquivo .cookie',
+    'backends.authUserPass': 'usuário e senha',
+    'backends.cookiePath': 'Caminho do .cookie',
+    'backends.user': 'Usuário do RPC',
+    'backends.password': 'Senha do RPC',
+    'backends.credentialNote':
+      'A credencial é cifrada com a chave-mestra do servidor e nunca volta numa ' +
+      'resposta da API. Quem alcança o RPC do seu nó pode pará-lo.',
+    'backends.dockerHint':
+      'Este watchtower roda em container: localhost aqui é o próprio container, não a sua máquina. Use host.docker.internal.',
+    'error.backend.unknownPreset': 'Não conheço a fonte "{preset}". Escolha uma do catálogo.',
+    'error.backend.hostRequired': 'Informe o host da fonte.',
+    'error.backend.portRequired': 'Informe a porta da fonte.',
+    'error.backend.portRange': 'Porta {porta} fora da faixa. Use um número entre 1 e 65535.',
+    'error.backend.authRequired':
+      'O RPC do Bitcoin Core precisa de autenticação: informe o caminho do arquivo .cookie do nó, ou usuário e senha do rpcauth.',
     'error.wallet.notFound': 'Esta carteira não existe, ou não é sua.',
     'error.wallet.mustArchiveFirst':
       'Arquive a carteira antes de apagá-la. Arquivar já a tira da tela e do worker, e dá para voltar atrás.',
@@ -327,6 +348,27 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'error.wallet.networkMismatch':
       'This key or address is for {rede_da_chave}, and the chosen source {nome_do_backend} watches {rede_do_backend}.',
     'error.wallet.backendNotFound': 'That backend does not exist, or is not yours.',
+    'backends.preset': 'Source',
+    'backends.host': 'Host',
+    'backends.port': 'Port',
+    'backends.labelField': 'Nickname (optional)',
+    'backends.auth': 'Authentication',
+    'backends.authCookie': '.cookie file',
+    'backends.authUserPass': 'user and password',
+    'backends.cookiePath': 'Path to .cookie',
+    'backends.user': 'RPC user',
+    'backends.password': 'RPC password',
+    'backends.credentialNote':
+      'The credential is encrypted with the server master key and never comes back ' +
+      'in an API response. Whoever reaches your node RPC can stop it.',
+    'backends.dockerHint':
+      'This watchtower runs in a container: localhost here is the container itself, not your machine. Use host.docker.internal.',
+    'error.backend.unknownPreset': 'I do not know the source "{preset}". Pick one from the catalogue.',
+    'error.backend.hostRequired': 'Give the host of the source.',
+    'error.backend.portRequired': 'Give the port of the source.',
+    'error.backend.portRange': 'Port {porta} is out of range. Use a number between 1 and 65535.',
+    'error.backend.authRequired':
+      'The Bitcoin Core RPC needs authentication: give the path to the node .cookie file, or the rpcauth user and password.',
     'error.wallet.notFound': 'That wallet does not exist, or is not yours.',
     'error.wallet.mustArchiveFirst':
       'Archive the wallet before deleting it. Archiving already takes it off the screen and off the worker, and can be reversed.',
