@@ -5,6 +5,7 @@ import { AlertFeed } from '../components/AlertFeed'
 import { AddWallet } from '../components/AddWallet'
 import { LangToggle } from '../components/LangToggle'
 import { WalletCard } from '../components/WalletCard'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Channels } from '../components/Channels'
 import { Search } from '../components/Search'
 import { render } from '../lib/i18n'
@@ -81,6 +82,11 @@ export function Dashboard({
   const [wallets, setWallets] = useState<Wallet[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [abrindoForm, setAbrindoForm] = useState(false)
+  // As arquivadas moram numa lista à parte e só são buscadas quando alguém
+  // pede: fora da tela, fora do total, e fora do worker.
+  const [arquivadas, setArquivadas] = useState<Wallet[]>([])
+  const [vendoArquivadas, setVendoArquivadas] = useState(false)
+  const [paraApagar, setParaApagar] = useState<Wallet | null>(null)
   const [carregado, setCarregado] = useState(false)
 
   const recarregar = useCallback(async () => {
@@ -88,6 +94,10 @@ export function Dashboard({
     setWallets(w)
     setAlerts(a)
     setCarregado(true)
+  }, [])
+
+  const recarregarArquivadas = useCallback(async () => {
+    setArquivadas(await api.wallets(true))
   }, [])
 
   useEffect(() => {
@@ -251,9 +261,72 @@ export function Dashboard({
                 catalog={catalog}
                 lang={lang}
                 onScan={() => void api.scanPrivacy(w.id).then(recarregar)}
+                onArchive={() =>
+                  void api
+                    .archiveWallet(w.id)
+                    .then(() => Promise.all([recarregar(), recarregarArquivadas()]))
+                }
               />
             ))}
           </div>
+
+          {!semCarteira && (
+            <div>
+              <Button
+                variant="ghost"
+                aria-expanded={vendoArquivadas}
+                onClick={() => {
+                  setVendoArquivadas(v => !v)
+                  void recarregarArquivadas()
+                }}
+              >
+                {render(catalog, 'wallets.archivedToggle', {}, lang)}
+              </Button>
+
+              {vendoArquivadas && (
+                <div className="mt-3 grid gap-5 xl:grid-cols-2">
+                  {arquivadas.length === 0 ? (
+                    <p className="font-prose text-sm text-faint">
+                      {render(catalog, 'wallets.archivedEmpty', {}, lang)}
+                    </p>
+                  ) : (
+                    arquivadas.map(w => (
+                      <WalletCard
+                        key={w.id}
+                        wallet={w}
+                        catalog={catalog}
+                        lang={lang}
+                        onUnarchive={() =>
+                          void api
+                            .unarchiveWallet(w.id)
+                            .then(() => Promise.all([recarregar(), recarregarArquivadas()]))
+                        }
+                        onDelete={() => setParaApagar(w)}
+                      />
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {paraApagar && (
+            <ConfirmDialog
+              label={paraApagar.label}
+              catalog={catalog}
+              lang={lang}
+              onCancel={() => setParaApagar(null)}
+              onConfirm={confirmado =>
+                void api
+                  .removeWallet(paraApagar.id, confirmado)
+                  .then(() => {
+                    setParaApagar(null)
+                    return Promise.all([recarregar(), recarregarArquivadas()])
+                  })
+                  .catch(() => setParaApagar(null))
+              }
+            />
+          )}
         </aside>
 
         {/* o que ele viu */}

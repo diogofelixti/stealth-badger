@@ -26,11 +26,17 @@ export function WalletCard({
   catalog,
   lang,
   onScan,
+  onArchive,
+  onUnarchive,
+  onDelete,
 }: {
   wallet: Wallet
   catalog: Catalog
   lang: Lang
   onScan?: () => void
+  onArchive?: () => void
+  onUnarchive?: () => void
+  onDelete?: () => void
 }) {
   const [moedasAbertas, setMoedasAbertas] = useState(false)
 
@@ -167,6 +173,34 @@ export function WalletCard({
           <UtxoTable walletId={wallet.id} catalog={catalog} lang={lang} />
         )}
       </div>
+
+      {/* Arquivar é a ação de todo dia: tira da tela e do worker, e volta
+          atrás. Apagar só aparece depois de arquivada, e é a única ação em
+          vermelho da carteira. */}
+      {(onArchive || onUnarchive) && (
+        <div className="mt-[10px] flex flex-wrap gap-2">
+          {wallet.archivedAt ? (
+            <>
+              {onUnarchive && (
+                <Button variant="ghost" onClick={onUnarchive}>
+                  {render(catalog, 'wallets.unarchive', {}, lang)}
+                </Button>
+              )}
+              {onDelete && (
+                <Button variant="danger" onClick={onDelete}>
+                  {render(catalog, 'wallets.delete', {}, lang)}
+                </Button>
+              )}
+            </>
+          ) : (
+            onArchive && (
+              <Button variant="ghost" onClick={onArchive}>
+                {render(catalog, 'wallets.archive', {}, lang)}
+              </Button>
+            )
+          )}
+        </div>
+      )}
 
       {/* Por onde *esta* carteira é vigiada. O selo do topo fala da sessão
           inteira e não distingue uma carteira da outra; aqui é onde o

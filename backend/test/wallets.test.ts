@@ -739,3 +739,157 @@ describe('POST /api/wallets — tipo de script declarado', () => {
     expect(res.json().code).toBe('wallet.scriptTypeWithAddress')
   })
 })
+
+describe('arquivar, desarquivar e apagar', () => {
+  async function comCarteira(): Promise<{
+    app: ReturnType<typeof buildApp>
+    cookie: string
+    id: number
+  }> {
+    process.env.NETWORK = 'mainnet'
+    const { app, cookie } = await loggedInApp()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre', key: ZPUB },
+    })
+    return { app, cookie, id: res.json().id }
+  }
+
+  it('arquivada some da lista e aparece em ?archived=true', async () => {
+    const { app, cookie, id } = await comCarteira()
+
+    const arquivar = await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${id}/archive`,
+      cookies: { sb_session: cookie },
+    })
+    expect(arquivar.statusCode).toBe(200)
+
+    const lista = await app.inject({
+      method: 'GET',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+    })
+    expect(lista.json()).toHaveLength(0)
+
+    const arquivadas = await app.inject({
+      method: 'GET',
+      url: '/api/wallets?archived=true',
+      cookies: { sb_session: cookie },
+    })
+    expect(arquivadas.json()).toHaveLength(1)
+    expect(arquivadas.json()[0].archivedAt).not.toBeNull()
+  })
+
+  it('desarquivar devolve a carteira à lista', async () => {
+    const { app, cookie, id } = await comCarteira()
+    await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${id}/archive`,
+      cookies: { sb_session: cookie },
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${id}/unarchive`,
+      cookies: { sb_session: cookie },
+    })
+
+    expect(res.statusCode).toBe(200)
+    const lista = await app.inject({
+      method: 'GET',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+    })
+    expect(lista.json()).toHaveLength(1)
+  })
+
+  it('recusa apagar carteira que não foi arquivada', async () => {
+    const { app, cookie, id } = await comCarteira()
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/wallets/${id}`,
+      cookies: { sb_session: cookie },
+      payload: { confirm: 'Cofre' },
+    })
+
+    expect(res.statusCode).toBe(409)
+    expect(res.json().code).toBe('wallet.mustArchiveFirst')
+  })
+
+  it('recusa apagar quando o rótulo digitado não bate', async () => {
+    const { app, cookie, id } = await comCarteira()
+    await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${id}/archive`,
+      cookies: { sb_session: cookie },
+    })
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/wallets/${id}`,
+      cookies: { sb_session: cookie },
+      payload: { confirm: 'cofre' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('wallet.confirmMismatch')
+  })
+
+  // A exceção deliberada ao princípio 5: append-only protege a história
+  // contra reescrita, não contra o dono pedindo para esquecer.
+  it('apaga a carteira e o log dela quando o rótulo bate', async () => {
+    const { app, cookie, id } = await comCarteira()
+    await pool.query(
+      `INSERT INTO chain_events (wallet_id, type, payload, height)
+       VALUES ($1, 'utxo_created', '{}'::jsonb, 1)`,
+      [id],
+    )
+    await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${id}/archive`,
+      cookies: { sb_session: cookie },
+    })
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/wallets/${id}`,
+      cookies: { sb_session: cookie },
+      payload: { confirm: 'Cofre' },
+    })
+
+    expect(res.statusCode).toBe(204)
+    const { rows } = await pool.query('SELECT count(*) FROM chain_events WHERE wallet_id = $1', [id])
+    expect(Number(rows[0]!.count)).toBe(0)
+    const carteiras = await pool.query('SELECT count(*) FROM wallets WHERE id = $1', [id])
+    expect(Number(carteiras.rows[0]!.count)).toBe(0)
+  })
+
+  it('não deixa apagar carteira de outro usuário', async () => {
+    const { app, cookie, id } = await comCarteira()
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'outro@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'outro@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const outro = login.cookies.find(c => c.name === 'sb_session')!.value
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/wallets/${id}`,
+      cookies: { sb_session: outro },
+      payload: { confirm: 'Cofre' },
+    })
+
+    expect(res.statusCode).toBe(404)
+    void cookie
+  })
+})

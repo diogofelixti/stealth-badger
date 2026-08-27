@@ -269,3 +269,28 @@ describe('tick — origem dos fundos', () => {
     expect(chamadas).toBe(1)
   })
 })
+
+describe('tick — carteira arquivada', () => {
+  // A falha silenciosa deste item: arquivar tira da tela, e sem o WHERE a
+  // carteira continua consultando o explorador público de trás da cortina —
+  // o oposto do que quem arquivou pediu.
+  it('não sincroniza carteira arquivada', async () => {
+    await pool.query('UPDATE wallets SET archived_at = now()')
+
+    const r = await tick({ adapterFactory: () => adapterWithDust() })
+
+    expect(r.walletsSynced).toBe(0)
+    const { rows } = await pool.query('SELECT count(*) FROM chain_events')
+    expect(Number(rows[0]!.count)).toBe(0)
+  })
+
+  it('volta a sincronizar depois de desarquivada', async () => {
+    await pool.query('UPDATE wallets SET archived_at = now()')
+    await tick({ adapterFactory: () => adapterWithDust() })
+
+    await pool.query('UPDATE wallets SET archived_at = NULL')
+    const r = await tick({ adapterFactory: () => adapterWithDust() })
+
+    expect(r.walletsSynced).toBe(1)
+  })
+})

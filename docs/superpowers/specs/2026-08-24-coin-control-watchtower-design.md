@@ -264,6 +264,12 @@ divergir na altura `H`: marcar todos os eventos com `height >= H` como revertido
 (campo `rolled_back_by`), reprojetar UTXO e saldo, e emitir um alerta próprio de reorg.
 O log append-only nunca é editado nem apagado.
 
+**A única exceção, escrita em 27/08:** apagar uma carteira apaga o log dela, em cascade.
+Append-only protege a história contra reescrita, não contra o dono pedindo para esquecer
+o próprio xpub — e por isso a ação de todo dia é *arquivar*, que tira a carteira da tela
+e do worker sem tocar no log, enquanto *apagar* exige carteira já arquivada e o rótulo
+digitado por extenso. A §7.1 da especificação tem o contrato.
+
 ---
 
 ## 7. Modelo de dados

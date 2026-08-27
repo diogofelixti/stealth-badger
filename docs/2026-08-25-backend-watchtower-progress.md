@@ -1509,10 +1509,65 @@ larguras:
   verdes; o que o pegou foi olhar a tela. Teste de CSS aplicado exigiria navegador na
   suíte, e isso não cabe na véspera — a conferência visual fica no roteiro de regressão.
 
+## Rodada 26 — Item 4: arquivar, e apagar de verdade quando for o caso
+
+### O que foi construído
+
+- Migração `010_wallet_archived.sql`: coluna `archived_at` e índice parcial das não
+  arquivadas.
+- `POST /api/wallets/:id/archive` e `/unarchive`; `DELETE /api/wallets/:id` com
+  `confirm` — 409 `wallet.mustArchiveFirst` se não estiver arquivada, 400
+  `wallet.confirmMismatch` se o rótulo digitado não bater, 404 se não for do usuário.
+- `GET /api/wallets` passou a devolver as vigiadas, `?archived=true` as arquivadas, e
+  cada linha diz `archivedAt`.
+- O `tick()` só busca carteira com `archived_at IS NULL`.
+- `ConfirmDialog.tsx`, que só libera apagar quando o rótulo digitado é exatamente o da
+  carteira, e o painel ganhou "ver arquivadas", com desarquivar e apagar.
+- As doze frases novas entraram nas duas línguas.
+- **A exceção ao princípio 5 está escrita** na §7.1 da especificação e no design: apagar
+  uma carteira apaga o log dela, porque append-only protege a história contra reescrita,
+  não contra o dono pedindo para esquecer o próprio xpub.
+
+### O que quebrou a premissa
+
+- **A suíte do frontend passou nos 106 testes com o estilo dos botões apagado** — o
+  defeito da rodada anterior. Aqui a lição virou método: **a conferência do item 4 foi
+  feita por navegador**, dirigindo a tela de verdade. O `getByText('ARQUIVAR')` não achou
+  nada: a caixa alta é `text-transform` no CSS, e o texto no DOM continua "Arquivar".
+  Quem confere pela tela precisa lembrar que maiúscula visual não é maiúscula no DOM.
+- **A suíte inteira ficou intermitente sob carga.** Duas execuções do backend falharam
+  com casos diferentes — uma com dois, outra com `cadastra a carteira e guarda o xpub
+  cifrado` estourando os 20s — enquanto o Fulcrum indexava e o Sparrow estava aberto:
+  **`load average` 9,32**, e a suíte levando **295s contra os 139s** de uma execução
+  tranquila. Rodado isolado, `wallets.test.ts` passa os 34 casos em 39s. Não é defeito do
+  código, e é o mesmo gatilho da intermitência já anotada.
+
+### O que ficou conferido
+
+Pelo navegador, com a sessão real:
+
+| O que | Medido |
+|---|---|
+| arquivar | a carteira sai da lista e do total; o `tick` deixa de sincronizá-la (teste) |
+| ver arquivadas | seção à parte, com `desarquivar` e `apagar de vez` |
+| rótulo errado | `apagar` continua **desabilitado** — conferido no navegador e no teste |
+| cancelar | fecha sem apagar |
+| desarquivar | a carteira volta à lista, e a lista de arquivadas fica vazia |
+
+### O que ficou de dívida
+
+- **A tela não avisa o que a API recusou.** O `catch` do diálogo fecha calado quando o
+  backend devolve 400 ou 409 — os dois casos que a tela já impede de acontecer, mas
+  fechar sem dizer nada é o tipo de silêncio que este projeto não aceita em outro lugar.
+- **Apagar não pede senha.** A confirmação é o rótulo digitado, como o backlog definiu;
+  quem tiver a sessão aberta apaga. Está coerente com o resto do produto, e fica
+  registrado por ser decisão, não esquecimento.
+
 ## Estado em 27/08
 
-- backend: 37 arquivos de teste, **432 testes**
-- frontend: 13 arquivos de teste, **106 testes**
+- backend: 37 arquivos de teste, **440 testes**
+- frontend: 14 arquivos de teste, **112 testes**
+- migrações aplicadas: `001` a `010`
 - `npx tsc --noEmit` limpo nos dois
 - três backends de cadeia: Esplora, Electrum e **Bitcoin Core**, escolhidos por carteira
 - o resto igual ao estado de 26/08, abaixo

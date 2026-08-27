@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { WalletCard } from '../src/components/WalletCard'
 import type { Wallet } from '../src/lib/api'
 
@@ -213,5 +213,46 @@ describe('WalletCard', () => {
     }
     render(<WalletCard wallet={parcial} catalog={catalogo} lang="pt" />)
     expect(screen.getByText(/412\.850/)).toBeDefined()
+  })
+})
+
+describe('WalletCard — arquivar e apagar', () => {
+  const comAcoes = {
+    ...catalogo,
+    'wallets.archive': 'Arquivar',
+    'wallets.unarchive': 'Desarquivar',
+    'wallets.delete': 'Apagar de vez',
+    'wallets.archived': 'arquivada',
+  }
+
+  it('oferece arquivar uma carteira vigiada', () => {
+    const arquivar = vi.fn()
+    render(
+      <WalletCard wallet={base} catalog={comAcoes} lang="pt" onArchive={arquivar} />,
+    )
+
+    fireEvent.click(screen.getByText('Arquivar'))
+
+    expect(arquivar).toHaveBeenCalled()
+  })
+
+  it('a arquivada troca arquivar por desarquivar e apagar', () => {
+    const desarquivar = vi.fn()
+    render(
+      <WalletCard
+        wallet={{ ...base, archivedAt: '2026-08-27T18:00:00Z' }}
+        catalog={comAcoes}
+        lang="pt"
+        onArchive={vi.fn()}
+        onUnarchive={desarquivar}
+        onDelete={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByText('Arquivar')).toBeNull()
+    expect(screen.getByText('Apagar de vez')).toBeDefined()
+    fireEvent.click(screen.getByText('Desarquivar'))
+
+    expect(desarquivar).toHaveBeenCalled()
   })
 })

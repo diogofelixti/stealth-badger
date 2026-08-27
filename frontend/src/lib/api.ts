@@ -48,6 +48,8 @@ export interface Wallet {
   privacyGrade: string | null
   privacyScannedAt: string | null
   privacyScanning?: boolean
+  /** preenchida quando a carteira foi arquivada; o worker a ignora */
+  archivedAt?: string | null
 }
 
 export interface PrivacyFinding {
@@ -178,7 +180,22 @@ export const api = {
     }),
   logout: () => request<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
   me: () => request<Me>('/api/auth/me'),
-  wallets: () => request<Wallet[]>('/api/wallets'),
+  wallets: (arquivadas = false) =>
+    request<Wallet[]>('/api/wallets' + (arquivadas ? '?archived=true' : '')),
+  archiveWallet: (id: number) =>
+    request<Wallet>(`/api/wallets/${id}/archive`, { method: 'POST' }),
+  unarchiveWallet: (id: number) =>
+    request<Wallet>(`/api/wallets/${id}/unarchive`, { method: 'POST' }),
+  removeWallet: async (id: number, confirm: string) => {
+    const res = await fetch(`/api/wallets/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm }),
+    })
+    if (!res.ok) throw await res.json()
+    return { ok: true as const }
+  },
   addWallet: (
     label: string,
     entrada: { key?: string; address?: string; scriptType?: string },

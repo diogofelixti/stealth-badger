@@ -261,6 +261,26 @@ produz exatamente o mesmo estado.
 
 Saldo é a soma dos UTXOs não gastos.
 
+### 7.1 A exceção: o dono pedindo para esquecer
+
+Há **uma** exceção ao append-only, e ela é deliberada: **apagar uma carteira apaga o log
+dela**, em cascade — `addresses`, `utxos`, `chain_events` e `alerts`.
+
+A razão: *append-only protege a história contra reescrita, não contra o dono pedindo
+para esquecer*. Um watchtower de privacidade que não deixa alguém remover o próprio
+xpub do banco contraria a própria tese que defende.
+
+Por isso a porta é estreita, e a ação de todo dia é outra:
+
+| Ação | O que faz | Reversível |
+|---|---|---|
+| **Arquivar** | `archived_at = now()`. Sai da lista, sai do total e **o worker para de consultá-la** | sim |
+| **Desarquivar** | `archived_at = NULL`. Volta a sincronizar no ciclo seguinte | sim |
+| **Apagar** | só depois de arquivada, e só digitando o **rótulo exato** da carteira | **não** |
+
+Nenhuma outra escrita no log é apagada nem editada: reorg continua gerando evento
+compensatório, e nunca `DELETE`.
+
 ---
 
 ## 8. Motor de alertas

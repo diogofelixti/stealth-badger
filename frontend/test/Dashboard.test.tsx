@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import type { Alert, Catalog, Me, Wallet } from '../src/lib/api'
 
-const wallets = vi.fn<() => Promise<Wallet[]>>()
+const wallets = vi.fn<(arquivadas?: boolean) => Promise<Wallet[]>>()
 const alerts = vi.fn<() => Promise<Alert[]>>()
 // O painel renderiza a seção de canais, que busca sozinha. Sem simular, o
 // fetch real falha em jsdom e a atualização de estado chega depois das
@@ -16,7 +16,7 @@ vi.mock('../src/lib/api', async importOriginal => {
     ...real,
     api: {
       ...real.api,
-      wallets: () => wallets(),
+      wallets: (arquivadas?: boolean) => wallets(arquivadas),
       alerts: () => alerts(),
       channels: () => channels(),
       search: () => search(),
@@ -259,5 +259,28 @@ describe('Dashboard — postura com backends diferentes', () => {
     montar()
 
     await waitFor(() => expect(screen.getByText(/2 backends/)).toBeDefined())
+  })
+})
+
+describe('Dashboard — carteira arquivada', () => {
+  // Arquivada fora da lista e fora do total: somá-la seria anunciar um saldo
+  // que o usuário pediu para tirar da frente.
+  it('não conta a carteira arquivada no total', async () => {
+    const arquivada: Wallet = {
+      ...CARTEIRA,
+      id: 9,
+      label: 'Antiga',
+      balanceSats: '900000',
+      archivedAt: '2026-08-27T18:00:00Z',
+    }
+    wallets.mockImplementation(async (arq?: boolean) =>
+      arq ? [arquivada] : [{ ...CARTEIRA, balanceSats: '50000' }],
+    )
+    montar()
+
+    await waitFor(() => expect(screen.getByText(/saldo total/i)).toBeDefined())
+    expect(screen.getByText('50.000')).toBeDefined()
+    expect(screen.queryByText('950.000')).toBeNull()
+    expect(screen.queryByText('900.000')).toBeNull()
   })
 })

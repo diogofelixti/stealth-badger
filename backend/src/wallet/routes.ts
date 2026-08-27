@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyReply } from 'fastify'
 import { erro } from '../http/erro'
 import type { ChainAdapter } from '../chain/types'
 import { createAdapter, type BackendRow } from '../chain/adapter'
@@ -311,8 +311,13 @@ export function registerWalletRoutes(
     })
   })
 
-  app.get('/api/wallets', async (req, reply) => {
+  app.get<{ Querystring: { archived?: string } }>('/api/wallets', async (req, reply) => {
     if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
+
+    // Uma lista só, com uma chave: a tela pede as vigiadas ou as arquivadas,
+    // e nunca as duas misturadas — arquivada no meio das outras seria a
+    // carteira que o usuário tirou da frente voltando sozinha.
+    const arquivadas = req.query.archived === 'true'
 
     const { rows } = await pool.query(
       `SELECT w.id, w.label, w.kind, w.script_type AS "scriptType", w.network,
@@ -324,7 +329,7 @@ export function registerWalletRoutes(
                  WHERE a.wallet_id = w.id ORDER BY a.id LIMIT 1
               ) END AS address,
               w.sync_progress AS "syncProgress", w.sync_height AS "syncHeight",
-              w.sync_error AS "syncError",
+              w.sync_error AS "syncError", w.archived_at AS "archivedAt",
               b.is_public AS "backendIsPublic", b.url AS "backendUrl",
               p.score AS "privacyScore", p.grade AS "privacyGrade",
               p.scanned_at AS "privacyScannedAt",
@@ -350,8 +355,9 @@ export function registerWalletRoutes(
             ORDER BY ps.scanned_at DESC, ps.id DESC LIMIT 1
          ) p ON true
         WHERE w.user_id = $1
+          AND (w.archived_at IS NOT NULL) = $2
         ORDER BY w.created_at DESC`,
-      [req.userId],
+      [req.userId, arquivadas],
     )
     // Se a análise está correndo é estado de processo, não de banco: vem do
     // registro em memória para que a tela não precise inferir pelo relógio.
@@ -359,4 +365,110 @@ export function registerWalletRoutes(
       rows.map(r => ({ ...r, privacyScanning: scanEmAndamento(Number(r.id)) })),
     )
   })
+
+  app.post<{ Params: { id: string } }>(
+    '/api/wallets/:id/archive',
+    async (req, reply) => arquivar(req, reply, true),
+  )
+
+  app.post<{ Params: { id: string } }>(
+    '/api/wallets/:id/unarchive',
+    async (req, reply) => arquivar(req, reply, false),
+  )
+
+  /**
+   * Apagar de verdade.
+   *
+   * É a exceção deliberada ao princípio 5 — `chain_events` é append-only e
+   * nunca sofre DELETE. A razão: append-only protege a história contra
+   * reescrita, não contra o dono pedindo para esquecer. Um watchtower de
+   * privacidade que não deixa alguém remover o próprio xpub do banco
+   * contraria a própria tese.
+   *
+   * Por isso a porta é estreita: só carteira já arquivada, e só depois de
+   * digitar o rótulo exato. Arquivar é a ação de todo dia; esta é a de uma
+   * vez só.
+   */
+  app.delete<{ Params: { id: string }; Body: { confirm?: string } }>(
+    '/api/wallets/:id',
+    async (req, reply) => {
+      if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
+
+      const alvo = await carteiraDoUsuario(Number(req.params.id), req.userId)
+      if (!alvo) {
+        return reply
+          .code(404)
+          .send(erro('wallet.notFound', 'esta carteira não existe, ou não é sua'))
+      }
+
+      if (!alvo.archived_at) {
+        return reply.code(409).send(
+          erro(
+            'wallet.mustArchiveFirst',
+            'arquive a carteira antes de apagá-la. Arquivar já a tira da tela ' +
+              'e do worker, e dá para voltar atrás',
+          ),
+        )
+      }
+
+      if ((req.body?.confirm ?? '') !== alvo.label) {
+        return reply.code(400).send(
+          erro(
+            'wallet.confirmMismatch',
+            'para apagar, digite o rótulo exato da carteira: ' + alvo.label,
+            { rotulo: alvo.label },
+          ),
+        )
+      }
+
+      // O cascata de `wallets` leva junto endereços, UTXOs, eventos e alertas.
+      await pool.query('DELETE FROM wallets WHERE id = $1', [alvo.id])
+      return reply.code(204).send()
+    },
+  )
+
+}
+
+interface CarteiraDoDono {
+  id: number
+  label: string
+  archived_at: Date | null
+}
+
+async function carteiraDoUsuario(
+  id: number,
+  userId: number,
+): Promise<CarteiraDoDono | null> {
+  if (!Number.isFinite(id)) return null
+  const { rows } = await pool.query<CarteiraDoDono>(
+    'SELECT id, label, archived_at FROM wallets WHERE id = $1 AND user_id = $2',
+    [id, userId],
+  )
+  return rows[0] ?? null
+}
+
+/**
+ * Arquivar tira da lista e do ciclo do worker; desarquivar devolve as duas
+ * coisas. O log não é tocado nem numa direção nem na outra.
+ */
+async function arquivar(
+  req: { userId?: number | null; params: { id: string } },
+  reply: FastifyReply,
+  arquivada: boolean,
+): Promise<unknown> {
+  if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
+
+  const alvo = await carteiraDoUsuario(Number(req.params.id), req.userId)
+  if (!alvo) {
+    return reply
+      .code(404)
+      .send(erro('wallet.notFound', 'esta carteira não existe, ou não é sua'))
+  }
+
+  const { rows } = await pool.query<{ id: string; label: string; archivedAt: Date | null }>(
+    `UPDATE wallets SET archived_at = $2 WHERE id = $1
+     RETURNING id, label, archived_at AS "archivedAt"`,
+    [alvo.id, arquivada ? new Date() : null],
+  )
+  return reply.send(rows[0])
 }

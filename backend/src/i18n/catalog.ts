@@ -81,6 +81,18 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallets.watchOnly':
       'Somente chaves públicas. O Stealth Badger é watch-only e recusa qualquer ' +
       'material que permita gastar.',
+    'wallets.archive': 'Arquivar',
+    'wallets.unarchive': 'Desarquivar',
+    'wallets.archived': 'arquivada',
+    'wallets.archivedToggle': 'Ver arquivadas',
+    'wallets.archivedEmpty': 'Nenhuma carteira arquivada.',
+    'wallets.delete': 'Apagar de vez',
+    'wallets.deleteTitle': 'Apagar {label}?',
+    'wallets.deleteNote':
+      'Apaga a chave, o log de eventos e os alertas desta carteira. Não dá para ' +
+      'voltar atrás. Arquivar já tira a carteira da tela e do worker, e é reversível.',
+    'wallets.deleteConfirmLabel': 'Digite o rótulo exato para confirmar',
+    'wallets.cancel': 'Cancelar',
     'wallets.scriptType': 'Tipo de script',
     'wallets.scriptTypeAuto': 'descobrir pela cadeia',
     'wallets.scriptTypeNote':
@@ -123,6 +135,11 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'error.wallet.networkMismatch':
       'Esta chave ou endereço é de {rede_da_chave}, e a fonte escolhida {nome_do_backend} vigia {rede_do_backend}.',
     'error.wallet.backendNotFound': 'O backend escolhido não existe, ou não é seu.',
+    'error.wallet.notFound': 'Esta carteira não existe, ou não é sua.',
+    'error.wallet.mustArchiveFirst':
+      'Arquive a carteira antes de apagá-la. Arquivar já a tira da tela e do worker, e dá para voltar atrás.',
+    'error.wallet.confirmMismatch':
+      'Para apagar, digite o rótulo exato da carteira: {rotulo}.',
     'error.wallet.unknownScriptType':
       'Não conheço o tipo de script "{tipo}". Aceito {aceitos}.',
     'error.wallet.scriptTypeConflict':
@@ -255,6 +272,19 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallets.watchOnly':
       'Public keys only. Stealth Badger is watch-only and refuses anything that ' +
       'could spend.',
+    'wallets.archive': 'Archive',
+    'wallets.unarchive': 'Unarchive',
+    'wallets.archived': 'archived',
+    'wallets.archivedToggle': 'See archived',
+    'wallets.archivedEmpty': 'No archived wallet.',
+    'wallets.delete': 'Delete for good',
+    'wallets.deleteTitle': 'Delete {label}?',
+    'wallets.deleteNote':
+      'Deletes the key, the event log and the alerts of this wallet. There is no ' +
+      'undo. Archiving already takes the wallet off the screen and off the worker, ' +
+      'and can be reversed.',
+    'wallets.deleteConfirmLabel': 'Type the exact label to confirm',
+    'wallets.cancel': 'Cancel',
     'wallets.scriptType': 'Script type',
     'wallets.scriptTypeAuto': 'discover from the chain',
     'wallets.scriptTypeNote':
@@ -297,6 +327,11 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'error.wallet.networkMismatch':
       'This key or address is for {rede_da_chave}, and the chosen source {nome_do_backend} watches {rede_do_backend}.',
     'error.wallet.backendNotFound': 'That backend does not exist, or is not yours.',
+    'error.wallet.notFound': 'That wallet does not exist, or is not yours.',
+    'error.wallet.mustArchiveFirst':
+      'Archive the wallet before deleting it. Archiving already takes it off the screen and off the worker, and can be reversed.',
+    'error.wallet.confirmMismatch':
+      'To delete, type the wallet label exactly: {rotulo}.',
     'error.wallet.unknownScriptType':
       'I do not know the script type "{tipo}". I accept {aceitos}.',
     'error.wallet.scriptTypeConflict':
