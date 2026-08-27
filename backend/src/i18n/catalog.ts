@@ -53,6 +53,28 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'feed.title': 'Registro',
     'feed.live': 'ao vivo',
     'feed.loadMore': 'Carregar mais',
+    'feed.tipBehind': 'ponta em {height} · sua carteira em {wallet}',
+    'prefs.price': 'Preço do BTC',
+    'prefs.priceNote':
+      'Nenhuma fonte ligada de fábrica. Ligar uma faz este servidor perguntar o preço a ' +
+      'ela: a consulta leva só o par de moedas, sem endereço, sem txid e sem nada que ' +
+      'identifique você, e o IP que aparece é o do servidor, não o seu. Preço não vaza ' +
+      'endereço, e por isso não acende a listra de exposição.',
+    'prefs.currency': 'Moeda',
+    'prefs.fees': 'Estimativa de taxa',
+    'prefs.feeOff': 'desligada',
+    'prefs.feeNode': 'pelo seu nó',
+    'prefs.feeMempool': 'pelo mempool.space',
+    'fees.blocks': '{n} blocos',
+    'fees.next': 'próximo bloco',
+    'error.fees.needsCoreBackend':
+      'A estimativa pelo nó precisa de uma fonte Bitcoin Core cadastrada. Cadastre o seu nó em Configurações, ou escolha outra fonte.',
+    'error.fees.sourceFailed': 'A fonte pública de taxas não respondeu.',
+    'error.chain.tipFailed': 'A fonte não respondeu a altura da ponta.',
+    'error.preferences.unknownPriceSource':
+      'Não conheço a fonte de preço "{fonte}". Aceito {aceitas}.',
+    'error.preferences.unknownFeeSource':
+      'Não conheço a fonte de taxa "{fonte}". Aceito {aceitas}.',
     'nav.panel': 'Painel',
     'nav.wallets': 'Carteiras',
     'nav.alerts': 'Alertas',
@@ -312,6 +334,28 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'feed.title': 'Log',
     'feed.live': 'live',
     'feed.loadMore': 'Load more',
+    'feed.tipBehind': 'tip at {height} · your wallet at {wallet}',
+    'prefs.price': 'BTC price',
+    'prefs.priceNote':
+      'No source is on out of the box. Turning one on makes this server ask it for the ' +
+      'price: the query carries only the currency pair, no address, no txid and nothing ' +
+      'that identifies you, and the IP it sees is the server\'s, not yours. Price does ' +
+      'not leak addresses, and that is why it does not light the exposure stripe.',
+    'prefs.currency': 'Currency',
+    'prefs.fees': 'Fee estimate',
+    'prefs.feeOff': 'off',
+    'prefs.feeNode': 'from your node',
+    'prefs.feeMempool': 'from mempool.space',
+    'fees.blocks': '{n} blocks',
+    'fees.next': 'next block',
+    'error.fees.needsCoreBackend':
+      'The node fee estimate needs a Bitcoin Core source registered. Add your node in Settings, or pick another source.',
+    'error.fees.sourceFailed': 'The public fee source did not answer.',
+    'error.chain.tipFailed': 'The source did not answer the tip height.',
+    'error.preferences.unknownPriceSource':
+      'I do not know the price source "{fonte}". I accept {aceitas}.',
+    'error.preferences.unknownFeeSource':
+      'I do not know the fee source "{fonte}". I accept {aceitas}.',
     'nav.panel': 'Panel',
     'nav.wallets': 'Wallets',
     'nav.alerts': 'Alerts',

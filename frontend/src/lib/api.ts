@@ -10,6 +10,35 @@ export type SyncState = 'pending' | 'importing' | 'synced' | 'degraded' | 'error
  * Sem title nem body: o alerta guarda o tipo e os parâmetros, e o texto é
  * escolhido na hora de exibir, no idioma de quem lê.
  */
+export const FONTES_DE_PRECO = ['coingecko', 'kraken', 'bitstamp', 'coinbase', 'mempool'] as const
+export type FonteDePreco = (typeof FONTES_DE_PRECO)[number]
+
+export interface Preferencias {
+  theme: string
+  currency: string
+  priceSources: FonteDePreco[]
+  feeSource: 'off' | 'node' | 'mempool'
+}
+
+export interface Precos {
+  currency: string
+  sources: { id: FonteDePreco; price: number | null; at: string; error?: string }[]
+  median: number | null
+}
+
+export interface Taxas {
+  source: 'off' | 'node' | 'mempool'
+  blocks: Record<string, number | null> | null
+  at: string
+}
+
+export interface PontaDaCadeia {
+  height: number
+  backendHost: string
+  isPublic: boolean
+  at: string
+}
+
 export interface EventoDeCadeia {
   id: number
   type: string
@@ -223,6 +252,15 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ backendId }),
     }),
+  preferences: () => request<Preferencias>('/api/preferences'),
+  savePreferences: (mudanca: Partial<Preferencias>) =>
+    request<Preferencias>('/api/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(mudanca),
+    }),
+  price: () => request<Precos>('/api/price'),
+  fees: () => request<Taxas>('/api/fees'),
+  chainTip: () => request<PontaDaCadeia>('/api/chain/tip'),
   alertDetail: (id: number) => request<AlertDetail>(`/api/alerts/${id}`),
   /**
    * A transação inteira, na fonte da carteira. **Só sai por clique**: num

@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { AlertDetail } from '../components/AlertDetail'
 import { Channels } from '../components/Channels'
 import { Search } from '../components/Search'
+import { Mercado } from '../components/Mercado'
 import { render } from '../lib/i18n'
 import { Button } from '../components/ui/Button'
 
@@ -59,6 +60,10 @@ export function Dashboard({
   // consultar por conta própria.
   const [fontes, setFontes] = useState<Backend[]>([])
   const [alertaAberto, setAlertaAberto] = useState<Alert | null>(null)
+  // A ponta real da cadeia, perguntada à mesma fonte que a carteira usa. O
+  // rodapé mostrava a maior `sync_height` entre as carteiras como se fosse a
+  // ponta: com o worker atrasado, anunciava altura velha como atual.
+  const [ponta, setPonta] = useState<number | null>(null)
   const [carregado, setCarregado] = useState(false)
 
   const recarregar = useCallback(async () => {
@@ -90,6 +95,13 @@ export function Dashboard({
       .backends()
       .then(setFontes)
       .catch(() => setFontes([]))
+  }, [])
+
+  useEffect(() => {
+    void api
+      .chainTip()
+      .then(t => setPonta(t.height))
+      .catch(() => setPonta(null))
   }, [])
 
   const recarregarArquivadas = useCallback(async () => {
@@ -231,6 +243,8 @@ export function Dashboard({
           {!semCarteira && (
             <>
               <div className="h-px bg-line" />
+              <Mercado catalog={catalog} lang={lang} />
+              <div className="h-px bg-line" />
               <Search catalog={catalog} lang={lang} />
               <div className="h-px bg-line" />
               <Channels catalog={catalog} lang={lang} />
@@ -351,9 +365,13 @@ export function Dashboard({
             />
           )}
 
-          {altura !== null && (
+          {/* Quando a carteira está atrás da ponta, a tela mostra as duas: um
+              número só esconderia que o worker ainda não chegou lá. */}
+          {(ponta !== null || altura !== null) && (
             <p className="pt-1 text-xs text-faint">
-              {render(catalog, 'feed.tip', { height: altura }, lang)}
+              {ponta !== null && altura !== null && altura < ponta
+                ? render(catalog, 'feed.tipBehind', { height: ponta, wallet: altura }, lang)
+                : render(catalog, 'feed.tip', { height: ponta ?? altura }, lang)}
             </p>
           )}
         </section>

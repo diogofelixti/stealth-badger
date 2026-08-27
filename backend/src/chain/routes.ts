@@ -1,6 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 import { loadConfig, type BackendKind } from '../config'
+import { pool } from '../db/pool'
+import { erro } from '../http/erro'
 import type { Network } from '../wallet/descriptor'
+import { createAdapter, type BackendRow } from './adapter'
+import type { ChainAdapter } from './types'
 import {
   criarBackend,
   listarBackends,
@@ -30,7 +34,77 @@ function redeValida(v: unknown): v is Network {
   return v === 'mainnet' || v === 'signet' || v === 'testnet'
 }
 
-export function registerBackendRoutes(app: FastifyInstance): void {
+export interface BackendRouteOptions {
+  adapterFactory?: (backend: BackendRow) => ChainAdapter
+}
+
+export function registerBackendRoutes(
+  app: FastifyInstance,
+  opts: BackendRouteOptions = {},
+): void {
+  const adapterFactory = opts.adapterFactory ?? createAdapter
+
+  /**
+   * A altura real da ponta, perguntada à fonte que a instância já usa.
+   *
+   * O rodapé do feed mostrava a maior `sync_height` entre as carteiras como se
+   * fosse a ponta: com o worker atrasado, o painel anunciava uma altura velha
+   * como atual. Nenhuma consulta nova a terceiro sai daqui — é a mesma fonte
+   * que a carteira já consulta.
+   */
+  app.get('/api/chain/tip', async (req, reply) => {
+    if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
+
+    const { rows } = await pool.query<{
+      id: string
+      kind: string
+      url: string
+      is_public: boolean
+      network: Network
+      credentials_encrypted: Buffer | null
+      wallet_id: string | null
+    }>(
+      `SELECT b.id, b.kind, b.url, b.is_public, b.network, b.credentials_encrypted,
+              (SELECT w.id FROM wallets w
+                WHERE w.backend_id = b.id AND w.user_id = $1
+                ORDER BY w.id LIMIT 1) AS wallet_id
+         FROM backends b
+        WHERE b.user_id IS NULL OR b.user_id = $1
+        ORDER BY (SELECT count(*) FROM wallets w WHERE w.backend_id = b.id AND w.user_id = $1) DESC,
+                 b.user_id NULLS LAST, b.id
+        LIMIT 1`,
+      [req.userId],
+    )
+    const linha = rows[0]
+    if (!linha) {
+      return reply
+        .code(404)
+        .send(erro('backend.notFound', 'nenhuma fonte de consulta cadastrada'))
+    }
+
+    const adapter = adapterFactory({
+      kind: linha.kind,
+      url: linha.url,
+      isPublic: linha.is_public,
+      network: linha.network,
+      ...(linha.wallet_id ? { walletId: Number(linha.wallet_id) } : {}),
+      credentialsEncrypted: linha.credentials_encrypted,
+    })
+    try {
+      return reply.send({
+        height: await adapter.tipHeight(),
+        backendHost: adapter.capabilities().host,
+        isPublic: linha.is_public,
+        at: new Date().toISOString(),
+      })
+    } catch (err) {
+      return reply
+        .code(502)
+        .send(erro('chain.tipFailed', (err as Error).message))
+    } finally {
+      adapter.close?.()
+    }
+  })
   app.get<{ Querystring: ListarBackendsQuery }>('/api/backends', async (req, reply) => {
     if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
     const { network } = req.query

@@ -11,6 +11,9 @@ import { registerAuthRoutes } from './auth/routes'
 import { registerWalletRoutes } from './wallet/routes'
 import { registerSearchRoutes } from './wallet/search'
 import { registerI18nRoutes } from './i18n/routes'
+import { registerPreferenceRoutes } from './preferences/routes'
+import { registerFeeRoutes } from './fees/routes'
+import { registerPriceRoutes } from './price/routes'
 
 export type AppOptions = WalletRouteOptions & PrivacyRouteOptions & ChannelRouteOptions
 
@@ -21,12 +24,15 @@ export function buildApp(opts: AppOptions = {}): FastifyInstance {
 
   app.get('/api/health', async () => ({ status: 'ok' }))
   registerAuthRoutes(app)
-  registerBackendRoutes(app)
+  registerBackendRoutes(app, opts)
   registerWalletRoutes(app, opts)
   registerSearchRoutes(app)
   registerPrivacyRoutes(app, opts)
   registerCoinControlRoutes(app)
   registerI18nRoutes(app)
+  registerPreferenceRoutes(app)
+  registerFeeRoutes(app)
+  registerPriceRoutes(app)
   registerAlertRoutes(app, opts)
   registerChannelRoutes(app, opts)
 

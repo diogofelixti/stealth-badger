@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api } from '../lib/api'
 import { BackendForm } from '../components/BackendForm'
 import { Channels } from '../components/Channels'
+import { Preferencias } from '../components/Preferencias'
 import { Button } from '../components/ui/Button'
 import { render } from '../lib/i18n'
 import { useDadosDoPainel } from './Layout'
@@ -67,6 +68,10 @@ export function SettingsPage() {
           </Button>
         )}
       </section>
+
+      <div className="h-px bg-line" />
+
+      <Preferencias catalog={catalog} lang={lang} />
 
       <div className="h-px bg-line" />
 

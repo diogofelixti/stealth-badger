@@ -1838,10 +1838,67 @@ troca de `/` para `/alertas`, com a URL mudando.
   escolha deliberada: com o painel lendo do contexto, os testes dele — que cobrem saldo
   por rede e reconferência — teriam de ser reescritos na véspera da entrega.
 
+## Rodada 32 — Item 12: ponta real, preço e taxas
+
+### O que foi construído
+
+- Migração `012_user_preferences.sql`, com **tudo desligado de fábrica**: `price_sources`
+  vazio e `fee_source = 'off'`.
+- `GET`/`PUT /api/preferences`, com lista branca: fonte de preço fora dela é recusada
+  nomeando as aceitas — array vindo do cliente não vira URL.
+- `GET /api/chain/tip` pergunta a altura **ao adapter**, pela mesma fonte que a carteira
+  já usa. O rodapé mostrava a maior `sync_height` entre as carteiras como se fosse a
+  ponta; agora, quando a carteira está atrás, a tela mostra as duas.
+- `GET /api/price` com cinco fontes públicas, mediana quando mais de uma responde, cache
+  de 60 s, e uma fonte fora do ar não derruba as outras.
+- `GET /api/fees` com as três posturas: `off` (padrão, não consulta nada), `node`
+  (`estimatesmartfee` no nó do usuário) e `mempool`. Pedir `node` sem ter fonte Core
+  responde `fees.needsCoreBackend` em vez de mostrar painel vazio.
+- Na tela: `Preferencias.tsx` em Configurações e `Mercado.tsx` no painel, que **não
+  desenha nada e não consulta ninguém** enquanto as duas coisas estão desligadas.
+
+### O que quebrou a premissa
+
+- **A conversão de taxa é o mesmo defeito da 21ª rodada, no mesmo formato.**
+  `estimatesmartfee` responde em BTC/kvB, e `0.00002812 * 1e8 / 1000` passa por ponto
+  flutuante. A conversão conta os dígitos do texto, como o `btcParaSats`, e há teste com
+  os valores que o nó devolveu de verdade.
+- **A requisição de preço sai do servidor, e não do navegador.** Do navegador, cada
+  usuário entregaria o próprio IP à CoinGecko; daqui é um IP só, e ele pode estar atrás
+  de Tor. Está escrito no código, e não só aqui.
+- **Preço não acende a listra**, e isso é decisão registrada: a listra é sobre endereços
+  vigiados, e inflá-la com o que não vaza endereço transformaria o aviso em ruído — o
+  oposto do princípio 2. A prosa da tela explica o que a fonte enxerga: um servidor
+  perguntando o preço, e o IP dele.
+
+### O que ficou conferido, contra o nó e contra as fontes
+
+| O que | Medido |
+|---|---|
+| ponta pela API | **319.631**, pela fonte Fulcrum da carteira, `isPublic: false` |
+| tudo desligado | `/api/price` devolve vazio e **nenhuma requisição sai**; `/api/fees` responde `off` |
+| taxa pelo nó | `{1: 390.374, 3: 390.374, 6: 50.511}` sat/vB |
+| o mesmo pelo `bitcoin-cli` | `0.00390374`, `0.00390374` e `0.00050511` BTC/kvB — conversão exata |
+| preço com duas fontes | coingecko **412.832** e coinbase **413.025**, mediana **412.929 BRL** |
+| cache | segunda chamada em **11 ms**, sem sair para a rede |
+| lista branca | `priceSources: ["https://meu.servidor/preco"]` recusado, nomeando as cinco aceitas |
+
+### O que ficou de dívida
+
+- **A conta do usuário do teste ficou com duas fontes de preço ligadas** e a taxa pelo
+  nó, para a conferência acima. É um clique para desligar em Configurações, e o padrão de
+  quem se cadastra continua sendo tudo desligado.
+- **A moeda oferece só BRL, USD e EUR**, e nem toda fonte cobre as três — Kraken e
+  Bitstamp não têm par com BRL, e nesses casos a fonte volta com `error` em vez de preço.
+  A tela mostra quem respondeu, mas ainda não explica esse caso em prosa.
+- **O tema ainda não faz nada**: a coluna existe em `user_preferences`, e quem a usa é o
+  item 11.
+
 ## Estado em 27/08
 
-- backend: 38 arquivos de teste, **483 testes**
-- frontend: 17 arquivos de teste, **136 testes**
+- backend: 42 arquivos de teste, **505 testes**
+- frontend: 19 arquivos de teste, **143 testes**
+- migrações aplicadas: `001` a `012`
 - **cinco rotas**, todas dentro da `Shell`, com teste de postura em cada uma
 - migrações aplicadas: `001` a `011`
 - **a postura soberana está demonstrada**: Bitcoin Core e Fulcrum desta máquina, com o
