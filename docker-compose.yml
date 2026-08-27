@@ -22,6 +22,10 @@ services:
       DATABASE_URL: postgres://badger:${POSTGRES_PASSWORD}@postgres:5432/stealth_badger
     volumes:
       - /mnt/dados2/signet/.cookie:/bitcoin/.cookie:ro
+      # Só o `hostname` do hidden service, e só para leitura: a página de
+      # acessos lê por onde o painel está acessível, e não controla nada.
+      # A chave privada do endereço fica no volume, longe do backend.
+      - tor-data:/var/lib/tor:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -54,5 +58,55 @@ services:
     ports:
       - "127.0.0.1:8090:80"
 
+  # ── ACESSOS EXTERNOS ────────────────────────────────────────────────────
+  # Três caminhos, três posturas, e nenhum sobe por padrão. Ligar é escolha de
+  # quem hospeda: `docker compose --profile tor up -d`. Nenhum deles monta o
+  # socket do Docker — o painel lê por onde está acessível, e não liga nem
+  # desliga nada.
+
+  # O mais soberano: ninguém no meio vê o tráfego nem o destino.
+  tor:
+    image: alpine:3.20
+    profiles: ["tor"]
+    command: >
+      sh -c "apk add --no-cache tor >/dev/null &&
+             cp /etc/torrc.template /etc/tor/torrc &&
+             chown -R tor:tor /var/lib/tor &&
+             chmod 700 /var/lib/tor/hidden_service 2>/dev/null || true;
+             su tor -s /bin/sh -c 'tor -f /etc/tor/torrc'"
+    volumes:
+      - ./services/tor/torrc:/etc/torrc.template:ro
+      - tor-data:/var/lib/tor
+    depends_on:
+      - nginx
+
+  # Rede privada entre os seus aparelhos; a Tailscale vê metadado, não conteúdo.
+  tailscale:
+    image: tailscale/tailscale:latest
+    profiles: ["tailscale"]
+    hostname: stealth-badger
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_EXTRA_ARGS: --advertise-tags=tag:stealth-badger
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+
+  # A Cloudflare termina o TLS e enxerga o tráfego em claro. É escolha
+  # legítima, e a tela diz isso sempre que o caminho está ligado.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["cloudflared"]
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      - nginx
+
 volumes:
   pgdata:
+  tor-data:
+  tailscale-state:

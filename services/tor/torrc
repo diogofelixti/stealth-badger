@@ -1,0 +1,12 @@
+# Hidden service do Stealth Badger.
+#
+# O painel inteiro passa a ser alcançável por um endereço .onion, e nada no
+# meio vê o tráfego nem o destino — é o caminho mais soberano dos três que o
+# item 13 oferece, e o único que não depende de terceiro nenhum.
+#
+# O diretório do hidden service guarda a chave privada do endereço: quem a tem
+# é o endereço. Ele mora num volume nomeado, e o backend só monta o `hostname`
+# em modo leitura.
+SocksPort 0
+HiddenServiceDir /var/lib/tor/hidden_service
+HiddenServicePort 80 nginx:80

@@ -14,6 +14,7 @@ import { registerI18nRoutes } from './i18n/routes'
 import { registerPreferenceRoutes } from './preferences/routes'
 import { registerFeeRoutes } from './fees/routes'
 import { registerPriceRoutes } from './price/routes'
+import { registerAccessRoutes } from './access/routes'
 
 export type AppOptions = WalletRouteOptions & PrivacyRouteOptions & ChannelRouteOptions
 
@@ -33,6 +34,7 @@ export function buildApp(opts: AppOptions = {}): FastifyInstance {
   registerPreferenceRoutes(app)
   registerFeeRoutes(app)
   registerPriceRoutes(app)
+  registerAccessRoutes(app)
   registerAlertRoutes(app, opts)
   registerChannelRoutes(app, opts)
 

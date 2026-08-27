@@ -1,3 +1,4 @@
+import { Acessos } from '../components/Acessos'
 import { render } from '../lib/i18n'
 import { useDadosDoPainel } from './Layout'
 
@@ -19,11 +20,8 @@ export function AccessPage() {
       <p className="font-prose text-base leading-relaxed text-muted">
         {render(catalog, 'access.roadmap', {}, lang)}
       </p>
-      <ul className="flex list-disc flex-col gap-1 pl-5 font-prose text-sm leading-relaxed text-faint">
-        <li>{render(catalog, 'access.tor', {}, lang)}</li>
-        <li>{render(catalog, 'access.tls', {}, lang)}</li>
-        <li>{render(catalog, 'access.ntfy', {}, lang)}</li>
-      </ul>
+
+      <Acessos catalog={catalog} lang={lang} />
     </div>
   )
 }

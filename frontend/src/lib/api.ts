@@ -32,6 +32,12 @@ export interface Taxas {
   at: string
 }
 
+export interface Acessos {
+  tor: { enabled: boolean; onion?: string }
+  tailscale: { enabled: boolean; hostname?: string }
+  cloudflare: { enabled: boolean; hostname?: string; warning: boolean }
+}
+
 export interface PontaDaCadeia {
   height: number
   backendHost: string
@@ -261,6 +267,7 @@ export const api = {
   price: () => request<Precos>('/api/price'),
   fees: () => request<Taxas>('/api/fees'),
   chainTip: () => request<PontaDaCadeia>('/api/chain/tip'),
+  access: () => request<Acessos>('/api/access'),
   alertDetail: (id: number) => request<AlertDetail>(`/api/alerts/${id}`),
   /**
    * A transação inteira, na fonte da carteira. **Só sai por clique**: num

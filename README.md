@@ -138,6 +138,9 @@ Tudo em `.env`, documentado em [`.env.example`](.env.example):
 | `CORE_COOKIE_PATH` | caminho do `.cookie` do bitcoind, quando o backend é `core` |
 | `CORE_RPC_TIMEOUT_MS` | timeout das chamadas RPC longas do Core, como registro e rescan |
 | `PUBLIC_BACKEND` | governa o aviso permanente de privacidade |
+| `TOR_HOSTNAME_PATH` | onde o backend lê o `hostname` do hidden service |
+| `TS_AUTHKEY` / `TAILSCALE_HOSTNAME` | chave e nome na Tailscale, quando o perfil sobe |
+| `TUNNEL_TOKEN` / `CLOUDFLARE_HOSTNAME` | túnel e domínio da Cloudflare, quando o perfil sobe |
 
 ### Avisos no celular
 
@@ -155,6 +158,33 @@ tarde demais.
 O perfil `ntfy` do Compose sobe um servidor local, mas ele escuta em `127.0.0.1` e um
 celular não alcança isso. Para receber no telefone, use o `ntfy.sh` público ou publique
 o servidor local na sua rede.
+
+### Alcançar o painel de fora
+
+Três caminhos, três posturas de privacidade, e **nenhum ligado por padrão**. A página
+**Acessos** mostra por onde o painel está acessível e o que cada caminho enxerga; ligar
+e desligar é na máquina que hospeda, de propósito — um painel que abre túnel sozinho é
+um painel que se publica sem ninguém mandar.
+
+```bash
+docker compose --profile tor up -d          # endereço .onion, com QR na tela
+docker compose --profile tailscale up -d    # rede privada entre seus aparelhos
+docker compose --profile cloudflared up -d  # domínio público, com o aviso abaixo
+```
+
+| Caminho | Quem vê o quê |
+|---|---|
+| **Tor** | ninguém no meio vê o tráfego nem o destino. É o mais soberano, e não depende de terceiro |
+| **Tailscale** | rede privada entre os seus aparelhos; a Tailscale vê metadado de conexão, não o conteúdo |
+| **Cloudflare Tunnel** | **a Cloudflare termina o TLS e enxerga o seu tráfego em claro** |
+
+A linha da Cloudflare fica na tela, e não numa nota de rodapé. Publicar um watchtower de
+privacidade atrás de um terminador de TLS de terceiro é escolha legítima — e este produto
+existe para que escolhas assim sejam feitas sabendo.
+
+O perfil `tor` guarda a chave do endereço `.onion` num volume do Docker; o backend monta
+apenas o `hostname`, em modo leitura. **O socket do Docker não é montado em lugar nenhum**:
+o painel lê por onde está acessível, e não liga nem desliga container nenhum.
 
 ## Onde o Bitcoin participa do fluxo
 

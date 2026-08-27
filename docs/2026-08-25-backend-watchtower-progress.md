@@ -1939,10 +1939,54 @@ troca de `/` para `/alertas`, com a URL mudando.
   vendo `sett` até escolher, e a escolha é explícita de propósito — mas seguir o sistema
   na primeira visita seria melhor.
 
+## Rodada 34 — Item 13: acessos externos, configuração e leitura
+
+### O que foi construído
+
+- Três perfis novos no `docker-compose.yml`: `tor`, `tailscale` e `cloudflared`, nenhum
+  sobe por padrão. O `services/tor/torrc` publica o `nginx` num hidden service.
+- `GET /api/access` **só lê**: o `hostname` do hidden service montado read-only, e as
+  variáveis `TAILSCALE_HOSTNAME` e `CLOUDFLARE_HOSTNAME`.
+- A página de Acessos nomeia os três caminhos com o que cada um enxerga, mostra o
+  endereço `.onion` com **QR code** e, quando nada está configurado, diz o comando que
+  liga cada um.
+- `.env.example` e o README ganharam a seção, com a tabela de quem vê o quê.
+
+### A decisão que está no código, e não só no documento
+
+**Nada aqui monta o socket do Docker.** O painel lê por onde está acessível e não liga
+nem desliga container nenhum — ligar é `docker compose --profile tor up -d`, na mão de
+quem hospeda. Um painel que se desliga sozinho se tranca para fora; um painel que abre
+túnel sozinho se publica sem ninguém mandar.
+
+**O aviso da Cloudflare é constante, não configuração.** `warning: true` sai da API
+sempre, e a frase fica na tela em cor de atenção: *a Cloudflare termina o TLS e enxerga o
+seu tráfego em claro*. Oferecer o túnel sem dizer isso seria fazer com o próprio usuário
+o que o produto denuncia nos exploradores públicos.
+
+### O que ficou conferido
+
+| O que | Medido |
+|---|---|
+| sem perfil nenhum | `{"tor":{"enabled":false},"tailscale":{"enabled":false},"cloudflare":{"enabled":false,"warning":true}}` |
+| a página | os três caminhos, cada um com o que enxerga e o comando que o liga |
+| `docker compose config` | válido com os três perfis novos |
+| ler arquivo que não existe | não quebra: é o caso comum de quem não usa túnel |
+
+### O que ficou de dívida
+
+- **Nenhum dos três perfis foi subido.** Subir o `tor` publica o painel num endereço
+  `.onion`, e subir o `cloudflared` o publica na internet: são ações de quem hospeda, com
+  consequência fora desta máquina, e não se tomam por conta própria. O critério de pronto
+  do backlog — *"`--profile tor up -d` publica o painel num `.onion` que abre"* — depende
+  dessa decisão do dono do projeto.
+- **A imagem do `tor` instala o pacote na subida** em vez de trazer um Dockerfile
+  próprio. Funciona e é uma linha; um `Dockerfile` seria mais rápido a cada restart.
+
 ## Estado em 27/08
 
-- backend: 42 arquivos de teste, **505 testes**
-- frontend: 21 arquivos de teste, **172 testes**
+- backend: 43 arquivos de teste, **510 testes**
+- frontend: 22 arquivos de teste, **175 testes**
 - **quatro temas**, com contraste medido por teste em cada um
 - migrações aplicadas: `001` a `012`
 - **cinco rotas**, todas dentro da `Shell`, com teste de postura em cada uma

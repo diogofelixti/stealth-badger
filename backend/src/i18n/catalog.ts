@@ -96,10 +96,18 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'settings.sessionNote':
       'A sessão vive num cookie de sessão, e sair a encerra neste navegador.',
     'access.roadmap':
-      'Aqui vão morar os acessos externos: chegar ao watchtower de fora da sua rede, sem abrir porta na sua casa. Ainda não está pronto, e dizer isso é melhor do que uma tela vazia.',
-    'access.tor': 'Endereço onion, para alcançar o painel sem expor IP.',
-    'access.tls': 'Domínio próprio com TLS, para quem prefere o caminho comum.',
-    'access.ntfy': 'Avisos no celular por ntfy, que já funcionam, ficam em Configurações.',
+      'Por onde o painel pode ser alcançado de fora, e o que cada caminho enxerga. Esta página lê a configuração; ligar e desligar é na máquina que hospeda, de propósito: um painel que liga túnel sozinho é um painel que se publica sem ninguém mandar.',
+    'access.tor': 'Tor',
+    'access.torNote':
+      'O mais soberano: ninguém no meio vê o tráfego nem o destino. O endereço onion abre no Tor Browser, e o QR evita digitar 56 caracteres no celular.',
+    'access.tailscale': 'Tailscale',
+    'access.tailscaleNote':
+      'Rede privada entre os seus aparelhos. A Tailscale vê metadado de conexão, não o conteúdo.',
+    'access.cloudflare': 'Cloudflare Tunnel',
+    'access.cloudflareWarning':
+      'A Cloudflare termina o TLS e enxerga o seu tráfego em claro. É uma escolha legítima, e este produto existe para que ela seja feita sabendo.',
+    'access.off': 'não configurado',
+    'access.howTo': 'ligar é {comando}, na máquina que hospeda',
     'alert.txid': 'Transação',
     'alert.height': 'Altura',
     'alert.blockHash': 'Hash do bloco',
@@ -382,10 +390,18 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'settings.sessionNote':
       'The session lives in a session cookie, and logging out ends it in this browser.',
     'access.roadmap':
-      'External access will live here: reaching the watchtower from outside your network, without opening a port at home. It is not ready yet, and saying so beats an empty screen.',
-    'access.tor': 'Onion address, to reach the panel without exposing an IP.',
-    'access.tls': 'Your own domain with TLS, for whoever prefers the usual path.',
-    'access.ntfy': 'Phone alerts through ntfy, which already work, live in Settings.',
+      'How the panel can be reached from outside, and what each path sees. This page reads the configuration; turning it on and off happens on the host machine, on purpose: a panel that opens a tunnel by itself is a panel that publishes itself with nobody asking.',
+    'access.tor': 'Tor',
+    'access.torNote':
+      'The most sovereign: nobody in the middle sees the traffic or the destination. The onion address opens in Tor Browser, and the QR saves typing 56 characters on a phone.',
+    'access.tailscale': 'Tailscale',
+    'access.tailscaleNote':
+      'A private network between your own devices. Tailscale sees connection metadata, not content.',
+    'access.cloudflare': 'Cloudflare Tunnel',
+    'access.cloudflareWarning':
+      'Cloudflare terminates TLS and sees your traffic in the clear. It is a legitimate choice, and this product exists so that it is made knowingly.',
+    'access.off': 'not configured',
+    'access.howTo': 'turn it on with {comando}, on the host machine',
     'alert.txid': 'Transaction',
     'alert.height': 'Height',
     'alert.blockHash': 'Block hash',
