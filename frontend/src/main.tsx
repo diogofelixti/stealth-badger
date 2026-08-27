@@ -2,9 +2,15 @@ import { StrictMode, useCallback, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { api, type Catalog, type Lang, type Me } from './lib/api'
+import type { Tema } from './lib/tema'
 import { Rotas } from './Rotas'
 import { Login } from './pages/Login'
+import { aplicarTema, temaSalvo } from './lib/tema'
 import './styles/index.css'
+
+// Antes de qualquer pintura: sem isto a tela abre no tema padrão e troca
+// quando a preferência chega, que é o piscar que o item 11 proíbe.
+aplicarTema(temaSalvo())
 
 const IDIOMA_SALVO = 'sb_lang'
 
@@ -36,6 +42,9 @@ function App() {
       const usuario = await api.me()
       setMe(usuario)
       setLang(usuario.language)
+      // O tema do servidor vence o cache do navegador, e só depois de haver
+      // usuário: antes disso não há preferência a buscar.
+      void api.preferences().then(p => aplicarTema(p.theme as Tema)).catch(() => undefined)
     } catch {
       setMe(null)
     } finally {

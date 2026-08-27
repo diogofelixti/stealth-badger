@@ -9,6 +9,9 @@ const backends = vi.fn<() => Promise<Backend[]>>()
 const channels = vi.fn()
 const search = vi.fn()
 const utxos = vi.fn()
+// o painel pergunta as preferências para saber se mostra preço e taxa
+const preferences = vi.fn()
+const chainTip = vi.fn()
 
 vi.mock('../src/lib/api', async importOriginal => {
   const real = await importOriginal<typeof import('../src/lib/api')>()
@@ -21,6 +24,8 @@ vi.mock('../src/lib/api', async importOriginal => {
       backends: () => backends(),
       channels: () => channels(),
       search: () => search(),
+      preferences: () => preferences(),
+      chainTip: () => chainTip(),
       utxos: () => utxos(),
     },
   }
@@ -61,6 +66,10 @@ const PUBLICA: Wallet = {
 }
 
 beforeEach(() => {
+  preferences.mockResolvedValue({
+    theme: 'sett', currency: 'BRL', priceSources: [], feeSource: 'off',
+  })
+  chainTip.mockResolvedValue({ height: 100, backendHost: 'x', isPublic: true, at: '' })
   wallets.mockResolvedValue([PUBLICA])
   alerts.mockResolvedValue({ items: [], nextCursor: null })
   backends.mockResolvedValue([])

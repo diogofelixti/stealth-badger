@@ -54,6 +54,11 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'feed.live': 'ao vivo',
     'feed.loadMore': 'Carregar mais',
     'feed.tipBehind': 'ponta em {height} · sua carteira em {wallet}',
+    'prefs.theme': 'Tema',
+    'theme.sett': 'sett · terra quente, escuro',
+    'theme.bone': 'bone · claro',
+    'theme.carvao': 'carvão · escuro neutro',
+    'theme.contraste': 'contraste · alto contraste',
     'prefs.price': 'Preço do BTC',
     'prefs.priceNote':
       'Nenhuma fonte ligada de fábrica. Ligar uma faz este servidor perguntar o preço a ' +
@@ -335,6 +340,11 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'feed.live': 'live',
     'feed.loadMore': 'Load more',
     'feed.tipBehind': 'tip at {height} · your wallet at {wallet}',
+    'prefs.theme': 'Theme',
+    'theme.sett': 'sett · warm earth, dark',
+    'theme.bone': 'bone · light',
+    'theme.carvao': 'carvão · neutral dark',
+    'theme.contraste': 'contraste · high contrast',
     'prefs.price': 'BTC price',
     'prefs.priceNote':
       'No source is on out of the box. Turning one on makes this server ask it for the ' +

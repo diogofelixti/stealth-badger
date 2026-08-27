@@ -14,6 +14,8 @@ export function Mercado({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
   const [taxas, setTaxas] = useState<Taxas | null>(null)
 
   useEffect(() => {
+    // Preferência que não carrega não derruba a tela: sem ela, o padrão é
+    // não mostrar nada — que é o mesmo que estar desligado.
     void api.preferences().then(prefs => {
       if (prefs.priceSources.length > 0) {
         void api.price().then(setPrecos).catch(() => setPrecos(null))
@@ -21,7 +23,7 @@ export function Mercado({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
       if (prefs.feeSource !== 'off') {
         void api.fees().then(setTaxas).catch(() => setTaxas(null))
       }
-    })
+    }).catch(() => undefined)
   }, [])
 
   const temPreco = precos?.median !== null && precos !== null

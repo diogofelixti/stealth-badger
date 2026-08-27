@@ -1894,10 +1894,56 @@ troca de `/` para `/alertas`, com a URL mudando.
 - **O tema ainda não faz nada**: a coluna existe em `user_preferences`, e quem a usa é o
   item 11.
 
+## Rodada 33 — Item 11: quatro temas, e o teste que impede o tema bonito de apagar o aviso
+
+### O que foi construído
+
+- Quatro temas, cada um redefinindo **só a matéria-prima** do `tokens.css`: `sett` (o
+  atual), `bone` (claro), `carvao` (escuro neutro) e `contraste` (alto contraste).
+  Nenhum componente sabe que temas existem — a camada semântica não mudou.
+- `lib/tema.ts`: aplica `data-theme` no `<html>`, guarda no `localStorage` e trata tema
+  desconhecido como o padrão. `sett` não carimba atributo nenhum, porque mora no `:root`.
+- O tema é aplicado **antes da primeira pintura**, a partir do `localStorage`, e depois o
+  servidor manda: `user_preferences.theme` segue a pessoa entre navegadores, e o
+  armazenamento local é cache.
+- Seletor de tema em Configurações, com os quatro nomes nas duas línguas.
+
+### O que quebrou a premissa
+
+- **`theme.test.ts` lê o CSS do disco, e não uma cópia dos valores.** Uma tabela de cores
+  mantida à parte envelheceria sozinha, e o teste passaria a aprovar um arquivo que
+  ninguém mais usa. Ele resolve os `var()` até o hexadecimal, calcula a luminância
+  relativa e falha nomeando o par.
+- **O `sett` já passava em tudo**, o que só se soube depois de medir: 24 verificações
+  entre os quatro temas, seis por tema.
+- **O catálogo recusa travessão**, e o teste `não usa travessão em frase nenhuma` pegou os
+  rótulos dos temas escritos com `—`. Trocados por `·`. É uma regra de estilo que ninguém
+  lembraria sozinho, e por isso está em teste.
+
+### O que ficou conferido, no navegador
+
+| O que | Medido |
+|---|---|
+| troca de tema | `data-theme` muda, e o fundo do `body` vai de `#F3EEE5` (bone) a `#121212` (carvão) e `#000000` (contraste) |
+| tokens resolvidos no tema claro | `--sb-bg: #F3EEE5`, `--sb-text: #1C1610`, cartão em `#E9E2D6` |
+| o servidor vence o cache | com `localStorage` em `bone` e a preferência em `contraste`, a tela abriu em **contraste** |
+| recarregar | o `data-theme` já está no HTML na primeira pintura |
+| contraste, medido | corpo ≥ 4,5:1 e aviso público ≥ 3:1 **nos quatro temas** |
+| exposto × soberano | distinguíveis entre si nos quatro |
+
+### O que ficou de dívida
+
+- **Uma falha isolada na suíte do frontend**, de novo sob carga, num caso de cadastro de
+  carteira; as execuções seguintes passaram inteiras. Mesma forma das anteriores.
+- **O tema não acompanha `prefers-color-scheme`.** Quem usa o sistema no claro continua
+  vendo `sett` até escolher, e a escolha é explícita de propósito — mas seguir o sistema
+  na primeira visita seria melhor.
+
 ## Estado em 27/08
 
 - backend: 42 arquivos de teste, **505 testes**
-- frontend: 19 arquivos de teste, **143 testes**
+- frontend: 21 arquivos de teste, **172 testes**
+- **quatro temas**, com contraste medido por teste em cada um
 - migrações aplicadas: `001` a `012`
 - **cinco rotas**, todas dentro da `Shell`, com teste de postura em cada uma
 - migrações aplicadas: `001` a `011`

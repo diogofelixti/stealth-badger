@@ -9,6 +9,9 @@ const alerts = vi.fn<() => Promise<{ items: Alert[]; nextCursor: string | null }
 // asserções — que foi a origem de falhas intermitentes neste arquivo.
 const channels = vi.fn<() => Promise<never[]>>()
 const search = vi.fn<() => Promise<never[]>>()
+// o painel pergunta as preferências para saber se mostra preço e taxa
+const preferences = vi.fn()
+const chainTip = vi.fn()
 
 vi.mock('../src/lib/api', async importOriginal => {
   const real = await importOriginal<typeof import('../src/lib/api')>()
@@ -20,6 +23,8 @@ vi.mock('../src/lib/api', async importOriginal => {
       alerts: () => alerts(),
       channels: () => channels(),
       search: () => search(),
+      preferences: () => preferences(),
+      chainTip: () => chainTip(),
     },
   }
 })
@@ -75,6 +80,8 @@ function montar() {
 }
 
 beforeEach(() => {
+  preferences.mockResolvedValue({ theme: 'sett', currency: 'BRL', priceSources: [], feeSource: 'off' })
+  chainTip.mockResolvedValue({ height: 100, backendHost: 'x', isPublic: true, at: '' })
   alerts.mockResolvedValue({ items: [], nextCursor: null })
   channels.mockResolvedValue([])
   search.mockResolvedValue([])

@@ -106,3 +106,80 @@
   --sb-stripe-critical: repeating-linear-gradient(
     180deg, var(--sb-alarm) 0 7px, var(--sb-bone) 7px 14px);
 }
+
+/* ── TEMAS ──────────────────────────────────────────────────────────────
+   Cada tema redefine **só a matéria-prima**. A camada semântica não muda, e
+   nenhum componente sabe que temas existem — é o que o comentário do topo
+   deste arquivo prometia desde o primeiro dia.
+
+   A regra que nenhum tema pode quebrar: o par texto/fundo cumpre WCAG AA, e
+   `--sb-public` continua **distinguível** de `--sb-sovereign`. Um tema bonito
+   que apague o aviso de explorador público desmonta a tese do produto sem
+   levantar exceção nenhuma — daí `theme.test.ts` ler estes valores e calcular
+   o contraste de cada par. */
+
+/* Claro: o mesmo vocabulário, invertido. Papel, não branco de escritório. */
+:root[data-theme='bone'] {
+  color-scheme: light;
+
+  --sb-sett:  #F3EEE5;
+  --sb-soil:  #E9E2D6;
+  --sb-clay:  #DED5C6;
+  --sb-root:  #BCAF9C;
+
+  --sb-bone:  #1C1610;
+  --sb-muted: #4A4136;
+  --sb-faint: #6B6155;
+
+  --sb-caution: #8A5A00;
+  --sb-alarm:   #A32915;
+  --sb-moss:    #26604A;
+
+  --sb-caution-lit: #6E4700;
+  --sb-alarm-lit:   #871F0F;
+  --sb-clay-lit:    #D2C7B4;
+}
+
+/* Escuro neutro: sem croma na superfície, para quem acha a terra quente demais. */
+:root[data-theme='carvao'] {
+  color-scheme: dark;
+
+  --sb-sett:  #121212;
+  --sb-soil:  #1B1B1B;
+  --sb-clay:  #242424;
+  --sb-root:  #383838;
+
+  --sb-bone:  #EDEDED;
+  --sb-muted: #B0B0B0;
+  --sb-faint: #7C7C7C;
+
+  --sb-caution: #E8A93F;
+  --sb-alarm:   #E4614A;
+  --sb-moss:    #6FBF9B;
+
+  --sb-caution-lit: #F2BC5F;
+  --sb-alarm-lit:   #EE7A65;
+  --sb-clay-lit:    #2E2E2E;
+}
+
+/* Alto contraste: texto puro sobre fundo puro, sem meio-tom. */
+:root[data-theme='contraste'] {
+  color-scheme: dark;
+
+  --sb-sett:  #000000;
+  --sb-soil:  #000000;
+  --sb-clay:  #101010;
+  --sb-root:  #FFFFFF;
+
+  --sb-bone:  #FFFFFF;
+  --sb-muted: #EDEDED;
+  --sb-faint: #C8C8C8;
+
+  --sb-caution: #FFD400;
+  --sb-alarm:   #FF6B5A;
+  --sb-moss:    #3DFFB0;
+
+  --sb-caution-lit: #FFE566;
+  --sb-alarm-lit:   #FF9A8E;
+  --sb-clay-lit:    #1C1C1C;
+}

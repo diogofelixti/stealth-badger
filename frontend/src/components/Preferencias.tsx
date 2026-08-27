@@ -9,6 +9,7 @@ import {
   type Preferencias as Prefs,
 } from '../lib/api'
 import { render } from '../lib/i18n'
+import { TEMAS, aplicarTema, type Tema } from '../lib/tema'
 
 const MOEDAS = ['BRL', 'USD', 'EUR']
 const campo = 'rounded border border-line bg-bg px-3 py-2 text-sm'
@@ -29,7 +30,12 @@ export function Preferencias({ catalog, lang }: { catalog: Catalog; lang: Lang }
   useEffect(() => {
     void api
       .preferences()
-      .then(setPrefs)
+      .then(p => {
+        setPrefs(p)
+        // O servidor manda quando os dois discordam: o tema segue a pessoa
+        // entre navegadores, e o localStorage é só cache.
+        aplicarTema(p.theme as Tema)
+      })
       .catch(err => setErro(mensagemDoErro(catalog, err, lang)))
   }, [catalog, lang])
 
@@ -54,6 +60,28 @@ export function Preferencias({ catalog, lang }: { catalog: Catalog; lang: Lang }
 
   return (
     <div className="flex flex-col gap-6">
+      <section>
+        <label htmlFor="tema" className={rotulo}>
+          {render(catalog, 'prefs.theme', {}, lang)}
+        </label>
+        <select
+          id="tema"
+          value={prefs.theme}
+          onChange={e => {
+            const tema = e.target.value as Tema
+            aplicarTema(tema)
+            void salvar({ theme: tema })
+          }}
+          className={campo}
+        >
+          {TEMAS.map(t => (
+            <option key={t} value={t}>
+              {render(catalog, `theme.${t}`, {}, lang)}
+            </option>
+          ))}
+        </select>
+      </section>
+
       <section>
         <h2 className={rotulo}>{render(catalog, 'prefs.price', {}, lang)}</h2>
         <p className="mb-2 font-prose text-sm leading-relaxed text-muted">
