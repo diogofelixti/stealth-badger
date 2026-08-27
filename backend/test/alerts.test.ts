@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { buildApp } from '../src/app'
 import { confirmationState, dedupeKey } from '../src/alerts/dedupe'
 import { alertsForEvent, alertsForOrigin, alertsForScan } from '../src/alerts/rules'
 import { listarAlertas, saveAlert } from '../src/alerts/store'
@@ -360,5 +361,178 @@ describe('paginação do feed por cursor', () => {
 
     expect(p.items).toHaveLength(2)
     expect(p.items.every(a => a['type'] === 'address_reused')).toBe(true)
+  })
+})
+
+describe('GET /api/alerts/:id — o detalhe', () => {
+  beforeEach(async () => {
+    await resetDb()
+  })
+
+  async function cenario(): Promise<{
+    app: ReturnType<typeof buildApp>
+    cookie: string
+    alertaId: number
+    txidInteiro: string
+    walletId: number
+  }> {
+    process.env.NETWORK = 'signet'
+    const app = buildApp()
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'detalhe@exemplo.com', password: 'senha-longa-de-teste' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'detalhe@exemplo.com', password: 'senha-longa-de-teste' },
+    })
+    const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+    const { rows: u } = await pool.query<{ id: string }>(
+      "SELECT id FROM users WHERE email = 'detalhe@exemplo.com'",
+    )
+    const { rows: b } = await pool.query<{ id: string }>(
+      `INSERT INTO backends (kind,url,network) VALUES ('esplora','http://x','signet') RETURNING id`,
+    )
+    const { rows: w } = await pool.query<{ id: string }>(
+      `INSERT INTO wallets (user_id,label,xpub_encrypted,xpub_fingerprint,script_type,network,backend_id,sync_height)
+       VALUES ($1,'Cofre',$2,'aabb','p2wpkh','signet',$3,200) RETURNING id`,
+      [u[0]!.id, Buffer.from([0]), b[0]!.id],
+    )
+    const walletId = Number(w[0]!.id)
+    const txidInteiro = 'ab'.repeat(32)
+    const { rows: e } = await pool.query<{ id: string }>(
+      `INSERT INTO chain_events (wallet_id, type, height, block_hash, txid, vout, payload)
+       VALUES ($1,'utxo_created',195,'000000abc',$2,3,'{"value":51000}'::jsonb) RETURNING id`,
+      [walletId, txidInteiro],
+    )
+    const { rows: a } = await pool.query<{ id: string }>(
+      `INSERT INTO alerts (user_id, wallet_id, type, severity, params, dedupe_key, event_id)
+       VALUES ($1,$2,'funds_received','info',$3,'k1',$4) RETURNING id`,
+      [
+        u[0]!.id,
+        walletId,
+        JSON.stringify({ value: 51000, txid: txidInteiro.slice(0, 12) + '...' }),
+        e[0]!.id,
+      ],
+    )
+    return { app, cookie, alertaId: Number(a[0]!.id), txidInteiro, walletId }
+  }
+
+  // Os params do alerta guardam o txid truncado — texto para caber na frase,
+  // não identificador. O detalhe sai do join com `chain_events`, e este teste
+  // é o que prova que ninguém tentou remendar a string.
+  it('traz o txid inteiro, e não o truncado da frase', async () => {
+    const { app, cookie, alertaId, txidInteiro } = await cenario()
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/alerts/${alertaId}`,
+      cookies: { sb_session: cookie },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().event.txid).toBe(txidInteiro)
+    expect(res.json().event.txid).not.toContain('...')
+    expect(res.json().wallet.label).toBe('Cofre')
+  })
+
+  it('conta as confirmações a partir da ponta conhecida', async () => {
+    const { app, cookie, alertaId } = await cenario()
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/alerts/${alertaId}`,
+      cookies: { sb_session: cookie },
+    })
+
+    // ponta 200, evento na altura 195
+    expect(res.json().confirmations).toBe(6)
+  })
+
+  it('altura nula é mempool: zero confirmação', async () => {
+    const { app, cookie, alertaId } = await cenario()
+    await pool.query('UPDATE chain_events SET height = NULL')
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/alerts/${alertaId}`,
+      cookies: { sb_session: cookie },
+    })
+
+    expect(res.json().confirmations).toBe(0)
+  })
+
+  it('alerta sem evento responde 200 com event nulo', async () => {
+    const { app, cookie, alertaId } = await cenario()
+    await pool.query('UPDATE alerts SET event_id = NULL WHERE id = $1', [alertaId])
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/alerts/${alertaId}`,
+      cookies: { sb_session: cookie },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().event).toBeNull()
+    expect(res.json().confirmations).toBeNull()
+  })
+
+  it('traz os alertas irmãos da mesma transação', async () => {
+    const { app, cookie, alertaId, txidInteiro, walletId } = await cenario()
+    const { rows: e2 } = await pool.query<{ id: string }>(
+      `INSERT INTO chain_events (wallet_id, type, height, block_hash, txid, vout, payload)
+       VALUES ($1,'utxo_created',195,'000000abc',$2,4,'{"value":600}'::jsonb) RETURNING id`,
+      [walletId, txidInteiro],
+    )
+    const { rows: u } = await pool.query<{ user_id: string }>(
+      'SELECT user_id FROM alerts WHERE id = $1',
+      [alertaId],
+    )
+    await pool.query(
+      `INSERT INTO alerts (user_id, wallet_id, type, severity, params, dedupe_key, event_id)
+       VALUES ($1,$2,'dust_received','warning','{}'::jsonb,'k2',$3)`,
+      [u[0]!.user_id, walletId, e2[0]!.id],
+    )
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/alerts/${alertaId}`,
+      cookies: { sb_session: cookie },
+    })
+
+    expect(res.json().siblings).toHaveLength(1)
+    expect(res.json().siblings[0].type).toBe('dust_received')
+  })
+
+  it('alerta de outro usuário responde igual a inexistente', async () => {
+    const { app, cookie, alertaId } = await cenario()
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'outro-detalhe@exemplo.com', password: 'senha-longa-de-teste' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'outro-detalhe@exemplo.com', password: 'senha-longa-de-teste' },
+    })
+    const outro = login.cookies.find(c => c.name === 'sb_session')!.value
+
+    const alheio = await app.inject({
+      method: 'GET',
+      url: `/api/alerts/${alertaId}`,
+      cookies: { sb_session: outro },
+    })
+    const inexistente = await app.inject({
+      method: 'GET',
+      url: '/api/alerts/999999',
+      cookies: { sb_session: outro },
+    })
+
+    expect(alheio.statusCode).toBe(404)
+    expect(alheio.json()).toEqual(inexistente.json())
+    void cookie
   })
 })

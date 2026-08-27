@@ -27,7 +27,7 @@ export function buildApp(opts: AppOptions = {}): FastifyInstance {
   registerPrivacyRoutes(app, opts)
   registerCoinControlRoutes(app)
   registerI18nRoutes(app)
-  registerAlertRoutes(app)
+  registerAlertRoutes(app, opts)
   registerChannelRoutes(app, opts)
 
   return app

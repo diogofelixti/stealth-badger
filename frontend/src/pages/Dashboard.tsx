@@ -6,6 +6,7 @@ import { AddWallet } from '../components/AddWallet'
 import { LangToggle } from '../components/LangToggle'
 import { WalletCard } from '../components/WalletCard'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { AlertDetail } from '../components/AlertDetail'
 import { Channels } from '../components/Channels'
 import { Search } from '../components/Search'
 import { render } from '../lib/i18n'
@@ -66,6 +67,14 @@ function postura(
   }
 }
 
+function hostDaFonte(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
+}
+
 export function Dashboard({
   me,
   catalog,
@@ -91,6 +100,7 @@ export function Dashboard({
   // As fontes cadastradas, para o cartão poder oferecer a troca sem cada um
   // consultar por conta própria.
   const [fontes, setFontes] = useState<Backend[]>([])
+  const [alertaAberto, setAlertaAberto] = useState<Alert | null>(null)
   const [carregado, setCarregado] = useState(false)
 
   const recarregar = useCallback(async () => {
@@ -378,7 +388,22 @@ export function Dashboard({
             lang={lang}
             temMais={cursor !== null}
             onLoadMore={() => void carregarMais()}
+            onSelect={setAlertaAberto}
           />
+
+          {alertaAberto && (
+            <AlertDetail
+              alertId={alertaAberto.id}
+              // o aviso do detalhe nomeia quem vai saber da consulta: a fonte
+              // da carteira daquele alerta, e não a da primeira da lista
+              fonte={hostDaFonte(
+                wallets.find(w => w.id === alertaAberto.walletId)?.backendUrl ?? '',
+              )}
+              catalog={catalog}
+              lang={lang}
+              onClose={() => setAlertaAberto(null)}
+            />
+          )}
 
           {altura !== null && (
             <p className="pt-1 text-xs text-faint">

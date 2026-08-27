@@ -1732,10 +1732,61 @@ público*, *host.docker.internal:50001 · Soberano*.
 - **"Carregar mais" não tem estado de carregando.** Numa conexão lenta o clique parece
   não fazer nada. É pequeno, e não foi feito por ordem de prioridade do backlog.
 
+## Rodada 30 — Item 5: o detalhe da transação ao clicar no alerta
+
+### O que foi construído
+
+- `GET /api/alerts/:id` devolve o alerta, o evento de cadeia que o causou, a carteira, as
+  **confirmações** e os alertas irmãos da mesma transação — tudo por junção, **sem
+  consultar backend nenhum**.
+- `TxDetail` no contrato dos adapters, e `getTransaction` nos três: Esplora por
+  `GET /tx/:txid`, Electrum por `blockchain.transaction.get` verboso, Bitcoin Core por
+  `gettransaction` na carteira de observação com `getrawtransaction` de reserva.
+- `GET /api/tx/:txid?walletId=` com `501 tx.unsupportedByBackend` quando a fonte não sabe
+  responder e `502 tx.backendFailed` **com o motivo** quando ela recusa.
+- `AlertDetail.tsx`: txid inteiro, altura, hash do bloco, confirmações, carteira, irmãos,
+  e o botão "buscar na cadeia" com a frase que diz para onde a consulta vai **antes** de
+  ir. As entradas e saídas só aparecem depois do clique.
+
+### O que quebrou a premissa
+
+- **O alerta nunca teve o txid inteiro.** `alerts.params` guarda
+  `event.txid.slice(0, 12) + '...'` — texto para caber na frase, não identificador.
+  Qualquer link montado a partir dos params levaria a lugar nenhum. O detalhe sai do join
+  com `chain_events`, e há teste que compara com o txid completo justamente para provar
+  que ninguém tentou remendar a string.
+- **Electrum e Bitcoin Core devolvem valores em BTC.** Entregá-los à tela mostraria
+  0,00051 onde o resto do sistema fala sats; e `Number(0.000087) * 1e8` só dá 8700 com
+  arredondamento. Os dois adapters convertem, e há teste com os dois valores.
+- **`gettransaction` antes de `getrawtransaction`**: a carteira de observação conhece o
+  que toca o descriptor registrado e responde **sem `txindex`**. Fazer o contrário
+  obrigaria quem roda um nó podado a reindexar a cadeia inteira para ver um detalhe.
+
+### O que ficou conferido, no navegador, sobre dados reais
+
+Clicando no alerta `Possível dust attack` da carteira vigiada pelo Fulcrum:
+
+| O que | Medido |
+|---|---|
+| consultas a `/api/tx` **antes** do clique | **zero** |
+| txid | `bbcc628c580b1e4ee41f8e56c23e9c87c5d9cc92a3dbb47bdb66d97931754eae`, inteiro |
+| altura e confirmações | 319378, **253 confirmações** |
+| hash do bloco | `000000124a6192e5415cdceff25a33926e95d45b80a338aee490dbe56b9f7097` |
+| irmãos | sete alertas da mesma transação |
+| depois do clique | uma única chamada, `/api/tx/<txid>?walletId=10`, com entradas e saídas |
+
+### O que ficou de dívida
+
+- **O link para explorador externo não existe ainda.** O backlog o condiciona ao item 12,
+  que liga fontes públicas de preço e taxa; sem ele não há para onde mandar o usuário com
+  aviso honesto.
+- **Não há botão de copiar o txid.** O texto está inteiro e selecionável; o botão ficou
+  para depois porque exige permissão de área de transferência e um estado de "copiado".
+
 ## Estado em 27/08
 
-- backend: 37 arquivos de teste, **465 testes**
-- frontend: 15 arquivos de teste, **123 testes**
+- backend: 38 arquivos de teste, **483 testes**
+- frontend: 16 arquivos de teste, **129 testes**
 - migrações aplicadas: `001` a `011`
 - **a postura soberana está demonstrada**: Bitcoin Core e Fulcrum desta máquina, com o
   mesmo saldo do explorador público

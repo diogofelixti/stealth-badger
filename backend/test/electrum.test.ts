@@ -490,3 +490,58 @@ describe('handshake do protocolo', () => {
     expect(versoes).toBe(2)
   })
 })
+
+describe('adapter Electrum — detalhe da transação', () => {
+  const TXID = 'ab'.repeat(32)
+
+  // O protocolo devolve valores em BTC, como o Bitcoin Core: entregar isso
+  // para a tela seria mostrar 0,00051 onde o resto do sistema fala sats.
+  it('traduz a resposta verbosa para o formato comum, em sats', async () => {
+    const a = createElectrumAdapter({
+      host: 'x',
+      port: 50001,
+      network: 'signet',
+      connect: fakeTransport({
+        'blockchain.headers.subscribe': () => ({ height: 200 }),
+        'blockchain.transaction.get': () => ({
+          txid: TXID,
+          blockhash: '000000abc',
+          confirmations: 6,
+          vin: [{ txid: 'cd'.repeat(32), vout: 1 }],
+          vout: [
+            { value: 0.00051, n: 0, scriptPubKey: { address: 'tb1qdestino' } },
+            { value: 0.000087, n: 1, scriptPubKey: { address: 'tb1qtroco' } },
+          ],
+        }),
+      }),
+    })
+
+    const tx = await a.getTransaction!(TXID)
+
+    expect(tx).toMatchObject({ txid: TXID, blockHash: '000000abc', height: 195 })
+    expect(tx!.vout).toEqual([
+      { n: 0, address: 'tb1qdestino', value: 51000 },
+      { n: 1, address: 'tb1qtroco', value: 8700 },
+    ])
+    expect(tx!.vin).toEqual([{ txid: 'cd'.repeat(32), vout: 1 }])
+  })
+
+  it('sem confirmação é mempool: altura nula', async () => {
+    const a = createElectrumAdapter({
+      host: 'x',
+      port: 50001,
+      network: 'signet',
+      connect: fakeTransport({
+        'blockchain.headers.subscribe': () => ({ height: 200 }),
+        'blockchain.transaction.get': () => ({
+          txid: TXID,
+          confirmations: 0,
+          vin: [],
+          vout: [],
+        }),
+      }),
+    })
+
+    expect((await a.getTransaction!(TXID))!.height).toBeNull()
+  })
+})

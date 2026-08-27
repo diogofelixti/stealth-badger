@@ -10,6 +10,33 @@ export type SyncState = 'pending' | 'importing' | 'synced' | 'degraded' | 'error
  * Sem title nem body: o alerta guarda o tipo e os parâmetros, e o texto é
  * escolhido na hora de exibir, no idioma de quem lê.
  */
+export interface EventoDeCadeia {
+  id: number
+  type: string
+  height: number | null
+  blockHash: string | null
+  txid: string | null
+  vout: number | null
+  payload: Record<string, unknown>
+}
+
+export interface AlertDetail {
+  alert: Alert
+  event: EventoDeCadeia | null
+  wallet: { id: number; label: string; network: Network }
+  confirmations: number | null
+  siblings: Alert[]
+}
+
+export interface TxDetail {
+  txid: string
+  height: number | null
+  blockHash: string | null
+  vin: { txid: string; vout: number; address?: string; value?: number }[]
+  vout: { n: number; address?: string; value: number }[]
+  fee?: number
+}
+
 export interface PaginaDeAlertas {
   items: Alert[]
   /** cursor opaco da página seguinte; `null` quando acabou */
@@ -196,6 +223,13 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ backendId }),
     }),
+  alertDetail: (id: number) => request<AlertDetail>(`/api/alerts/${id}`),
+  /**
+   * A transação inteira, na fonte da carteira. **Só sai por clique**: num
+   * explorador público esta chamada entrega mais um dado ao serviço.
+   */
+  transaction: (txid: string, walletId: number) =>
+    request<TxDetail>(`/api/tx/${txid}?walletId=${walletId}`),
   archiveWallet: (id: number) =>
     request<Wallet>(`/api/wallets/${id}/archive`, { method: 'POST' }),
   unarchiveWallet: (id: number) =>

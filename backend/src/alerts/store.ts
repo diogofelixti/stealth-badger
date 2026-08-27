@@ -138,3 +138,102 @@ export async function listarAlertas(
         : null,
   }
 }
+
+/**
+ * O detalhe completo de um alerta, montado por junção — nunca remendando os
+ * `params`.
+ *
+ * Os params guardam o txid truncado, porque são texto para caber na frase.
+ * O identificador de verdade está em `chain_events`, e é de lá que ele sai.
+ * `event_id` é nulável: alerta de queda de score não vem de evento de cadeia,
+ * e nesses o detalhe existe sem transação em vez de mostrar campo vazio.
+ */
+export async function detalheDoAlerta(
+  userId: number,
+  alertId: number,
+): Promise<Record<string, unknown> | null> {
+  if (!Number.isFinite(alertId)) return null
+
+  const { rows } = await pool.query<{
+    id: string
+    walletId: string
+    type: string
+    severity: string
+    params: Record<string, unknown>
+    createdAt: Date
+    readAt: Date | null
+    eventId: string | null
+    eventType: string | null
+    height: number | null
+    blockHash: string | null
+    txid: string | null
+    vout: number | null
+    eventPayload: Record<string, unknown> | null
+    walletLabel: string
+    walletNetwork: string
+    syncHeight: number | null
+  }>(
+    `SELECT a.id, a.wallet_id AS "walletId", a.type, a.severity, a.params,
+            a.created_at AS "createdAt", a.read_at AS "readAt",
+            e.id AS "eventId", e.type AS "eventType", e.height, e.block_hash AS "blockHash",
+            e.txid, e.vout, e.payload AS "eventPayload",
+            w.label AS "walletLabel", w.network AS "walletNetwork",
+            w.sync_height AS "syncHeight"
+       FROM alerts a
+       JOIN wallets w ON w.id = a.wallet_id
+       LEFT JOIN chain_events e ON e.id = a.event_id
+      WHERE a.id = $1 AND a.user_id = $2`,
+    [alertId, userId],
+  )
+
+  const linha = rows[0]
+  if (!linha) return null
+
+  // Confirmações a partir da ponta que a carteira conhece. Altura nula é
+  // mempool, e mempool é zero confirmação — não é "não sei".
+  const confirmations =
+    linha.eventId === null
+      ? null
+      : linha.height === null || linha.syncHeight === null
+        ? 0
+        : Math.max(0, linha.syncHeight - linha.height + 1)
+
+  const irmaos = linha.txid
+    ? (
+        await pool.query(
+          `SELECT a.id, a.type, a.severity, a.params, a.created_at AS "createdAt"
+             FROM alerts a JOIN chain_events e ON e.id = a.event_id
+            WHERE a.user_id = $1 AND e.txid = $2 AND a.id <> $3
+            ORDER BY a.created_at DESC`,
+          [userId, linha.txid, alertId],
+        )
+      ).rows
+    : []
+
+  return {
+    alert: {
+      id: linha.id,
+      walletId: linha.walletId,
+      type: linha.type,
+      severity: linha.severity,
+      params: linha.params,
+      createdAt: linha.createdAt,
+      readAt: linha.readAt,
+    },
+    event:
+      linha.eventId === null
+        ? null
+        : {
+            id: linha.eventId,
+            type: linha.eventType,
+            height: linha.height,
+            blockHash: linha.blockHash,
+            txid: linha.txid,
+            vout: linha.vout,
+            payload: linha.eventPayload,
+          },
+    wallet: { id: linha.walletId, label: linha.walletLabel, network: linha.walletNetwork },
+    confirmations,
+    siblings: irmaos,
+  }
+}

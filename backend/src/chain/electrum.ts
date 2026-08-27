@@ -4,7 +4,22 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils'
 import * as btc from '@scure/btc-signer'
 import { electrumScripthash } from '../wallet/derive'
 import type { Network } from '../wallet/descriptor'
-import type { AddressStatus, ChainAdapter, ChainCapabilities, TxRef, Utxo } from './types'
+import type {
+  AddressStatus,
+  ChainAdapter,
+  ChainCapabilities,
+  TxDetail,
+  TxRef,
+  Utxo,
+} from './types'
+
+interface ElectrumTx {
+  txid?: string
+  blockhash?: string
+  confirmations?: number
+  vin?: { txid?: string; vout?: number }[]
+  vout?: { value?: number; n?: number; scriptPubKey?: { address?: string } }[]
+}
 
 /**
  * Erro que o próprio servidor devolveu na resposta — bloco inexistente,
@@ -289,6 +304,46 @@ export function createElectrumAdapter(opts: ElectrumOptions): ChainAdapter {
     close() {
       transport?.close()
       transport = null
+    },
+
+    /**
+     * A transação inteira, para o detalhe do alerta.
+     *
+     * O protocolo devolve o mesmo objeto verboso do Bitcoin Core, com valores
+     * **em BTC** — entregá-los assim mostraria 0,00051 onde o resto do sistema
+     * fala sats. A altura não vem no objeto: sai da ponta menos as
+     * confirmações, e `confirmations: 0` é mempool, não altura zero.
+     */
+    async getTransaction(txid: string): Promise<TxDetail | null> {
+      let t: ElectrumTx
+      try {
+        t = (await call('blockchain.transaction.get', [txid, true])) as ElectrumTx
+      } catch {
+        return null
+      }
+      if (!t || typeof t !== 'object') return null
+
+      const confirmacoes = Number(t.confirmations ?? 0)
+      let height: number | null = null
+      if (confirmacoes > 0) {
+        const ponta = (await call('blockchain.headers.subscribe')) as { height: number }
+        height = ponta.height - confirmacoes + 1
+      }
+
+      return {
+        txid: t.txid ?? txid,
+        height,
+        blockHash: t.blockhash ?? null,
+        vin: (t.vin ?? [])
+          .filter(i => typeof i.txid === 'string')
+          .map(i => ({ txid: i.txid!, vout: Number(i.vout ?? 0) })),
+        vout: (t.vout ?? []).map((o, i) => ({
+          n: o.n ?? i,
+          ...(o.scriptPubKey?.address ? { address: o.scriptPubKey.address } : {}),
+          // BTC → sats, arredondando: ponto flutuante não representa 0,000087
+          value: Math.round(Number(o.value ?? 0) * 1e8),
+        })),
+      }
     },
 
     async getUtxosForAddress(address: string): Promise<Utxo[]> {

@@ -59,6 +59,22 @@ export interface RegisteredUtxo {
   derivationPath: string
 }
 
+/**
+ * A transação como as três fontes a descrevem.
+ *
+ * Uma forma só, traduzida por cada adapter: sem isso a tela teria um caso por
+ * fonte, e a fonte nova chegaria como campo faltando. `height` nulo é mempool
+ * — não é "não sei".
+ */
+export interface TxDetail {
+  txid: string
+  height: number | null
+  blockHash: string | null
+  vin: { txid: string; vout: number; address?: string; value?: number }[]
+  vout: { n: number; address?: string; value: number }[]
+  fee?: number
+}
+
 export interface ChainAdapter {
   capabilities(): ChainCapabilities
   tipHeight(): Promise<number>
@@ -78,6 +94,15 @@ export interface ChainAdapter {
   rescanFrom?(height: number): Promise<void>
   /** As saídas não gastas do que foi registrado. Par de `registerDescriptor`. */
   getRegisteredUtxos?(): Promise<RegisteredUtxo[]>
+  /**
+   * A transação inteira, quando a fonte souber contá-la.
+   *
+   * Opcional de propósito: é a única consulta do sistema que sai **por clique
+   * do usuário**, e não pelo ciclo do worker. Num explorador público cada
+   * chamada entrega mais um dado ao serviço, e fazer isso ao abrir o feed
+   * multiplicaria a exposição que o produto existe para denunciar.
+   */
+  getTransaction?(txid: string): Promise<TxDetail | null>
   subscribe?(scripthash: string, onChange: () => void): () => void
   /**
    * Encerra a conexão que o adapter mantém aberta, quando ele mantém alguma.

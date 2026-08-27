@@ -1,4 +1,5 @@
 import type {
+  TxDetail,
   AddressStatus,
   ChainAdapter,
   ChainCapabilities,
@@ -16,6 +17,13 @@ interface EsploraStatus {
 interface EsploraTx {
   txid: string
   status: EsploraStatus
+  fee?: number
+  vin?: {
+    txid: string
+    vout: number
+    prevout?: { scriptpubkey_address?: string; value?: number }
+  }[]
+  vout?: { scriptpubkey_address?: string; value: number }[]
 }
 
 interface EsploraStats {
@@ -204,6 +212,44 @@ export function createEsploraAdapter(
         spentByTxid: r.txid,
         height: r.status?.confirmed ? r.status.block_height ?? null : null,
         blockHash: r.status?.confirmed ? r.status.block_hash ?? null : null,
+      }
+    },
+
+    /**
+     * A transação inteira, para o detalhe do alerta.
+     *
+     * Sai por clique do usuário, nunca pelo ciclo: num explorador público esta
+     * chamada é mais um dado entregue ao serviço. O `null` cobre a transação
+     * que o explorador não conhece — a tela mostra o que o log sabe e diz que
+     * o resto não foi consultado, em vez de inventar.
+     */
+    async getTransaction(txid: string): Promise<TxDetail | null> {
+      let res: Response
+      try {
+        res = await get('/tx/' + txid)
+      } catch {
+        return null
+      }
+      const t = (await res.json()) as EsploraTx
+
+      return {
+        txid: t.txid ?? txid,
+        height: t.status?.confirmed ? (t.status.block_height ?? null) : null,
+        blockHash: t.status?.confirmed ? (t.status.block_hash ?? null) : null,
+        vin: (t.vin ?? []).map(i => ({
+          txid: i.txid,
+          vout: i.vout,
+          ...(i.prevout?.scriptpubkey_address
+            ? { address: i.prevout.scriptpubkey_address }
+            : {}),
+          ...(i.prevout?.value !== undefined ? { value: i.prevout.value } : {}),
+        })),
+        vout: (t.vout ?? []).map((o, n) => ({
+          n,
+          ...(o.scriptpubkey_address ? { address: o.scriptpubkey_address } : {}),
+          value: o.value,
+        })),
+        ...(t.fee !== undefined ? { fee: t.fee } : {}),
       }
     },
 

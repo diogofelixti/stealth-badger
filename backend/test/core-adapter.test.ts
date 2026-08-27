@@ -329,3 +329,81 @@ describe('adapter Bitcoin Core', () => {
     })
   })
 })
+
+describe('adapter Bitcoin Core — detalhe da transação', () => {
+  const TXID = 'ab'.repeat(32)
+
+  const DECODIFICADA = {
+    txid: TXID,
+    vin: [{ txid: 'cd'.repeat(32), vout: 1 }],
+    vout: [
+      { value: 0.00051, n: 0, scriptPubKey: { address: 'tb1qdestino' } },
+      { value: 0.000087, n: 1, scriptPubKey: { address: 'tb1qtroco' } },
+    ],
+  }
+
+  // A carteira de observação conhece as transações que tocam o descriptor
+  // registrado, e responde sem `txindex`. Exigir `txindex` obrigaria quem roda
+  // um nó podado a reindexar a cadeia inteira para ver um detalhe.
+  it('pergunta primeiro à carteira de observação, que não exige txindex', async () => {
+    const registro = { chamadas: [] as { method: string; params: unknown[]; wallet?: string }[] }
+    const a = createCoreAdapter({
+      rpc: rpcFalso(
+        {
+          gettransaction: {
+            txid: TXID,
+            blockhash: '000000abc',
+            confirmations: 6,
+            decoded: DECODIFICADA,
+          },
+        },
+        registro,
+      ),
+      wallet: 'vigia',
+    })
+
+    const tx = await a.getTransaction!(TXID)
+
+    expect(registro.chamadas[0]!.method).toBe('gettransaction')
+    expect(registro.chamadas[0]!.wallet).toBe('vigia')
+    expect(tx).toMatchObject({ txid: TXID, blockHash: '000000abc' })
+    expect(tx!.vout).toEqual([
+      { n: 0, address: 'tb1qdestino', value: 51000 },
+      { n: 1, address: 'tb1qtroco', value: 8700 },
+    ])
+  })
+
+  it('cai no getrawtransaction quando a carteira não conhece a transação', async () => {
+    const registro = { chamadas: [] as { method: string; params: unknown[]; wallet?: string }[] }
+    const a = createCoreAdapter({
+      rpc: rpcFalso(
+        {
+          gettransaction: new Error('Invalid or non-wallet transaction id'),
+          getrawtransaction: { ...DECODIFICADA, blockhash: '000000abc', confirmations: 6 },
+          getblockcount: 200,
+        },
+        registro,
+      ),
+      wallet: 'vigia',
+    })
+
+    const tx = await a.getTransaction!(TXID)
+
+    expect(registro.chamadas.map(c => c.method)).toContain('getrawtransaction')
+    expect(tx!.txid).toBe(TXID)
+  })
+
+  // `txindex` desligado e transação fora da carteira: o nó não tem como
+  // responder, e inventar seria pior que dizer que não sabe.
+  it('devolve nulo quando nem a carteira nem o nó conhecem a transação', async () => {
+    const a = createCoreAdapter({
+      rpc: rpcFalso({
+        gettransaction: new Error('Invalid or non-wallet transaction id'),
+        getrawtransaction: new Error('No such mempool or blockchain transaction'),
+      }),
+      wallet: 'vigia',
+    })
+
+    expect(await a.getTransaction!(TXID)).toBeNull()
+  })
+})

@@ -24,6 +24,7 @@ export function AlertFeed({
   lang,
   temMais = false,
   onLoadMore,
+  onSelect,
 }: {
   alerts: Alert[]
   catalog: Catalog
@@ -31,6 +32,8 @@ export function AlertFeed({
   /** há página seguinte no cursor do servidor */
   temMais?: boolean
   onLoadMore?: () => void
+  /** abre o detalhe do alerta; sem isto o cartão não é clicável */
+  onSelect?: (alerta: Alert) => void
 }) {
   if (alerts.length === 0) {
     return <p className="text-sm text-faint">{render(catalog, 'feed.empty', {}, lang)}</p>
@@ -48,7 +51,20 @@ export function AlertFeed({
           <article
             key={a.id}
             data-severity={a.severity}
-            className="flex rounded border border-line bg-surface"
+            {...(onSelect
+              ? {
+                  onClick: () => onSelect(a),
+                  role: 'button',
+                  tabIndex: 0,
+                  onKeyDown: (e: { key: string }) => {
+                    if (e.key === 'Enter' || e.key === ' ') onSelect(a)
+                  },
+                }
+              : {})}
+            className={
+              'flex rounded border border-line bg-surface' +
+              (onSelect ? ' cursor-pointer hover:border-accent' : '')
+            }
             style={{ borderLeft: 'none' }}
           >
             <div className="w-1 shrink-0" style={{ background: regua(a.severity) }} />

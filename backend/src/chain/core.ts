@@ -1,4 +1,4 @@
-import type { ChainAdapter, ChainCapabilities, RegisteredUtxo } from './types'
+import type { ChainAdapter, TxDetail, ChainCapabilities, RegisteredUtxo } from './types'
 import type { Rpc } from './core-rpc'
 
 export interface CoreOptions {
@@ -21,6 +21,16 @@ interface UnspentDoCore {
 const CAMINHO_NO_DESCRIPTOR = /\[[0-9a-fA-F]{8}((?:\/\d+'?)+)\]/
 const RESCAN_POLL_MS = process.env.NODE_ENV === 'test' ? 1 : 2_000
 const RESCAN_WAIT_MS = 600_000
+
+interface TxBruta {
+  txid?: string
+  blockhash?: string
+  blockheight?: number
+  confirmations?: number
+  decoded?: TxBruta
+  vin?: { txid?: string; vout?: number }[]
+  vout?: { value?: number; n?: number; scriptPubKey?: { address?: string } }[]
+}
 
 interface WalletInfo {
   scanning?: false | { duration?: number; progress?: number }
@@ -127,8 +137,58 @@ export function createCoreAdapter(opts: CoreOptions): ChainAdapter {
     )
   }
 
+  /** BTC → sats. Ponto flutuante não representa 0,000087; arredondar sim. */
+  function emSats(valor: unknown): number {
+    return Math.round(Number(valor ?? 0) * 1e8)
+  }
+
+  function traduzir(txid: string, bruta: TxBruta): TxDetail {
+    const d = bruta.decoded ?? bruta
+    const confirmacoes = Number(bruta.confirmations ?? 0)
+    return {
+      txid: d.txid ?? txid,
+      // `blockheight` só vem em algumas respostas; a ponta menos as
+      // confirmações é o que sempre dá para calcular.
+      height: confirmacoes > 0 ? (bruta.blockheight ?? null) : null,
+      blockHash: bruta.blockhash ?? null,
+      vin: (d.vin ?? [])
+        .filter(i => typeof i.txid === 'string')
+        .map(i => ({ txid: i.txid!, vout: Number(i.vout ?? 0) })),
+      vout: (d.vout ?? []).map((o, i) => ({
+        n: o.n ?? i,
+        ...(o.scriptPubKey?.address ? { address: o.scriptPubKey.address } : {}),
+        value: emSats(o.value),
+      })),
+    }
+  }
+
   return {
     capabilities: () => caps,
+
+    /**
+     * A transação inteira, para o detalhe do alerta.
+     *
+     * Pergunta primeiro à carteira de observação: ela conhece o que toca o
+     * descriptor registrado e responde **sem `txindex`**. Exigir `txindex`
+     * obrigaria quem roda um nó podado a reindexar a cadeia inteira para ver
+     * um detalhe. `getrawtransaction` é a segunda tentativa, e o `null` é a
+     * resposta honesta quando nem uma nem outra sabe.
+     */
+    async getTransaction(txid: string): Promise<TxDetail | null> {
+      try {
+        const daCarteira = (await rpc('gettransaction', [txid, true, true], wallet)) as TxBruta
+        if (daCarteira) return traduzir(txid, daCarteira)
+      } catch {
+        // segue para o nó
+      }
+      try {
+        const doNo = (await rpc('getrawtransaction', [txid, true])) as TxBruta
+        if (doNo) return traduzir(txid, doNo)
+      } catch {
+        return null
+      }
+      return null
+    },
 
     async tipHeight() {
       return Number(await rpc('getblockcount'))

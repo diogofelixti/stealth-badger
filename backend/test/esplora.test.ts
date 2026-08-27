@@ -333,3 +333,72 @@ describe('quem gastou a saída', () => {
     })
   })
 })
+
+describe('adapter Esplora — detalhe da transação', () => {
+  const TXID = 'ab'.repeat(32)
+
+  // Os três adapters falam com backends diferentes e precisam devolver a
+  // mesma forma: sem isso a tela teria um caso por fonte, e a fonte nova
+  // chegaria como campo faltando.
+  it('traduz a resposta do explorador para o formato comum', async () => {
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: fakeFetch({
+        [`/tx/${TXID}`]: {
+          txid: TXID,
+          fee: 300,
+          status: { confirmed: true, block_height: 195, block_hash: '000000abc' },
+          vin: [
+            {
+              txid: 'cd'.repeat(32),
+              vout: 1,
+              prevout: { scriptpubkey_address: 'tb1qorigem', value: 60000 },
+            },
+          ],
+          vout: [
+            { scriptpubkey_address: 'tb1qdestino', value: 51000 },
+            { scriptpubkey_address: 'tb1qtroco', value: 8700 },
+          ],
+        },
+      }),
+    })
+
+    const tx = await a.getTransaction!(TXID)
+
+    expect(tx).toMatchObject({
+      txid: TXID,
+      height: 195,
+      blockHash: '000000abc',
+      fee: 300,
+    })
+    expect(tx!.vin).toEqual([
+      { txid: 'cd'.repeat(32), vout: 1, address: 'tb1qorigem', value: 60000 },
+    ])
+    expect(tx!.vout).toEqual([
+      { n: 0, address: 'tb1qdestino', value: 51000 },
+      { n: 1, address: 'tb1qtroco', value: 8700 },
+    ])
+  })
+
+  it('transação na mempool vem sem altura, e não com altura zero', async () => {
+    const a = createEsploraAdapter('https://exemplo/api', {
+      fetchFn: fakeFetch({
+        [`/tx/${TXID}`]: {
+          txid: TXID,
+          status: { confirmed: false },
+          vin: [],
+          vout: [],
+        },
+      }),
+    })
+
+    const tx = await a.getTransaction!(TXID)
+
+    expect(tx!.height).toBeNull()
+  })
+
+  it('devolve nulo quando o explorador não conhece a transação', async () => {
+    const a = createEsploraAdapter('https://exemplo/api', { fetchFn: fakeFetch({}) })
+
+    expect(await a.getTransaction!(TXID)).toBeNull()
+  })
+})
