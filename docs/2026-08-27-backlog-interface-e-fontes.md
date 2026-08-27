@@ -114,9 +114,133 @@ Frontend: **duas telas** (`Login`, `Dashboard`), sem roteador. Nove componentes.
 | Fingerprints de transação | spec §12.1 | fora deste backlog |
 | Limiar de `dust` configurável | spec §12.1 | fora deste backlog |
 | Painel de administrador (`users.is_admin`) | spec §12.1 | fora deste backlog |
-| Uma instância vigia uma rede só | spec §12.2 | fora deste backlog |
+| Uma instância vigia uma rede só | spec §12.2 | **item 0** |
 | Análise de privacidade leva ~78 s | spec §12.2 | fora deste backlog |
 | Interface de duas telas | spec §12.2 | **item 10** resolve |
+
+---
+
+# Item 0 — Uma instância, mais de uma rede
+
+*Levantado em 27/08, testando o cadastro de um endereço de mainnet. Entrou depois dos
+outros e vai na frente de quase todos: é o que impede a carteira real do apresentador de
+ser vigiada.*
+
+**O sintoma.** Cadastrar `bc1q…` numa instância com `NETWORK=signet` recusa:
+
+> este endereço é de mainnet, mas este watchtower vigia signet. Use um endereço de signet.
+
+**Por quê.** A limitação está escrita na §12.2 da especificação — *"uma instância vigia
+uma rede só"* — e era aceitável enquanto signet era o ambiente de teste. Deixou de ser: um
+watchtower que não vigia mainnet não vigia o dinheiro de ninguém.
+
+### O que o diagnóstico encontrou
+
+Boa notícia primeiro: **o banco sempre foi multi-rede.** `wallets.network` e
+`backends.network` existem desde a migração `001`, com CHECK nas três redes. Não há
+migração a fazer.
+
+O que trava são quatro coisas, e a terceira é a que ninguém veria:
+
+1. **`backend/src/wallet/routes.ts:82`** — `const network: Network = cfg.network`. A rede
+   da carteira vem da instância, e não do que está sendo vigiado.
+2. **`criarBackend` carimba a rede da instância em todo backend cadastrado**, ignorando
+   para onde a URL aponta (`chain/routes.ts` passa `loadConfig().network`). Cadastrar
+   `https://mempool.space/api` hoje grava `network: 'signet'` — um backend de mainnet
+   rotulado como signet, que sincronizaria e não acharia nada, sem erro nenhum.
+   `listarBackends(userId, cfg.network)` filtra pela mesma rede, então nem aparece.
+3. **O painel soma tudo num total só.** `Dashboard.tsx` faz
+   `somadas.reduce((soma, w) => soma + Number(w.balanceSats), 0)`. Com mainnet e signet na
+   mesma tela, **o total mistura dinheiro de verdade com moeda de teste** e anuncia um
+   número que não existe. É a falha silenciosa deste item, e a mais grave do documento:
+   ninguém revisa um número que parece plausível.
+4. **`ensureBackendGlobal(network)`** monta o backend da instância a partir de
+   `cfg.backendUrl`. Chamá-lo para mainnet criaria um backend de mainnet apontando para
+   uma URL de signet.
+
+### A regra que resolve, e por que é esta
+
+**A chave e o endereço dizem "mainnet ou não-mainnet", e nada mais.** Signet e testnet
+compartilham as mesmas version bytes de xpub (`043587cf`, `044a5262`, `045f1cf6`) e o
+mesmo HRP `tb` — o código já sabe disso e escreve *"testnet ou signet"* na mensagem de
+erro do `address.ts`. Nenhuma inspeção da chave separa as duas.
+
+Portanto: **quem decide a rede da carteira é o backend escolhido.** A chave só precisa ser
+*compatível* com ele:
+
+| chave/endereço | backend de mainnet | backend de signet ou testnet |
+|---|---|---|
+| `xpub`/`zpub`, `bc1…`, `1…`, `3…` | aceita | recusa, e oferece as fontes de mainnet |
+| `tpub`/`vpub`, `tb1…`, `m…`, `n…`, `2…` | recusa, e oferece as fontes da outra rede | aceita |
+
+Isso não é contorno: é o modelo correto, e é o que o schema já descreve.
+
+### O que muda
+
+**Backend (`kind`/rede do backend):**
+
+- `POST /api/backends` passa a receber **`network`** no corpo, com padrão vindo do preset
+  (item 2: mempool.space tem um caminho por rede; Core tem uma porta por rede — `8332`,
+  `38332`, `18332`). Nunca mais `loadConfig().network` por baixo do pano;
+- `GET /api/backends` **lista todas as redes**, cada linha com a sua, e aceita
+  `?network=` para filtrar. A tela agrupa por rede;
+- `ensureBackendGlobal` **só serve `cfg.network`**. Para as outras redes o usuário
+  cadastra o backend dele — com o catálogo do item 2 é um clique;
+- `NETWORK` no `.env` deixa de significar *"a rede que este watchtower vigia"* e passa a
+  significar *"a rede do backend que a instância oferece pronto"*. Reescrever a linha no
+  `.env.example`, no README e na §11 da especificação — variável que muda de sentido e
+  mantém a descrição antiga é a próxima pessoa perdendo uma tarde.
+
+**Cadastro de carteira (`wallet/routes.ts`):**
+
+- `wallets.network` passa a ser **a rede do backend escolhido**;
+- a validação da chave compara com a rede do backend, não com `cfg.network`, e a
+  mensagem muda de sujeito: em vez de *"este watchtower vigia signet"*, dizer que **a
+  fonte escolhida** vigia signet, nomeando-a, e listar as fontes de mainnet que o usuário
+  tem. Se não tiver nenhuma, oferecer cadastrar;
+- `parseWatchAddress` recebe a rede do backend, como já recebe.
+
+**Painel:**
+
+- **o total deixa de ser um número.** Saldo é somado **por rede**, e cada total é rotulado.
+  Mainnet aparece primeiro; signet e testnet aparecem como o que são;
+- os cartões de carteira mostram a rede quando há mais de uma na tela;
+- a postura de privacidade continua agregada como está — exposição é exposição em
+  qualquer rede.
+
+**Chaves e mensagens novas:** `backend.networkRequired`, `wallet.networkMismatch` (com
+`{rede_da_chave, rede_do_backend, nome_do_backend}`), `balance.totalByNetwork`,
+`network.mainnet` / `network.signet` / `network.testnet` — nas duas línguas.
+
+### Testes
+
+- `wallets.test.ts`: chave de mainnet com backend de mainnet **cadastra**, e
+  `wallets.network` é `mainnet` mesmo com `NETWORK=signet` na instância
+- `wallets.test.ts`: chave de mainnet com backend de signet recusa **nomeando o backend**,
+  não a instância
+- `wallets.test.ts`: `tpub` é aceito tanto por backend de signet quanto de testnet — a
+  chave não distingue os dois, e recusar um deles seria inventar informação
+- `backends.test.ts`: cadastrar backend com `network: 'mainnet'` numa instância de signet
+  grava `mainnet`, e `GET /api/backends` o devolve
+- `backends.test.ts`: `ensureBackendGlobal` não cria backend para rede diferente de
+  `cfg.network`
+- `Dashboard.test.tsx`: **duas carteiras de redes diferentes produzem dois totais, e nunca
+  um só** — é o teste que impede o painel de somar signet com mainnet
+- `tick.test.ts`: o worker sincroniza carteiras de redes diferentes no mesmo ciclo, cada
+  uma pelo seu backend
+
+**Pronto quando:** numa instância com `NETWORK=signet`, dá para cadastrar
+`bc1ql49ydapnjafl5t2cp9zqpjwe6pdgmxy98859v2` por um backend de mainnet cadastrado pela
+tela, ver o saldo dele, e o painel mostrar **dois totais separados** — sem tocar no `.env`
+e sem reiniciar nada.
+
+### Efeito nos outros itens
+
+- **item 2** (catálogo de fontes) passa a pedir a rede junto do preset; mempool.space e
+  Blockstream têm um caminho por rede, e o Core uma porta por rede;
+- **item 3** (trocar a fonte) já previa `backend.networkMismatch`. Continua valendo: trocar
+  para um backend de outra rede é recusa, porque mudaria o significado do que foi vigiado;
+- **§12.2 da especificação** perde a limitação *"uma instância vigia uma rede só"*.
 
 ---
 
@@ -951,15 +1075,16 @@ acabar ali.
 
 | # | Item | Por que nesta posição |
 |---|---|---|
-| 1 | **Item 1** — soberania provada contra o nó | fecha a pendência mais antiga, com o nó que já está na máquina. Nenhum outro item vale mais para o passo 5 do roteiro |
-| 2 | **Item 7** — botões · **Item 8** — tipografia · **Item 9** — grade | três itens visuais, sem migração e sem API. Mudam a impressão da tela inteira em poucas horas |
-| 3 | **Item 4** — arquivar e apagar | fecha um buraco que qualquer pessoa encontra em trinta segundos de uso |
-| 4 | **Item 2** — catálogo de fontes · **Item 3** — trocar a fonte | juntos, porque o formulário do 2 é o que o 3 usa |
-| 5 | **Item 6** — paginação · **Item 5** — detalhe do alerta | o feed vira usável e ganha profundidade |
-| 6 | **Item 10** — navegação e detalhe da carteira | precisa dos anteriores para ter o que colocar nas páginas |
-| 7 | **Item 12** — ponta, preço e taxas | valor visível, custo baixo, e a parte da ponta é quase de graça |
-| 8 | **Item 11** — temas | o mais adiável: encanta e não desbloqueia nada |
-| 9 | **Item 13** — acessos externos | depende de configuração de infraestrutura, que é o que mais atrasa perto do prazo |
+| 1 | **Item 0** — mais de uma rede na mesma instância | descoberto depois dos outros e vai na frente: sem ele o watchtower não vigia mainnet, e a carteira real do apresentador não entra na tela |
+| 2 | **Item 1** — soberania provada contra o nó | fecha a pendência mais antiga, com o nó que já está na máquina. Nenhum outro item vale mais para o passo 5 do roteiro |
+| 3 | **Item 7** — botões · **Item 8** — tipografia · **Item 9** — grade | três itens visuais, sem migração e sem API. Mudam a impressão da tela inteira em poucas horas |
+| 4 | **Item 4** — arquivar e apagar | fecha um buraco que qualquer pessoa encontra em trinta segundos de uso |
+| 5 | **Item 2** — catálogo de fontes · **Item 3** — trocar a fonte | juntos, porque o formulário do 2 é o que o 3 usa |
+| 6 | **Item 6** — paginação · **Item 5** — detalhe do alerta | o feed vira usável e ganha profundidade |
+| 7 | **Item 10** — navegação e detalhe da carteira | precisa dos anteriores para ter o que colocar nas páginas |
+| 8 | **Item 12** — ponta, preço e taxas | valor visível, custo baixo, e a parte da ponta é quase de graça |
+| 9 | **Item 11** — temas | o mais adiável: encanta e não desbloqueia nada |
+| 10 | **Item 13** — acessos externos | depende de configuração de infraestrutura, que é o que mais atrasa perto do prazo |
 
 **Parar no meio de um item é pior do que não começá-lo.** Se o tempo acabar, o certo é
 fechar o item em andamento com o que dá, registrar no diário o que ficou, e não abrir o

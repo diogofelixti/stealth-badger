@@ -607,7 +607,10 @@ com contrato e critério de pronto, está em
 ### 12.2 Limitações conhecidas do que existe
 
 - **Uma instância vigia uma rede só** (`NETWORK`). Dá para contrastar explorador público
-  e nó próprio, mas ambos na mesma rede.
+  e nó próprio, mas ambos na mesma rede. **Especificado para cair**: o item 0 do backlog
+  de 27/08 tira a rede da configuração da instância e a põe no backend escolhido, que é o
+  único que sabe qual rede não-mainnet é — `tpub` e `tb1…` não distinguem signet de
+  testnet.
 - **O adapter Electrum foi verificado contra um servidor público**, não contra um nó do
   próprio usuário. Electrs, Fulcrum e florestad continuam sem terem sido exercitados.
 - **O adapter de Bitcoin Core não falou com um bitcoind de verdade.** O RPC, o registro
