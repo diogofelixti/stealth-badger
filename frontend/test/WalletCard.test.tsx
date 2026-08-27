@@ -256,3 +256,57 @@ describe('WalletCard — arquivar e apagar', () => {
     expect(desarquivar).toHaveBeenCalled()
   })
 })
+
+describe('WalletCard — trocar a fonte de consulta', () => {
+  const comFontes = {
+    ...catalogo,
+    'wallets.changeSource': 'Trocar fonte',
+    'wallets.changeSourceNote': 'O histórico não se perde na troca.',
+  }
+
+  const FONTES = [
+    {
+      id: 1, kind: 'esplora' as const, url: 'https://mempool.space/signet/api',
+      isPublic: true, network: 'signet' as const, scope: 'global' as const,
+    },
+    {
+      id: 2, kind: 'electrum' as const, url: 'electrum://host.docker.internal:50001',
+      isPublic: false, network: 'signet' as const, scope: 'own' as const,
+    },
+  ]
+
+  it('oferece as fontes da mesma rede e avisa que o histórico fica', () => {
+    render(
+      <WalletCard
+        wallet={base}
+        catalog={comFontes}
+        lang="pt"
+        backends={FONTES}
+        onChangeBackend={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('Trocar fonte'))
+
+    expect(screen.getByText(/histórico não se perde/i)).toBeDefined()
+    expect(screen.getByRole('option', { name: /host\.docker\.internal/ })).toBeDefined()
+  })
+
+  it('troca para a fonte escolhida', () => {
+    const trocar = vi.fn()
+    render(
+      <WalletCard
+        wallet={base}
+        catalog={comFontes}
+        lang="pt"
+        backends={FONTES}
+        onChangeBackend={trocar}
+      />,
+    )
+    fireEvent.click(screen.getByText('Trocar fonte'))
+
+    fireEvent.change(screen.getByLabelText('Trocar fonte'), { target: { value: '2' } })
+
+    expect(trocar).toHaveBeenCalledWith(2)
+  })
+})

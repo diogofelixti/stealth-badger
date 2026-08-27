@@ -937,3 +937,146 @@ describe('POST /api/wallets — chave ambígua contra backend de registro real',
     expect(res.json().scriptType).toBe('p2wpkh')
   })
 })
+
+describe('PATCH /api/wallets/:id — trocar a fonte de consulta', () => {
+  async function carteiraEBackends(): Promise<{
+    app: ReturnType<typeof buildApp>
+    cookie: string
+    walletId: number
+    outraFonte: number
+  }> {
+    process.env.NETWORK = 'signet'
+    const app = buildApp({ adapterFactory: () => adapterQueConhece(new Set()) })
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'troca@exemplo.com', password: 'senha-longa-de-teste', language: 'pt' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'troca@exemplo.com', password: 'senha-longa-de-teste' },
+    })
+    const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+
+    const publico = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: { preset: 'mempool', network: 'signet' },
+    })
+    const proprio = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: { preset: 'fulcrum', host: '127.0.0.1', port: 50001, network: 'signet' },
+    })
+    const carteira = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Migrante', key: TPUB, backendId: publico.json().id, scriptType: 'p2wpkh' },
+    })
+    return {
+      app,
+      cookie,
+      walletId: carteira.json().id,
+      outraFonte: proprio.json().id,
+    }
+  }
+
+  // O log é append-only: um UTXO que existe continua existindo, quem quer que
+  // responda por ele. Apagar o histórico na troca seria reescrever a história
+  // por mudança de fonte.
+  it('troca a fonte, zera a sincronização e não apaga o log', async () => {
+    const { app, cookie, walletId, outraFonte } = await carteiraEBackends()
+    await pool.query(
+      `INSERT INTO chain_events (wallet_id, type, payload, height)
+       VALUES ($1, 'utxo_created', '{}'::jsonb, 10)`,
+      [walletId],
+    )
+    await pool.query(
+      `UPDATE wallets SET sync_state = 'synced', sync_progress = 100, sync_height = 99
+        WHERE id = $1`,
+      [walletId],
+    )
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/wallets/${walletId}`,
+      cookies: { sb_session: cookie },
+      payload: { backendId: outraFonte },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().backendUrl).toBe('electrum://127.0.0.1:50001')
+    expect(res.json().backendIsPublic).toBe(false)
+    expect(res.json().syncState).toBe('pending')
+
+    const { rows } = await pool.query('SELECT count(*) FROM chain_events WHERE wallet_id = $1', [
+      walletId,
+    ])
+    expect(Number(rows[0]!.count)).toBe(1)
+  })
+
+  it('recusa fonte de outra rede, nomeando as duas', async () => {
+    const { app, cookie, walletId } = await carteiraEBackends()
+    const mainnet = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: { preset: 'mempool', network: 'mainnet' },
+    })
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/wallets/${walletId}`,
+      cookies: { sb_session: cookie },
+      payload: { backendId: mainnet.json().id },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('backend.networkMismatch')
+    expect(res.json().params).toMatchObject({ rede_da_carteira: 'signet', rede_do_backend: 'mainnet' })
+  })
+
+  // Distinguir inexistente de alheio contaria a um usuário quais ids existem
+  // no banco de outro.
+  it('dá a mesma resposta para fonte inexistente e fonte de outro usuário', async () => {
+    const { app, cookie, walletId } = await carteiraEBackends()
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'alheio@exemplo.com', password: 'senha-longa-de-teste' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'alheio@exemplo.com', password: 'senha-longa-de-teste' },
+    })
+    const outro = login.cookies.find(c => c.name === 'sb_session')!.value
+    const dele = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: outro },
+      payload: { preset: 'fulcrum', host: '10.0.0.9', port: 50001, network: 'signet' },
+    })
+
+    const alheio = await app.inject({
+      method: 'PATCH',
+      url: `/api/wallets/${walletId}`,
+      cookies: { sb_session: cookie },
+      payload: { backendId: dele.json().id },
+    })
+    const inexistente = await app.inject({
+      method: 'PATCH',
+      url: `/api/wallets/${walletId}`,
+      cookies: { sb_session: cookie },
+      payload: { backendId: 999999 },
+    })
+
+    expect(alheio.statusCode).toBe(inexistente.statusCode)
+    expect(alheio.json().code).toBe(inexistente.json().code)
+    expect(alheio.statusCode).toBe(404)
+  })
+})

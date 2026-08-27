@@ -669,3 +669,104 @@ describe('syncWallet por registro de descriptor', () => {
     expect(rows[0]!.sync_state).toBe('synced')
   })
 })
+
+describe('syncWallet — carteira de endereço avulso num backend de registro', () => {
+  const ENDERECO = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu'
+
+  function adapterDeRegistro(reg: {
+    descriptors: string[]
+    utxos: () => { txid: string; vout: number; value: number; height: number | null; address: string; derivationPath: string }[]
+  }): ChainAdapter {
+    return {
+      capabilities: () => ({
+        randomAccess: false,
+        needsRegistration: true,
+        supportsSubscribe: false,
+        hasTxIndex: true,
+        isPublic: false,
+        host: 'meu nó',
+      }),
+      tipHeight: async () => 200,
+      blockHashAt: async (h: number) => 'h' + h,
+      registerDescriptor: async (d: string) => {
+        reg.descriptors.push(d)
+      },
+      getRegisteredUtxos: async () => reg.utxos(),
+    }
+  }
+
+  async function carteiraDeEndereco(): Promise<number> {
+    const { rows: u } = await pool.query<{ id: string }>('SELECT id FROM users LIMIT 1')
+    const { rows: b } = await pool.query<{ id: string }>('SELECT id FROM backends LIMIT 1')
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO wallets (user_id, label, kind, script_type, network, gap_limit, backend_id)
+       VALUES ($1,'Doações','address','p2wpkh','mainnet',20,$2) RETURNING id`,
+      [u[0]!.id, b[0]!.id],
+    )
+    const id = Number(rows[0]!.id)
+    await pool.query(
+      `INSERT INTO addresses (wallet_id, chain, idx, derivation_path, address, scripthash)
+       VALUES ($1, 0, 0, '', $2, 'sh')`,
+      [id, ENDERECO],
+    )
+    return id
+  }
+
+  // Uma carteira de endereço avulso não tem xpub do qual montar descriptor de
+  // cadeia. O Core aceita `addr(<endereço>)`, e é o que permite vigiar um
+  // endereço publicado pelo nó do próprio usuário.
+  it('registra addr(endereço) em vez das duas cadeias', async () => {
+    const id = await carteiraDeEndereco()
+    const reg = { descriptors: [] as string[], utxos: () => [] }
+
+    await syncWallet(id, adapterDeRegistro(reg))
+
+    expect(reg.descriptors).toEqual([`addr(${ENDERECO})`])
+  })
+
+  it('projeta o saldo do que o nó reporta para esse endereço', async () => {
+    const id = await carteiraDeEndereco()
+    const reg = {
+      descriptors: [] as string[],
+      utxos: () => [
+        {
+          txid: 'bb'.repeat(32), vout: 1, value: 51000, height: 190,
+          address: ENDERECO, derivationPath: '0/0',
+        },
+      ],
+    }
+
+    const r = await syncWallet(id, adapterDeRegistro(reg))
+
+    expect(r.newEvents).toHaveLength(1)
+    expect(await walletBalance(id)).toBe(51000)
+  })
+
+  // O teste que prova que trocar a fonte não reescreve o log: o mesmo UTXO,
+  // visto primeiro por sondagem e depois por registro, é um evento só.
+  it('não duplica evento quando a mesma carteira troca de modelo', async () => {
+    const id = await carteiraDeEndereco()
+    const utxo = { txid: 'cc'.repeat(32), vout: 0, value: 12345, height: 180 }
+
+    await syncWallet(
+      id,
+      adapterWith({ [ENDERECO]: [{ txid: utxo.txid, height: 180, blockHash: 'h180' }] }, { [ENDERECO]: [utxo] }),
+    )
+    const depoisDaSondagem = await walletBalance(id)
+
+    await syncWallet(
+      id,
+      adapterDeRegistro({
+        descriptors: [],
+        utxos: () => [{ ...utxo, address: ENDERECO, derivationPath: '0/0' }],
+      }),
+    )
+
+    const { rows } = await pool.query<{ count: string }>(
+      `SELECT count(*) FROM chain_events WHERE wallet_id = $1 AND type = 'utxo_created'`,
+      [id],
+    )
+    expect(Number(rows[0]!.count)).toBe(1)
+    expect(await walletBalance(id)).toBe(depoisDaSondagem)
+  })
+})

@@ -132,16 +132,33 @@ async function sincronizarPorRegistro(
     )
   }
 
-  const masterKey = process.env.MASTER_KEY_HEX
-  if (!masterKey) throw new Error('MASTER_KEY_HEX ausente')
-  const canonicalXpub = open(wallet.xpub_encrypted!, masterKey)
-
-  // As duas cadeias: recebimento e troco. Registrar só a primeira deixaria o
-  // troco invisível, e o saldo apareceria menor do que é.
-  for (const chain of [0, 1] as const) {
-    await adapter.registerDescriptor(
-      descriptorFor(canonicalXpub + '/' + chain + '/*', wallet.script_type),
+  if (wallet.kind === 'address') {
+    // Carteira de endereço avulso não tem xpub do qual montar descriptor de
+    // cadeia — e não precisa: `addr(<endereço>)` é descriptor válido, e é o
+    // que deixa alguém vigiar o endereço que publicou pelo próprio nó.
+    const { rows } = await pool.query<{ address: string }>(
+      'SELECT address FROM addresses WHERE wallet_id = $1 ORDER BY id LIMIT 1',
+      [walletId],
     )
+    const endereco = rows[0]?.address
+    if (!endereco) {
+      throw new Error(
+        'carteira de endereço avulso sem endereço gravado: não há o que registrar',
+      )
+    }
+    await adapter.registerDescriptor(`addr(${endereco})`)
+  } else {
+    const masterKey = process.env.MASTER_KEY_HEX
+    if (!masterKey) throw new Error('MASTER_KEY_HEX ausente')
+    const canonicalXpub = open(wallet.xpub_encrypted!, masterKey)
+
+    // As duas cadeias: recebimento e troco. Registrar só a primeira deixaria o
+    // troco invisível, e o saldo apareceria menor do que é.
+    for (const chain of [0, 1] as const) {
+      await adapter.registerDescriptor(
+        descriptorFor(canonicalXpub + '/' + chain + '/*', wallet.script_type),
+      )
+    }
   }
 
   const doNo = await adapter.getRegisteredUtxos()

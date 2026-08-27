@@ -151,6 +151,12 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'backends.dockerHint':
       'Este watchtower roda em container: localhost aqui é o próprio container, não a sua máquina. Use host.docker.internal.',
     'error.backend.unknownPreset': 'Não conheço a fonte "{preset}". Escolha uma do catálogo.',
+    'error.backend.notFound': 'Esta fonte não existe, ou não é sua.',
+    'error.backend.networkMismatch':
+      'Esta carteira é de {rede_da_carteira}, e a fonte escolhida {nome_do_backend} vigia {rede_do_backend}.',
+    'wallets.changeSource': 'Trocar fonte',
+    'wallets.changeSourceNote':
+      'O histórico não se perde na troca: a carteira volta a sincronizar pela fonte nova, e o log continua o mesmo.',
     'error.backend.hostRequired': 'Informe o host da fonte.',
     'error.backend.portRequired': 'Informe a porta da fonte.',
     'error.backend.portRange': 'Porta {porta} fora da faixa. Use um número entre 1 e 65535.',
@@ -364,6 +370,12 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'backends.dockerHint':
       'This watchtower runs in a container: localhost here is the container itself, not your machine. Use host.docker.internal.',
     'error.backend.unknownPreset': 'I do not know the source "{preset}". Pick one from the catalogue.',
+    'error.backend.notFound': 'That source does not exist, or is not yours.',
+    'error.backend.networkMismatch':
+      'This wallet is on {rede_da_carteira}, and the chosen source {nome_do_backend} watches {rede_do_backend}.',
+    'wallets.changeSource': 'Change source',
+    'wallets.changeSourceNote':
+      'History is not lost in the switch: the wallet syncs again through the new source, and the log stays the same.',
     'error.backend.hostRequired': 'Give the host of the source.',
     'error.backend.portRequired': 'Give the port of the source.',
     'error.backend.portRange': 'Port {porta} is out of range. Use a number between 1 and 65535.',

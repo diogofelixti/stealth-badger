@@ -1634,10 +1634,66 @@ aviso de `host.docker.internal` aparecendo enquanto se digita `localhost`, e
   bloqueia o ciclo do worker — a limitação medida na rodada 24.
 - **O item 3, trocar a fonte de uma carteira já cadastrada, não foi começado.**
 
+## Rodada 28 — Item 3: trocar a fonte de uma carteira já cadastrada
+
+### O que foi construído
+
+- `PATCH /api/wallets/:id` com `backendId`: troca a fonte, volta a carteira para
+  `pending`, zera progresso e erro, e **não toca no log**.
+- Recusas: `backend.networkMismatch` nomeando as duas redes, e **a mesma resposta 404
+  para fonte inexistente e fonte de outro usuário** — distinguir contaria quais ids
+  existem no banco alheio.
+- `sincronizarPorRegistro` passou a registrar **`addr(<endereço>)`** quando a carteira é
+  de endereço avulso, em vez das duas cadeias de derivação. É o que permite vigiar um
+  endereço publicado pelo próprio nó, e era a saída 1 das duas que o backlog previa.
+- A consulta que monta a carteira para a tela virou uma constante usada pela listagem e
+  pela troca: duas consultas parecidas divergem no primeiro campo novo, e a tela passaria
+  a mostrar dado diferente conforme o caminho.
+- O cartão ganhou "trocar fonte", com a frase que diz **antes** da troca que o histórico
+  não se perde, e a lista mostra o apelido da fonte quando ele existe.
+
+### O que quebrou a premissa
+
+- **A carteira de endereço avulso não sincronizava por registro**, e o erro não era
+  "não sei fazer": era `Cannot read properties of null (reading 'length')` — o motor
+  tentava abrir um `xpub_encrypted` nulo. Quem trocasse a fonte de um endereço vigiado
+  para o próprio nó veria a carteira morrer em `error` com uma mensagem que não diz nada.
+- **Dirigir a tela por texto não basta.** O `getByText` do Playwright achou "Trocar
+  fonte" na página inteira, mas o cartão certo só foi alcançado pelo elemento
+  `<article>` — dois seletores por classe e por ancestral falharam antes. Fica anotado
+  para o roteiro de regressão: os cartões têm `article` e `data-wallet-kind`, e é por eles
+  que se ancora.
+
+### O que ficou conferido, pela tela
+
+A carteira do dono, vigiada pelo mempool.space, trocada para o Fulcrum desta máquina:
+
+| O que | Antes | Depois |
+|---|---|---|
+| fonte | `mempool.space/signet/api` | `electrum://host.docker.internal:50001` |
+| selo | **aceso** (`backendIsPublic: true`) | **apagado** (`false`) |
+| saldo | 7.552.468 sats | **7.552.468 sats** |
+| UTXOs | 32 | **32** |
+| `chain_events` | 32 | **32** — o log não foi reescrito |
+| estado | `synced` | `pending` → `synced` no ciclo seguinte |
+
+As fontes oferecidas na troca vieram rotuladas pela postura: *mempool.space · Explorador
+público*, *host.docker.internal:50001 · Soberano*.
+
+### O que ficou de dívida
+
+- **A troca não foi exercitada de sondagem para registro contra o nó real.** Está coberta
+  por teste — inclusive o que prova que o mesmo UTXO visto pelos dois modelos não vira
+  dois eventos —, mas contra o Bitcoin Core de verdade custaria os dois rescans da rodada
+  24, e o ciclo do worker parado junto.
+- **Duas fontes com o mesmo host aparecem iguais na lista quando nenhuma tem apelido.**
+  O apelido resolve, e o catálogo do item 2 o oferece; fontes cadastradas antes dele não
+  têm.
+
 ## Estado em 27/08
 
-- backend: 37 arquivos de teste, **454 testes**
-- frontend: 15 arquivos de teste, **118 testes**
+- backend: 37 arquivos de teste, **460 testes**
+- frontend: 15 arquivos de teste, **120 testes**
 - migrações aplicadas: `001` a `011`
 - **a postura soberana está demonstrada**: Bitcoin Core e Fulcrum desta máquina, com o
   mesmo saldo do explorador público

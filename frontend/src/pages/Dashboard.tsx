@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, type Alert, type Catalog, type Lang, type Me, type Wallet } from '../lib/api'
+import { api, type Alert, type Backend, type Catalog, type Lang, type Me, type Wallet } from '../lib/api'
 import { Shell } from '../components/Shell'
 import { AlertFeed } from '../components/AlertFeed'
 import { AddWallet } from '../components/AddWallet'
@@ -87,6 +87,9 @@ export function Dashboard({
   const [arquivadas, setArquivadas] = useState<Wallet[]>([])
   const [vendoArquivadas, setVendoArquivadas] = useState(false)
   const [paraApagar, setParaApagar] = useState<Wallet | null>(null)
+  // As fontes cadastradas, para o cartão poder oferecer a troca sem cada um
+  // consultar por conta própria.
+  const [fontes, setFontes] = useState<Backend[]>([])
   const [carregado, setCarregado] = useState(false)
 
   const recarregar = useCallback(async () => {
@@ -94,6 +97,13 @@ export function Dashboard({
     setWallets(w)
     setAlerts(a)
     setCarregado(true)
+  }, [])
+
+  useEffect(() => {
+    void api
+      .backends()
+      .then(setFontes)
+      .catch(() => setFontes([]))
   }, [])
 
   const recarregarArquivadas = useCallback(async () => {
@@ -265,6 +275,10 @@ export function Dashboard({
                   void api
                     .archiveWallet(w.id)
                     .then(() => Promise.all([recarregar(), recarregarArquivadas()]))
+                }
+                backends={fontes.filter(f => f.network === w.network)}
+                onChangeBackend={id =>
+                  void api.changeWalletBackend(w.id, id).then(recarregar)
                 }
               />
             ))}

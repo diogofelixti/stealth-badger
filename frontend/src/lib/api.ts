@@ -185,6 +185,11 @@ export const api = {
   me: () => request<Me>('/api/auth/me'),
   wallets: (arquivadas = false) =>
     request<Wallet[]>('/api/wallets' + (arquivadas ? '?archived=true' : '')),
+  changeWalletBackend: (id: number, backendId: number) =>
+    request<Wallet>(`/api/wallets/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ backendId }),
+    }),
   archiveWallet: (id: number) =>
     request<Wallet>(`/api/wallets/${id}/archive`, { method: 'POST' }),
   unarchiveWallet: (id: number) =>

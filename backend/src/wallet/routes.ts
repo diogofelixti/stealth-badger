@@ -16,6 +16,48 @@ import {
   type ScriptType,
 } from './descriptor'
 
+/**
+ * A carteira como a tela a conhece: saldo, contagem, postura da fonte e a
+ * última análise de privacidade. Mora numa constante porque a listagem e a
+ * troca de fonte precisam devolver **a mesma coisa** — duas consultas
+ * parecidas divergem no primeiro campo novo, e a tela passa a mostrar dado
+ * diferente conforme o caminho que a trouxe.
+ */
+const SELECT_DA_CARTEIRA = `SELECT w.id, w.label, w.kind, w.script_type AS "scriptType", w.network,
+              w.xpub_fingerprint AS fingerprint, w.sync_state AS "syncState",
+              -- só o endereço avulso: uma carteira por chave tem dezenas, e
+              -- eleger um deles seria mostrar um dado que não significa nada
+              CASE WHEN w.kind = 'address' THEN (
+                SELECT a.address FROM addresses a
+                 WHERE a.wallet_id = w.id ORDER BY a.id LIMIT 1
+              ) END AS address,
+              w.sync_progress AS "syncProgress", w.sync_height AS "syncHeight",
+              w.sync_error AS "syncError", w.archived_at AS "archivedAt",
+              b.is_public AS "backendIsPublic", b.url AS "backendUrl",
+              p.score AS "privacyScore", p.grade AS "privacyGrade",
+              p.scanned_at AS "privacyScannedAt",
+              COALESCE((
+                SELECT sum(value_sats) FROM utxos u
+                WHERE u.wallet_id = w.id AND NOT u.spent
+              ), 0)::bigint AS "balanceSats",
+              (
+                SELECT count(*) FROM utxos u
+                WHERE u.wallet_id = w.id AND NOT u.spent
+              )::int AS "utxoCount",
+              (
+                SELECT count(*) FROM utxos u
+                WHERE u.wallet_id = w.id AND NOT u.spent AND u.frozen
+              )::int AS "frozenCount"
+         FROM wallets w
+         JOIN backends b ON b.id = w.backend_id
+         -- LATERAL em vez de subconsulta por coluna: uma varredura só traz
+         -- score, nota e data da mesma análise, e não de três diferentes
+         LEFT JOIN LATERAL (
+           SELECT score, grade, scanned_at FROM privacy_scans ps
+            WHERE ps.wallet_id = w.id
+            ORDER BY ps.scanned_at DESC, ps.id DESC LIMIT 1
+         ) p ON true`
+
 export interface WalletRouteOptions {
   adapterFactory?: (backend: BackendRow) => ChainAdapter
 }
@@ -312,43 +354,9 @@ export function registerWalletRoutes(
     const arquivadas = req.query.archived === 'true'
 
     const { rows } = await pool.query(
-      `SELECT w.id, w.label, w.kind, w.script_type AS "scriptType", w.network,
-              w.xpub_fingerprint AS fingerprint, w.sync_state AS "syncState",
-              -- só o endereço avulso: uma carteira por chave tem dezenas, e
-              -- eleger um deles seria mostrar um dado que não significa nada
-              CASE WHEN w.kind = 'address' THEN (
-                SELECT a.address FROM addresses a
-                 WHERE a.wallet_id = w.id ORDER BY a.id LIMIT 1
-              ) END AS address,
-              w.sync_progress AS "syncProgress", w.sync_height AS "syncHeight",
-              w.sync_error AS "syncError", w.archived_at AS "archivedAt",
-              b.is_public AS "backendIsPublic", b.url AS "backendUrl",
-              p.score AS "privacyScore", p.grade AS "privacyGrade",
-              p.scanned_at AS "privacyScannedAt",
-              COALESCE((
-                SELECT sum(value_sats) FROM utxos u
-                WHERE u.wallet_id = w.id AND NOT u.spent
-              ), 0)::bigint AS "balanceSats",
-              (
-                SELECT count(*) FROM utxos u
-                WHERE u.wallet_id = w.id AND NOT u.spent
-              )::int AS "utxoCount",
-              (
-                SELECT count(*) FROM utxos u
-                WHERE u.wallet_id = w.id AND NOT u.spent AND u.frozen
-              )::int AS "frozenCount"
-         FROM wallets w
-         JOIN backends b ON b.id = w.backend_id
-         -- LATERAL em vez de subconsulta por coluna: uma varredura só traz
-         -- score, nota e data da mesma análise, e não de três diferentes
-         LEFT JOIN LATERAL (
-           SELECT score, grade, scanned_at FROM privacy_scans ps
-            WHERE ps.wallet_id = w.id
-            ORDER BY ps.scanned_at DESC, ps.id DESC LIMIT 1
-         ) p ON true
-        WHERE w.user_id = $1
-          AND (w.archived_at IS NOT NULL) = $2
-        ORDER BY w.created_at DESC`,
+      SELECT_DA_CARTEIRA +
+        ` WHERE w.user_id = $1 AND (w.archived_at IS NOT NULL) = $2
+          ORDER BY w.created_at DESC`,
       [req.userId, arquivadas],
     )
     // Se a análise está correndo é estado de processo, não de banco: vem do
@@ -357,6 +365,68 @@ export function registerWalletRoutes(
       rows.map(r => ({ ...r, privacyScanning: scanEmAndamento(Number(r.id)) })),
     )
   })
+
+  /**
+   * Trocar a fonte de consulta de uma carteira já cadastrada.
+   *
+   * Pode trocar de modelo de sincronização junto — sair da sondagem para o
+   * registro, ou o contrário. O que **não** muda é o log: `chain_events` é
+   * append-only, e um UTXO que existe continua existindo independentemente de
+   * quem responde por ele. A projeção é reconstruída pelo ciclo seguinte, e
+   * por isso a carteira volta a `pending`.
+   */
+  app.patch<{ Params: { id: string }; Body: { backendId?: number } }>(
+    '/api/wallets/:id',
+    async (req, reply) => {
+      if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
+
+      const alvo = await carteiraDoUsuario(Number(req.params.id), req.userId)
+      if (!alvo) {
+        return reply
+          .code(404)
+          .send(erro('wallet.notFound', 'esta carteira não existe, ou não é sua'))
+      }
+
+      const escolhido = await backendDoUsuario(req.userId, Number(req.body?.backendId))
+      if (!escolhido) {
+        // A mesma resposta para fonte inexistente e fonte de outro usuário:
+        // distinguir as duas contaria quais ids existem no banco alheio.
+        return reply
+          .code(404)
+          .send(erro('backend.notFound', 'esta fonte não existe, ou não é sua'))
+      }
+
+      if (escolhido.network !== alvo.network) {
+        return reply.code(400).send(
+          erro(
+            'backend.networkMismatch',
+            'esta carteira é de ' + alvo.network + ', e a fonte escolhida ' +
+              hostDoBackend(escolhido.url) + ' vigia ' + escolhido.network,
+            {
+              rede_da_carteira: alvo.network,
+              rede_do_backend: escolhido.network,
+              nome_do_backend: hostDoBackend(escolhido.url),
+            },
+          ),
+        )
+      }
+
+      // A projeção se refaz sozinha; o log não é tocado.
+      await pool.query(
+        `UPDATE wallets
+            SET backend_id = $2, sync_state = 'pending', sync_progress = 0,
+                sync_error = NULL
+          WHERE id = $1`,
+        [alvo.id, escolhido.id],
+      )
+
+      const { rows } = await pool.query(
+        SELECT_DA_CARTEIRA + ' WHERE w.user_id = $1 AND w.id = $2',
+        [req.userId, alvo.id],
+      )
+      return reply.send({ ...rows[0], privacyScanning: scanEmAndamento(alvo.id) })
+    },
+  )
 
   app.post<{ Params: { id: string } }>(
     '/api/wallets/:id/archive',
@@ -424,6 +494,8 @@ export function registerWalletRoutes(
 interface CarteiraDoDono {
   id: number
   label: string
+  network: Network
+  kind: 'xpub' | 'address'
   archived_at: Date | null
 }
 
@@ -433,7 +505,7 @@ async function carteiraDoUsuario(
 ): Promise<CarteiraDoDono | null> {
   if (!Number.isFinite(id)) return null
   const { rows } = await pool.query<CarteiraDoDono>(
-    'SELECT id, label, archived_at FROM wallets WHERE id = $1 AND user_id = $2',
+    'SELECT id, label, network, kind, archived_at FROM wallets WHERE id = $1 AND user_id = $2',
     [id, userId],
   )
   return rows[0] ?? null
