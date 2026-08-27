@@ -11,6 +11,11 @@ import type { Marca } from './marks'
  * A spec não tem campo de tag. Elas são anexadas ao rótulo como `#tag`, o que
  * mantém a ida e a volta sem perda e continua legível numa carteira que só
  * saiba mostrar o rótulo.
+ *
+ * Cuidado com `spendable`: **omitir não quer dizer "gastável"**. A spec diz que
+ * omitir manda a carteira de destino preservar o que já tinha. Por isso a
+ * exportação sempre escreve o campo, e a importação distingue "não mencionado"
+ * de "gastável".
  */
 
 interface LinhaBip329 {
@@ -18,6 +23,22 @@ interface LinhaBip329 {
   ref?: string
   label?: string
   spendable?: boolean
+}
+
+/**
+ * O que uma linha do arquivo diz sobre uma saída.
+ *
+ * `frozen` é opcional porque a spec permite não dizer nada a respeito, e
+ * ausência é diferente de negação: tratar "não mencionado" como "gastável"
+ * descongelaria em silêncio tudo que o usuário congelou, ao importar um
+ * arquivo de carteira que não escreve o campo.
+ */
+export interface MarcaImportada {
+  txid: string
+  vout: number
+  label: string | null
+  tags: string[]
+  frozen?: boolean
 }
 
 const REF_DE_SAIDA = /^([0-9a-fA-F]{64}):(\d+)$/
@@ -50,28 +71,30 @@ export function exportarBip329(marcas: Marca[]): string {
     // rótulo nem congelamento não é exportação, é ruído.
     if (!label && !m.frozen) continue
 
-    const linha: LinhaBip329 = {
-      type: 'output',
-      ref: `${m.txid}:${m.vout}`,
-      label,
-    }
-    // `spendable` é opcional e o padrão da spec é verdadeiro: escrever só
-    // quando é falso mantém o arquivo menor e igualmente correto.
-    if (m.frozen) linha.spendable = false
-    linhas.push(JSON.stringify(linha))
+    // Sempre explícito. Omitir mandaria a carteira de destino preservar o
+    // congelamento que ela já tivesse, e o nosso "não está congelado" nunca
+    // chegaria lá.
+    linhas.push(
+      JSON.stringify({
+        type: 'output',
+        ref: `${m.txid}:${m.vout}`,
+        label,
+        spendable: !m.frozen,
+      } satisfies LinhaBip329),
+    )
   }
 
   return linhas.length ? linhas.join('\n') + '\n' : ''
 }
 
 export interface ImportacaoBip329 {
-  marcas: Marca[]
+  marcas: MarcaImportada[]
   /** linhas que não viraram marca: outro tipo, JSON inválido, ref estranha */
   ignoradas: number
 }
 
 export function interpretarBip329(texto: string): ImportacaoBip329 {
-  const marcas: Marca[] = []
+  const marcas: MarcaImportada[] = []
   let ignoradas = 0
 
   for (const bruta of texto.split('\n')) {
@@ -106,7 +129,8 @@ export function interpretarBip329(texto: string): ImportacaoBip329 {
       vout: Number(ref[2]),
       label,
       tags,
-      frozen: obj.spendable === false,
+      // ausente fica ausente: quem importa decide preservar o que já tinha
+      ...(obj.spendable === undefined ? {} : { frozen: obj.spendable === false }),
     })
   }
 

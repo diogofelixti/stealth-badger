@@ -199,4 +199,63 @@ describe('rótulos BIP-329', () => {
     })
     expect(res.json()).toMatchObject({ imported: 0, ignored: 1 })
   })
+
+  // A spec diz que omitir `spendable` manda preservar o que já existe.
+  // Importar de uma carteira que não escreve o campo descongelaria em silêncio
+  // tudo que o usuário tinha congelado — e congelamento é a decisão de coin
+  // control mais direta que existe: "não gaste este".
+  it('não descongela o que o arquivo importado não menciona', async () => {
+    const { app, cookie, walletId } = await comUtxo()
+    await app.inject({
+      method: 'PUT',
+      url: `/api/wallets/${walletId}/utxos/${TXID}/0`,
+      cookies: { sb_session: cookie },
+      payload: { frozen: true },
+    })
+
+    const arquivo =
+      JSON.stringify({ type: 'output', ref: `${TXID}:0`, label: 'só o rótulo' }) + '\n'
+    await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${walletId}/labels`,
+      cookies: { sb_session: cookie },
+      headers: { 'content-type': 'text/plain' },
+      payload: arquivo,
+    })
+
+    const lista = await app.inject({
+      method: 'GET',
+      url: `/api/wallets/${walletId}/utxos`,
+      cookies: { sb_session: cookie },
+    })
+    expect(lista.json()[0]).toMatchObject({ label: 'só o rótulo', frozen: true })
+  })
+
+  it('descongela quando o arquivo diz explicitamente que é gastável', async () => {
+    const { app, cookie, walletId } = await comUtxo()
+    await app.inject({
+      method: 'PUT',
+      url: `/api/wallets/${walletId}/utxos/${TXID}/0`,
+      cookies: { sb_session: cookie },
+      payload: { frozen: true },
+    })
+
+    const arquivo =
+      JSON.stringify({ type: 'output', ref: `${TXID}:0`, label: 'x', spendable: true }) +
+      '\n'
+    await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${walletId}/labels`,
+      cookies: { sb_session: cookie },
+      headers: { 'content-type': 'text/plain' },
+      payload: arquivo,
+    })
+
+    const lista = await app.inject({
+      method: 'GET',
+      url: `/api/wallets/${walletId}/utxos`,
+      cookies: { sb_session: cookie },
+    })
+    expect(lista.json()[0]).toMatchObject({ frozen: false })
+  })
 })

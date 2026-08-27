@@ -481,7 +481,7 @@ que o projeto é self-hostável e que a chave nunca é versionada.
 
 ---
 
-## 11.4 Análise de privacidade
+### 11.4 Análise de privacidade
 
 O `am-i-exposed` (MIT) é chamado **como CLI, por subprocess**. O pacote publica só
 `bin`, sem `main` nem `exports`: não há biblioteca para importar.
@@ -516,6 +516,37 @@ anterior transformaria "o score caiu depois daquela consolidação" num número 
 > "Could not find any Python installation", erro que não menciona nem o scanner nem o
 > sqlite.
 
+### 11.5 Coin control e BIP-329
+
+Cada UTXO aceita **rótulo**, **tags de proveniência** e **congelamento**.
+
+Essas três coisas são dados do usuário, e por isso **não moram em `utxos`**: aquela
+tabela é projeção, apagada e reconstruída a cada sincronização. Moram em `utxo_marks`,
+com chave `(carteira, txid, vout)` que não referencia `utxos` de propósito — a marca
+precisa sobreviver ao UTXO ser gasto, porque o BIP-329 exporta rótulo de saída gasta
+também.
+
+A exportação é **JSON Lines**, um objeto por linha, como a spec manda:
+
+```json
+{"type":"output","ref":"<txid>:<vout>","label":"do faucet #nao-kyc","spendable":false}
+```
+
+Duas decisões que o formato impõe:
+
+- **`spendable` é sempre escrito.** A BIP-329 diz que *omitir* manda a carteira de
+  destino preservar o que ela já tinha — então omitir faria o nosso "não está
+  congelado" nunca chegar lá. Pela mesma razão, na importação, campo ausente **preserva**
+  o congelamento local em vez de desfazê-lo;
+- **a spec não tem campo de tag.** Elas são anexadas ao rótulo como `#tag`, o que mantém
+  a ida e a volta sem perda e continua legível em carteira que só saiba mostrar o
+  rótulo.
+
+A importação atravessa arquivo de outra carteira sem engasgar: `tx`, `addr`, `pubkey`,
+`input`, `xpub` e `spscan` são contados e pulados, linha corrompida não aborta o
+arquivo, e saída que não é desta carteira não vira marca órfã. O **arquivo de exemplo da
+própria BIP-329** é lido por teste.
+
 ---
 
 ## 12. O que ainda não existe
@@ -527,21 +558,25 @@ Escrito para ser lido antes que alguém pergunte.
 | Item | Situação |
 |---|---|
 | **`registerDescriptor` / `rescanFrom`** | caminho de Bitcoin Core e Floresta; previstos na interface, sem implementação |
-| **Alertas sobre endereços sancionados** | fora de escopo por decisão; ver §4 do design |
-| **Coin control** (rótulos, tags, regras de gasto, BIP-329) | modelado, não construído |
+| **Regras "não gastar junto"** | a parte do coin control que não foi construída; rótulo, tags e congelamento existem |
 | **Fingerprints de transação** | não construído |
 | **Limiar de dust configurável** | fixo em 1000 sats; não há tabela `alert_rules` |
+| **Painel de administrador** | `users.is_admin` existe no schema e nada o usa |
 
 ### 12.2 Limitações conhecidas do que existe
 
-- **O adapter Esplora não tem backoff contra o `429`** do explorador público.
-- **O adapter Electrum não foi exercido contra um servidor Electrum de verdade.**
-  O protocolo é coberto por um servidor de teste local que fala JSON-RPC por TCP —
-  incluindo resposta partida em vários pedaços, notificação sem id e erro devolvido
-  pelo servidor — mas nenhum Electrs, Fulcrum ou florestad rodou contra ele ainda.
+- **Uma instância vigia uma rede só** (`NETWORK`). Dá para contrastar explorador público
+  e nó próprio, mas ambos na mesma rede.
+- **O adapter Electrum foi verificado contra um servidor público**, não contra um nó do
+  próprio usuário. Electrs, Fulcrum e florestad continuam sem terem sido exercitados.
+- **O arquivo BIP-329 exportado não foi aberto por outra carteira.** A ida e a volta
+  estão cobertas por teste, incluindo o arquivo de exemplo da spec, mas nenhum Sparrow
+  ou Nunchuk leu o nosso.
 - **O paralelismo é fixo em cinco consultas simultâneas.** É um número escolhido para
   não virar rajada contra o explorador público, não um valor ajustado por medição de
   cada backend.
+- **A análise de privacidade leva por volta de 78 segundos** numa carteira de 77
+  endereços, porque o scanner faz a própria varredura por gap limit.
 - **A interface é de duas telas** — login e um dashboard único. Não há navegação nem
   menus; não há uma terceira tela para onde ir.
 
@@ -553,12 +588,19 @@ Testes são critério de avaliação do hackathon e entrega obrigatória. O TDD 
 onde a falha é **silenciosa** — o caso em que um bug não se anuncia:
 
 deduplicação de alerta, detecção de reorg, gap limit, projeção de UTXO, derivação HD,
-cifra em repouso e reconexão do listener SSE.
+cifra em repouso, reconexão do listener SSE, ida e volta em BIP-329, e o que separa
+"não sei" de "é zero".
 
 ```bash
-cd backend && npm test     # 35 arquivos, 381 testes
-npx tsc --noEmit           # sem erros
+cd backend  && npm test && npx tsc --noEmit   # 35 arquivos, 388 testes
+cd frontend && npm test && npx tsc --noEmit   # 11 arquivos,  95 testes
 ```
+
+Há ainda uma **passagem de regressão pela interface**, em
+`backend/scripts/regressao-navegador.mjs`, contra a stack de pé. Ela existe porque
+metade dos defeitos deste projeto só apareceu na tela: o aviso de privacidade que a
+rolagem levava embora, a unidade duplicada no saldo, o botão de sair quebrado por um
+cabeçalho HTTP. Nenhum teste de unidade pega esses três.
 
 A suíte trunca o banco inteiro entre os casos, e por isso **recusa rodar contra um
 banco que não termine em `_test`**. O vitest monta a URL sozinho a partir do `.env`;
@@ -583,3 +625,18 @@ Contra a signet real, via `https://mempool.space/signet/api`:
 | feed ao vivo pelo nginx | primeiro byte em **+0s**, `X-Accel-Buffering: no` |
 | chave de rede errada | recusada no cadastro |
 | stack completa | `docker compose up -d --build` sobe os 5 containers |
+
+### 13.2 Verificação ponta a ponta executada em 26/08/2026
+
+| Comportamento | Observado |
+|---|---|
+| ciclo de sincronização | **6,0 a 6,6 s** para 77 endereços, medido três vezes |
+| análise de privacidade | score 66, nota C, três achados na carteira de 32 UTXOs |
+| análise de endereço avulso | score 100, nota A+, quatro achados |
+| origem dos fundos | `kyc_origin` disparado por `entity-behavior-exchange` em transação real |
+| coin control | 32 UTXOs com rótulo e congelamento; **congelamento sobreviveu a um ciclo** que reconstruiu a projeção |
+| exportação BIP-329 | `spendable: false` e `Content-Disposition` nomeando o `.jsonl` |
+| push no celular | notificação lida de volta no `ntfy.sh`, com título, corpo e tag |
+| adapter Electrum | contra ElectrumX 1.19 público: altura, histórico, UTXOs e status. **O hash de bloco calculado do cabeçalho confere com o mempool.space** |
+| degradação honesta | endereço de 33 mil transações recusado pelo explorador: carteira em `degraded` com o motivo, e as outras seguem |
+| regressão pela interface | 11 verificações, nenhuma resposta 4xx, nenhum erro de página |
