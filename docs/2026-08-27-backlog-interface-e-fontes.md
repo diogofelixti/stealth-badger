@@ -1089,3 +1089,32 @@ acabar ali.
 **Parar no meio de um item é pior do que não começá-lo.** Se o tempo acabar, o certo é
 fechar o item em andamento com o que dá, registrar no diário o que ficou, e não abrir o
 próximo.
+
+---
+
+## Estado da execução, ao fim de 27/08
+
+Os treze itens foram executados no mesmo dia, cada um com TDD onde o backlog exigia,
+conferência no navegador e uma rodada no diário de bordo. O que cada item quebrou de
+premissa está lá, não aqui.
+
+| Item | Rodada no diário | Onde ficou a dívida |
+|---|---|---|
+| 0 · mais de uma rede | 22 | saldo mainnet não conferido contra explorador |
+| 1 · soberania provada | 23, 24, 27 | credencial de linha não exercitada contra o nó |
+| 2 · catálogo de fontes | 27 | — |
+| 3 · trocar a fonte | 28 | troca sondagem→registro não exercitada contra o nó real |
+| 4 · arquivar e apagar | 26 | o diálogo fecha calado quando a API recusa |
+| 5 · detalhe do alerta | 30 | sem link externo e sem botão de copiar |
+| 6 · paginação | 29 | filtros existem na API antes de existirem na tela |
+| 7 · botões | 25 | — |
+| 8 · tipografia | 25 | — |
+| 9 · grade | 25 | coluna vizinha vazia ao abrir moedas em tela grande |
+| 10 · navegação | 31 | a barra lateral não vira gaveta abaixo de `lg` |
+| 11 · temas | 33 | não segue `prefers-color-scheme` na primeira visita |
+| 12 · ponta, preço e taxas | 32 | moeda só em BRL, USD e EUR |
+| 13 · acessos externos | 34 | **nenhum perfil foi subido**: publicar o painel é decisão de quem hospeda |
+
+**Estado medido ao fim do dia:** backend com 510 testes em 43 arquivos, frontend com 175
+em 22, `npx tsc --noEmit` limpo nos dois, migrações `001` a `012`, e a postura de
+privacidade coberta por teste em cada uma das cinco rotas.
