@@ -402,9 +402,11 @@ exemplo — jamais reais.
 |---|---|
 | `MASTER_KEY_HEX` | 32 bytes em hex. Cifra os xpubs em repouso |
 | `NETWORK` | `mainnet`, `signet` ou `testnet`. Define que chaves o sistema aceita |
-| `CHAIN_BACKEND` | `esplora` ou `electrum` |
+| `CHAIN_BACKEND` | `esplora`, `electrum` ou `core` |
 | `ESPLORA_URL` | backend de cadeia quando `CHAIN_BACKEND=esplora` |
 | `ELECTRUM_URL` | `electrum://host:porta` quando `CHAIN_BACKEND=electrum` |
+| `CORE_URL` | `http://host:porta` do RPC quando `CHAIN_BACKEND=core` |
+| `CORE_COOKIE_PATH` | caminho do `.cookie` do bitcoind. Ausente, o RPC vai sem credencial |
 | `PUBLIC_BACKEND` | governa o aviso persistente de privacidade |
 | `WORKER_INTERVAL_MS` | intervalo entre ciclos; padrão 30000, mínimo 5000 |
 
@@ -417,7 +419,7 @@ cadastra os seus:
 | Rota | Efeito |
 |---|---|
 | `GET /api/backends` | lista o backend da instância mais os do usuário. Cria o da instância se ainda não existir, para que a tela nunca receba lista vazia |
-| `POST /api/backends` | cadastra backend do usuário. Valida o esquema contra o protocolo — `http(s)://` para Esplora, `electrum://` para Electrum |
+| `POST /api/backends` | cadastra backend do usuário. Valida o esquema contra o protocolo — `http(s)://` para Esplora e para o RPC do Core, `electrum://` para Electrum |
 | `POST /api/wallets` | aceita `backendId`. Ausente, usa o da instância. De outro usuário, recusa |
 
 Backend inexistente e backend de outra pessoa recebem **a mesma recusa**, de propósito:
@@ -442,12 +444,13 @@ carteira exposta e uma soberana fica visível lado a lado.
 > **Limitação:** a instância ainda vigia **uma rede só** (`NETWORK`). Dá para contrastar
 > as duas posturas — explorador público contra nó próprio — mas ambas na mesma rede.
 
-### 11.2 Dois backends de cadeia
+### 11.2 Três backends de cadeia
 
 **Esplora**, por HTTP, é o caminho do explorador público — cômodo e observável por
 terceiro. **Electrum**, JSON-RPC por TCP, é o caminho de quem já roda infraestrutura:
 um adapter só atende Electrs, Fulcrum e Floresta, porque o florestad embute um
-servidor Electrum.
+servidor Electrum. **Bitcoin Core**, pelo RPC do próprio nó, é o caminho de quem não
+quer nem servidor de índice no meio.
 
 O tipo do backend é dado do banco, não escolha costurada em cada ponto de uso: o
 motor de sincronização e o cadastro de carteira montam o adapter pelo mesmo caminho,
@@ -465,10 +468,47 @@ Verificado em 26/08 contra um ElectrumX 1.19 público de signet: altura da ponta
 histórico, UTXOs e status de endereço. O hash de bloco que o adapter calcula do
 cabeçalho **confere com o que o mempool.space reporta** para a mesma altura.
 
-`PUBLIC_BACKEND` sem valor assume público no Esplora e soberano no Electrum, que é o
-uso corrente dos dois. Quem aponta para um Esplora próprio, ou para um servidor
+`PUBLIC_BACKEND` sem valor assume público no Esplora e soberano no Electrum e no Core,
+que é o uso corrente dos três. Quem aponta para um Esplora próprio, ou para um servidor
 Electrum de terceiro, precisa dizer — é o aviso de privacidade da tela que depende
 disso.
+
+#### O Core não responde por endereço, e isso muda o motor
+
+Os dois primeiros respondem histórico de qualquer script na hora. O Core **não**: sem
+`-txindex` e sem carteira, perguntar por um endereço arbitrário não é operação que o
+RPC ofereça. Ele precisa que o descriptor seja **registrado** antes, e então segue
+aquilo — é a distinção que o adapter declara em `needsRegistration`, e é por ela que o
+motor de sincronização escolhe o caminho, não por tentativa e erro.
+
+No caminho de registro **não há gap limit a sondar**: quem sabe quais endereços existem
+é o nó, e ele reporta a carteira inteira de uma vez. O que existe é o `range` do
+`importdescriptors` — `[0, 999]`, o padrão do próprio Core para carteiras de descriptor,
+bem acima do gap limit de 20 do caminho de sondagem, porque aqui a faixa é varrida uma
+vez e não a cada ciclo. O Core recusa descriptor com curinga sem `range`. A consequência prática é que
+**sumir de `listunspent` é evidência de gasto**, o que no modelo de sondagem não seria
+verdade — lá só conta o endereço que foi de fato perguntado. O endereço e o caminho de
+derivação vêm do nó, porque o motor não derivou nada — e o caminho é lido dos **dois
+últimos** trechos da origem que o `desc` carrega, porque ela vem tão longa quanto o nó
+souber (`[fp/84'/1'/0'/0/7]`) e o resto do sistema guarda `cadeia/índice`.
+
+Cada carteira vigiada ganha no nó uma **carteira de observação própria**,
+`stealth-badger-<id>`, criada com `disable_private_keys`. Compartilhar uma carteira de
+observação entre duas vigiadas faria `listunspent` devolver a união das duas, e os
+UTXOs de uma apareceriam como saldo da outra. As duas cadeias — recebimento e troco —
+são registradas: só a primeira deixaria o troco invisível, e o saldo apareceria menor
+do que é.
+
+Duas consequências ficam à vista no cadastro. A **detecção do tipo de script pela
+cadeia** (§4.2) não roda com Core, porque ela pergunta por endereço: o tipo declarado
+pela chave é assumido, e quem quer outro informa. E o **cookie do bitcoind é lido a
+cada chamada**, não guardado: ele é regerado a cada reinício do nó, e guardá-lo faria o
+watchtower parar de autenticar depois de um restart, com um "unauthorized" que não
+explica por quê.
+
+O valor vem do Core em **BTC, com ponto flutuante**. A conversão para satoshi conta os
+dígitos do texto em vez de multiplicar por `1e8`: `0.00000001 * 1e8` não dá exatamente
+1 em binário, e o watchtower projeta saldo a partir desse número.
 
 ### 11.3 Custódia do xpub
 
@@ -557,7 +597,6 @@ Escrito para ser lido antes que alguém pergunte.
 
 | Item | Situação |
 |---|---|
-| **`registerDescriptor` / `rescanFrom`** | caminho de Bitcoin Core e Floresta; previstos na interface, sem implementação |
 | **Regras "não gastar junto"** | a parte do coin control que não foi construída; rótulo, tags e congelamento existem |
 | **Fingerprints de transação** | não construído |
 | **Limiar de dust configurável** | fixo em 1000 sats; não há tabela `alert_rules` |
@@ -569,6 +608,12 @@ Escrito para ser lido antes que alguém pergunte.
   e nó próprio, mas ambos na mesma rede.
 - **O adapter Electrum foi verificado contra um servidor público**, não contra um nó do
   próprio usuário. Electrs, Fulcrum e florestad continuam sem terem sido exercitados.
+- **O adapter de Bitcoin Core não falou com um bitcoind de verdade.** O RPC, o registro
+  de descriptor e a leitura dos UTXOs estão cobertos por teste contra um transporte
+  simulado, e o motor tem o caminho de registro coberto ponta a ponta contra o banco —
+  mas nenhum nó respondeu ainda. `rescanFrom` existe no adapter e o motor não o chama:
+  `importdescriptors` com `timestamp: 0` já varre a cadeia, e um rescan explícito por
+  cima seria uma segunda varredura pelo mesmo motivo.
 - **O arquivo BIP-329 exportado não foi aberto por outra carteira.** A ida e a volta
   estão cobertas por teste, incluindo o arquivo de exemplo da spec, mas nenhum Sparrow
   ou Nunchuk leu o nosso.

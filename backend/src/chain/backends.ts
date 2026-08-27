@@ -13,7 +13,7 @@ export interface BackendResumo {
   scope: 'global' | 'own'
 }
 
-const ACEITOS: BackendKind[] = ['esplora', 'electrum']
+const ACEITOS: BackendKind[] = ['esplora', 'electrum', 'core']
 
 /**
  * Valida o endereço do backend contra o protocolo que ele diz falar.
@@ -26,7 +26,7 @@ export function validarBackend(kind: string, url: string): ErroDaApi | null {
   if (!ACEITOS.includes(kind as BackendKind)) {
     return erro(
       'backend.unknownKind',
-      `tipo de backend "${kind}" não tem adapter. Aceitos: esplora, electrum`,
+      `tipo de backend "${kind}" não tem adapter. Aceitos: esplora, electrum, core`,
       { tipo: String(kind) },
     )
   }
@@ -41,6 +41,12 @@ export function validarBackend(kind: string, url: string): ErroDaApi | null {
     return erro(
       'backend.esploraScheme',
       'o Esplora fala HTTP: o endereço precisa começar com http:// ou https://',
+    )
+  }
+  if (kind === 'core' && !/^https?:\/\//i.test(url)) {
+    return erro(
+      'backend.coreScheme',
+      'o RPC do Bitcoin Core fala HTTP: o endereço precisa começar com http:// ou https://',
     )
   }
   if (kind === 'electrum' && !/^electrum:\/\//i.test(url)) {

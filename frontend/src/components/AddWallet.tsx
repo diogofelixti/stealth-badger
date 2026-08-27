@@ -192,6 +192,7 @@ export function AddWallet({
             className={`mb-2 ${campo}`}
           >
             <option value="electrum">Electrum</option>
+            <option value="core">Bitcoin Core</option>
             <option value="esplora">Esplora</option>
           </select>
           <input

@@ -3,6 +3,7 @@ import { open } from '../crypto/secretbox'
 import { pool } from '../db/pool'
 import { activeEvents, appendEvent } from '../events/log'
 import { projectWallet } from '../events/project'
+import { descriptorFor } from '../privacy/scan'
 import type { Network, ScriptType } from '../wallet/descriptor'
 import { mapComLimite } from './concorrencia'
 import {
@@ -109,6 +110,119 @@ async function conferirRegistrados(
   return encontrados
 }
 
+/**
+ * Sincroniza um backend que **segue descriptors** em vez de responder consultas
+ * por endereço — Bitcoin Core watch-only, e o Floresta pelo mesmo caminho.
+ *
+ * O design chama os dois de "modelos incompatíveis": aqui não há gap limit a
+ * sondar, porque quem sabe quais endereços existem é o nó. Ele reporta a
+ * carteira inteira de uma vez, e é por isso que sumir da lista é evidência de
+ * gasto — diferente do modelo de sondagem, onde só conta o endereço que foi
+ * de fato perguntado.
+ */
+async function sincronizarPorRegistro(
+  walletId: number,
+  adapter: ChainAdapter,
+  wallet: WalletRow,
+): Promise<{ newEvents: number[] }> {
+  if (!adapter.registerDescriptor || !adapter.getRegisteredUtxos) {
+    throw new Error(
+      'este adapter diz precisar de registro, mas não oferece registerDescriptor e ' +
+        'getRegisteredUtxos — sem os dois o descriptor entra e nada volta',
+    )
+  }
+
+  const masterKey = process.env.MASTER_KEY_HEX
+  if (!masterKey) throw new Error('MASTER_KEY_HEX ausente')
+  const canonicalXpub = open(wallet.xpub_encrypted!, masterKey)
+
+  // As duas cadeias: recebimento e troco. Registrar só a primeira deixaria o
+  // troco invisível, e o saldo apareceria menor do que é.
+  for (const chain of [0, 1] as const) {
+    await adapter.registerDescriptor(
+      descriptorFor(canonicalXpub + '/' + chain + '/*', wallet.script_type),
+    )
+  }
+
+  const doNo = await adapter.getRegisteredUtxos()
+
+  // O endereço vem do nó, não da derivação: no modelo de registro o motor não
+  // derivou nada, e sem gravá-lo o alerta não teria o que mostrar nem o coin
+  // control a que se referir.
+  const addressIds = new Map<string, number>()
+  for (const u of doNo) {
+    const [chainStr, idxStr] = u.derivationPath.split('/')
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO addresses (wallet_id, chain, idx, derivation_path, address, scripthash, is_used)
+       VALUES ($1,$2,$3,$4,$5,'',true)
+       ON CONFLICT (wallet_id, chain, idx) DO UPDATE SET is_used = true
+       RETURNING id`,
+      [walletId, Number(chainStr ?? 0) === 1 ? 1 : 0, Number(idxStr ?? 0), u.derivationPath, u.address],
+    )
+    addressIds.set(u.txid + ':' + u.vout, Number(rows[0]!.id))
+  }
+
+  const existing = await activeEvents(walletId)
+  const conhecidos = new Set(
+    existing.filter(e => e.type === 'utxo_created').map(e => e.txid + ':' + e.vout),
+  )
+  const jaGastos = new Set(
+    existing.filter(e => e.type === 'utxo_spent').map(e => e.txid + ':' + e.vout),
+  )
+
+  const newEvents: number[] = []
+  const vistos = new Set<string>()
+
+  for (const u of doNo) {
+    const key = u.txid + ':' + u.vout
+    vistos.add(key)
+    if (conhecidos.has(key)) continue
+    newEvents.push(
+      await appendEvent({
+        walletId,
+        type: 'utxo_created',
+        height: u.height,
+        blockHash: u.height !== null ? await adapter.blockHashAt(u.height) : null,
+        txid: u.txid,
+        vout: u.vout,
+        payload: { addressId: addressIds.get(key)!, valueSats: u.value },
+      }),
+    )
+  }
+
+  for (const key of conhecidos) {
+    if (vistos.has(key) || jaGastos.has(key)) continue
+    const [txid, voutStr] = key.split(':')
+    const vout = Number(voutStr)
+
+    let gasto: Awaited<ReturnType<NonNullable<ChainAdapter['getOutspend']>>> = null
+    if (adapter.getOutspend) {
+      try {
+        gasto = await adapter.getOutspend(txid!, vout)
+      } catch (err) {
+        console.error(
+          'não foi possível saber quem gastou ' + key + ': ' + (err as Error).message,
+        )
+      }
+    }
+
+    newEvents.push(
+      await appendEvent({
+        walletId,
+        type: 'utxo_spent',
+        height: gasto?.height ?? null,
+        blockHash: gasto?.blockHash ?? null,
+        txid: txid!,
+        vout,
+        payload: { spentAtTxid: gasto?.spentByTxid ?? null },
+      }),
+    )
+  }
+
+  await projectWallet(walletId)
+  return { newEvents }
+}
+
 export async function syncWallet(
   walletId: number,
   adapter: ChainAdapter,
@@ -135,6 +249,14 @@ export async function syncWallet(
     const tipHeight = await adapter.tipHeight()
     const reorgAt = await detectReorg(walletId, adapter)
     if (reorgAt !== null) await rollbackFrom(walletId, reorgAt)
+
+    // Os dois modelos de backend divergem aqui e não voltam a se encontrar:
+    // um sonda endereços, o outro segue descriptors que registrou.
+    if (adapter.capabilities().needsRegistration) {
+      const { newEvents } = await sincronizarPorRegistro(walletId, adapter, wallet)
+      await setState(walletId, 'synced', { progress: 100, height: tipHeight })
+      return { newEvents, reorgAt, tipHeight, skipped: 0, ilegiveis: [] }
+    }
 
     // Um reorg desfaz o que se sabia dos endereços atingidos: o status
     // guardado passa a descrever uma cadeia que não existe mais, e tudo

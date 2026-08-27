@@ -1177,6 +1177,115 @@ Uma armadilha do Compose que vale registrar para quem for repetir: `ports` num a
 de override é **somado** ao original, não substituído. Sem `!override`, o teste tentou
 publicar a mesma porta duas vezes e bateu na do ambiente de desenvolvimento.
 
+## Vigésima primeira rodada — 27/08, o nó do próprio usuário
+
+A pendência mais antiga do projeto era a postura soberana: o design previa
+`registerDescriptor` e `rescanFrom` desde a §7, e a §12.1 os listava como "previstos na
+interface, sem implementação". Um watchtower cuja tese é privacidade que só sabe falar
+com explorador público e com servidor de índice de terceiro tem um buraco no meio da
+tese.
+
+Construído nesta rodada:
+
+- **`core-rpc.ts`** — cliente JSON-RPC do bitcoind, com transporte injetável para o
+  teste não abrir socket, autenticação por cookie ou por usuário/senha, e o erro do
+  Core convertido em exceção nomeando o método que falhou;
+- **`core.ts`** — o adapter: cria a carteira de observação, importa os descriptors,
+  lê `listunspent` e converte para o vocabulário do motor;
+- **`RegisteredUtxo` e `getRegisteredUtxos`** na interface de adapter;
+- **`sincronizarPorRegistro`** no motor — o segundo caminho de sincronização, escolhido
+  pela capacidade declarada e não por tentativa e erro;
+- **`core` como tipo de backend** de ponta a ponta: `CHAIN_BACKEND`, validação de
+  esquema no `POST /api/backends`, mensagem de recusa nas duas línguas, e a opção
+  "Bitcoin Core" no seletor da tela — sem ela, cadastrar um nó dependeria de mexer no
+  `.env` do servidor, e a postura soberana ficaria fora do alcance de quem usa a
+  instância sem administrá-la.
+
+### O que quebrou a premissa
+
+**O design previu o registro e não previu a leitura de volta.** `registerDescriptor` e
+`rescanFrom` entram; nada saía. Sem `getRegisteredUtxos`, o descriptor entra no nó e o
+motor fica sem nada para projetar — o caminho inteiro era um beco sem saída, e isso não
+aparece até alguém tentar implementá-lo.
+
+**"Gap limit" não é uma propriedade do sistema, é uma propriedade de um dos dois
+modelos.** No caminho de registro não há o que sondar: quem sabe quais endereços existem
+é o nó. A consequência que importa é a inversa e não é simétrica — **sumir de
+`listunspent` é evidência de gasto**, o que no caminho de sondagem seria falso, porque lá
+só conta o endereço que foi de fato perguntado.
+
+**Três defeitos que só apareceriam contra um bitcoind de verdade**, achados ao escrever
+a especificação e cobertos por teste antes de existir nó para prová-los:
+
+1. **`importdescriptors` recusa descriptor com curinga sem `range`** — *"Descriptor is
+   ranged, please specify the range"*. A importação inteira falharia na primeira
+   carteira. Passa a informar `[0, 999]`, o padrão do próprio Core;
+2. **`createwallet` responde "Database already exists" depois que o nó reinicia.** A
+   carteira de observação é criada com `load_on_startup: false`, para não mexer na
+   configuração do nó de quem nos hospeda; o preço é que ela existe e não está
+   carregada. `listwallets` lista só as carregadas, então o adapter concluía "não
+   existe" e tentava criar. Passa a tentar `loadwallet` antes — o watchtower parava de
+   sincronizar no primeiro restart do nó, e o erro não dizia por quê;
+3. **a origem da chave no `desc` é tão longa quanto o nó souber.** `listunspent`
+   devolve `[fp/0/7]` quando o descriptor importado não traz caminho, e
+   `[fp/84'/1'/0'/0/7]` quando traz. Ler os dois primeiros trechos gravaria o endereço
+   em `cadeia 84`, `índice 1` — no lugar errado, **sem erro nenhum**. Passa a ler os
+   dois últimos.
+
+**Uma carteira de observação por carteira vigiada, e não uma por nó.** `listunspent`
+responde pela carteira inteira: duas carteiras do watchtower compartilhando a mesma no
+nó receberiam a união das duas, e os UTXOs de uma apareceriam como saldo da outra. É por
+isso que o `BackendRow` passou a carregar `walletId` — e que montar o adapter de Core sem
+ele é erro, não valor padrão.
+
+**A detecção de tipo de script pela cadeia não funciona com Core**, porque ela pergunta
+por endereço. Com backend de registro o tipo declarado pela chave é assumido, e quem
+quer outro informa. Manter a tentativa faria o cadastro falhar em vez de degradar.
+
+**O valor vem em BTC, com ponto flutuante.** `0.00000001 * 1e8` não dá exatamente 1 em
+binário. A conversão conta os dígitos do texto: um satoshi perdido por arredondamento é
+saldo errado que ninguém consegue explicar depois.
+
+**E o cookie do bitcoind é regerado a cada reinício do nó**, então é lido a cada chamada
+em vez de guardado. Guardá-lo faria a autenticação parar de funcionar depois de um
+restart, com um `unauthorized` que não explica nada.
+
+### Um defeito na própria suíte, achado no caminho
+
+Sob disco disputado — a máquina construía imagem Docker ao mesmo tempo —, o `beforeEach`
+que esvazia o banco de verdade passava dos **10 s** que o vitest dá a um hook por padrão.
+Quando isso acontece o caso segue com o banco sujo, e a falha aparece como violação de
+chave estrangeira num teste que não tem nada a ver com o que quebrou. `hookTimeout`
+passa a acompanhar o `testTimeout`, em 20 s.
+
+Vale contra a *falha isolada em `Dashboard > anuncia postura pública`* anotada na rodada
+anterior, que também aconteceu com Docker construindo ao lado: a intermitência tinha a
+mesma forma.
+
+### Medido ao fim da rodada
+
+| | Antes | Depois |
+|---|---|---|
+| backend | 35 arquivos, 381 testes | **37 arquivos, 418 testes** |
+| frontend | 95 testes | **96 testes** |
+| `npx tsc --noEmit` | limpo | limpo nos dois |
+
+### O que ficou de dívida
+
+- **Nenhum bitcoind respondeu ainda.** O RPC, o registro e a leitura estão cobertos
+  contra transporte simulado, e o motor tem o caminho de registro coberto ponta a ponta
+  contra o banco — mas um transporte falso não cobra o que um servidor real cobra, e
+  esta é exatamente a lição da décima sétima rodada, quando o Electrum nunca teria
+  funcionado e os testes passavam. Os três defeitos acima foram achados lendo o
+  comportamento documentado do Core; o próximo só aparece com nó do outro lado;
+- **`rescanFrom` existe no adapter e o motor não o chama.** `importdescriptors` com
+  `timestamp: 0` já varre desde o gênesis, e um rescan explícito por cima seria uma
+  segunda varredura pelo mesmo motivo. Fica implementado porque a interface o previa e
+  porque um backend de registro que não saiba revarrer é um beco sem saída diferente;
+- **`internal: false` nas duas cadeias.** A cadeia 1 é troco, e o Core sabe marcar isso.
+  Como `listunspent` devolve as saídas não gastas de todo jeito, a marcação não muda o
+  que o watchtower lê — mas é informação correta que estamos deixando de dar ao nó.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
@@ -1187,7 +1296,7 @@ O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
 | 2. xpub → modo público, badge de aviso aceso | **funciona**, e o aviso fica preso ao topo ao rolar |
 | 3. `am-i-exposed`: score e achados | **funciona** — botão no cartão, score, nota e achados com recomendação |
 | 4. Tabela de UTXO com tags, dust congelado | **funciona** — rótulo, tags, congelamento e dust destacado |
-| 5. Segunda carteira em modo soberano, lado a lado | **possível**, na mesma rede. O adapter Electrum foi verificado contra um ElectrumX real; falta um nó do próprio apresentador para a postura ser soberana de verdade |
+| 5. Segunda carteira em modo soberano, lado a lado | **possível**, na mesma rede, e agora por dois caminhos: Electrum, verificado contra um ElectrumX real, ou o RPC do próprio Bitcoin Core, implementado em 27/08 e ainda sem nó do outro lado. Falta um nó do próprio apresentador para a postura ser soberana de verdade |
 | 6. Transação real no signet → alerta no celular | **funciona**, e o canal agora se cadastra pela tela, com botão de teste |
 | 7. Exportar BIP-329 e abrir no Sparrow | **exporta e importa**; falta abrir o arquivo no Sparrow de verdade |
 | 8. Roadmap | falar |
@@ -1211,6 +1320,14 @@ e exportação BIP-329 → roadmap honesto.
 
 Não depende de transação nova chegar na hora, que é a única parte fora do nosso controle.
 
+## Estado em 27/08
+
+- backend: 37 arquivos de teste, **418 testes**
+- frontend: 12 arquivos de teste, **96 testes**
+- `npx tsc --noEmit` limpo nos dois
+- três backends de cadeia: Esplora, Electrum e **Bitcoin Core**, escolhidos por carteira
+- o resto igual ao estado de 26/08, abaixo
+
 ## Estado em 26/08, ao fim do dia
 
 - backend: 35 arquivos de teste, **381 testes**
@@ -1225,16 +1342,22 @@ Não depende de transação nova chegar na hora, que é a única parte fora do n
 
 ### Em execução
 
-- **Nada.** Os sete tipos da taxonomia da §8.1 estão implementados.
+- **Nada.** Os sete tipos da taxonomia da §8.1 estão implementados, e o caminho de
+  registro de descriptor — a última peça do design que estava só na interface — foi
+  construído em 27/08.
 
 ### Técnicas
 
 - **Uma falha isolada na suíte do frontend**, em `Dashboard > anuncia postura pública`,
   numa execução entre quinze. Não reproduziu depois, e a máquina construía imagem
   Docker no mesmo instante. Fica anotada em vez de dada por resolvida: intermitência
-  que não se explica costuma voltar
+  que não se explica costuma voltar — **o `hookTimeout` corrigido em 27/08 é candidato
+  a explicação**, porque a falha do backend tinha a mesma forma e o mesmo gatilho
 - **Abrir o arquivo BIP-329 exportado no Sparrow de verdade.** A ida e volta está
   coberta por teste de round-trip, mas nenhuma outra carteira leu o arquivo ainda
 - **A postura soberana não foi demonstrada.** O adapter Electrum falou com um servidor
-  real, mas público; mostrar "soberano" exige um nó do próprio apresentador
+  real, mas público, e o adapter de Bitcoin Core não falou com bitcoind nenhum; mostrar
+  "soberano" exige um nó do próprio apresentador
+- **`rescanFrom` implementado e não chamado**, e `internal: false` também na cadeia de
+  troco — as duas razões estão na vigésima primeira rodada
 - Itens não-código do checklist: pitch ensaiado e plano B gravado

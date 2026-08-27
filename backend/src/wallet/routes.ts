@@ -156,8 +156,12 @@ export function registerWalletRoutes(
       // `xpub`/`tpub` não dizem o tipo de script: quem exporta por descriptor
       // usa a mesma codificação para legado, segwit e taproot. Assumir errado
       // não dá erro — a carteira sincroniza e mostra saldo zero para sempre.
+      //
+      // Descobrir exige perguntar à cadeia por endereço, e um backend de
+      // registro não responde isso: com ele, o padrão é assumido e o usuário
+      // informa o tipo se quiser outro.
       scriptType = parsed.scriptType
-      if (parsed.scriptTypeAmbiguous) {
+      if (parsed.scriptTypeAmbiguous && backend.kind !== 'core') {
         const adapter = adapterFactory(backend)
         try {
           scriptType =

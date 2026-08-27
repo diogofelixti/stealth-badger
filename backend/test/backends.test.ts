@@ -92,7 +92,7 @@ describe('POST /api/backends', () => {
       method: 'POST',
       url: '/api/backends',
       cookies: { sb_session: cookie },
-      payload: { kind: 'core', url: 'http://127.0.0.1:8332', isPublic: false },
+      payload: { kind: 'pombo-correio', url: 'http://127.0.0.1:8332', isPublic: false },
     })
     expect(res.statusCode).toBe(400)
     expect(res.json().error).toMatch(/esplora/)
@@ -109,6 +109,32 @@ describe('POST /api/backends', () => {
     })
     expect(res.statusCode).toBe(400)
     expect(res.json().error).toMatch(/electrum:\/\//)
+  })
+
+  it('aceita um backend de Bitcoin Core apontando para o RPC do nó', async () => {
+    const { app, cookie } = await logado()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: { kind: 'core', url: 'http://127.0.0.1:38332', isPublic: false },
+    })
+    expect(res.statusCode).toBe(201)
+    expect(res.json().kind).toBe('core')
+  })
+
+  // O RPC do Core fala HTTP, não o protocolo do Electrum. Aceitar o esquema
+  // errado só adiaria a falha para o primeiro ciclo do worker, longe daqui.
+  it('exige http ou https no RPC do Core', async () => {
+    const { app, cookie } = await logado()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: { kind: 'core', url: 'electrum://127.0.0.1:50001', isPublic: false },
+    })
+    expect(res.statusCode).toBe(400)
+    expect(res.json().error).toMatch(/https?/)
   })
 
   it('exige http ou https no Esplora', async () => {

@@ -40,6 +40,25 @@ export interface Outspend {
   blockHash: string | null
 }
 
+/**
+ * Uma saída não gasta de uma carteira **registrada** no backend.
+ *
+ * O design previu `registerDescriptor` e `rescanFrom`, mas não previu como ler
+ * de volta o que o backend passou a seguir. Sem isto o registro seria um
+ * caminho sem saída: o descriptor entra e nada volta.
+ *
+ * Traz o endereço e o caminho de derivação porque, no modelo de registro, é o
+ * backend quem sabe qual endereço é qual — o motor não derivou nada.
+ */
+export interface RegisteredUtxo {
+  txid: string
+  vout: number
+  value: number
+  height: number | null
+  address: string
+  derivationPath: string
+}
+
 export interface ChainAdapter {
   capabilities(): ChainCapabilities
   tipHeight(): Promise<number>
@@ -57,6 +76,8 @@ export interface ChainAdapter {
   getOutspend?(txid: string, vout: number): Promise<Outspend | null>
   registerDescriptor?(descriptor: string): Promise<void>
   rescanFrom?(height: number): Promise<void>
+  /** As saídas não gastas do que foi registrado. Par de `registerDescriptor`. */
+  getRegisteredUtxos?(): Promise<RegisteredUtxo[]>
   subscribe?(scripthash: string, onChange: () => void): () => void
   /**
    * Encerra a conexão que o adapter mantém aberta, quando ele mantém alguma.

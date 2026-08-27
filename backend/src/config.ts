@@ -1,4 +1,4 @@
-export type BackendKind = 'esplora' | 'electrum'
+export type BackendKind = 'esplora' | 'electrum' | 'core'
 
 export interface Config {
   port: number
@@ -50,7 +50,7 @@ export function loadConfig(): Config {
   }
 
   const backendKind = (process.env.CHAIN_BACKEND ?? 'esplora') as BackendKind
-  if (!['esplora', 'electrum'].includes(backendKind)) {
+  if (!['esplora', 'electrum', 'core'].includes(backendKind)) {
     throw new Error(`CHAIN_BACKEND inválido: ${backendKind}`)
   }
 
@@ -59,9 +59,12 @@ export function loadConfig(): Config {
   // e PUBLIC_BACKEND continua podendo contrariá-la nos dois sentidos — quem
   // aponta para um Esplora próprio, ou para um Electrum de terceiro, precisa
   // dizer, porque é o aviso de privacidade da tela que depende disto.
+  // Electrum e Core são infraestrutura de quem roda; Esplora, por padrão, é
+  // explorador público de terceiro.
   const eletrum = backendKind === 'electrum'
+  const proprio = backendKind !== 'esplora'
   const declarado = process.env.PUBLIC_BACKEND
-  const publicBackend = declarado === undefined ? !eletrum : declarado !== 'false'
+  const publicBackend = declarado === undefined ? !proprio : declarado !== 'false'
 
   return {
     port: Number(process.env.PORT ?? 3000),
@@ -72,9 +75,12 @@ export function loadConfig(): Config {
       'postgres://badger:badger@localhost:5432/stealth_badger',
     masterKeyHex: key,
     backendKind,
-    backendUrl: eletrum
-      ? process.env.ELECTRUM_URL ?? 'electrum://127.0.0.1:50001'
-      : process.env.ESPLORA_URL ?? 'https://mempool.space/signet/api',
+    backendUrl:
+      backendKind === 'core'
+        ? process.env.CORE_URL ?? 'http://127.0.0.1:8332'
+        : eletrum
+          ? process.env.ELECTRUM_URL ?? 'electrum://127.0.0.1:50001'
+          : process.env.ESPLORA_URL ?? 'https://mempool.space/signet/api',
     network,
     publicBackend,
     workerIntervalMs,

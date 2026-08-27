@@ -33,8 +33,49 @@ describe('createAdapter', () => {
   })
 
   it('recusa um tipo de backend que não sabe montar, nomeando-o', () => {
-    expect(() => createAdapter({ ...base, kind: 'core', url: 'http://x' })).toThrow(
-      /core/,
+    expect(() => createAdapter({ ...base, kind: 'pombo-correio', url: 'http://x' })).toThrow(
+      /pombo-correio/,
     )
+  })
+
+  // O terceiro modelo: um nó que você mesmo roda, falado por RPC. Ele não
+  // responde consulta por endereço, e é por isso que o motor precisa saber
+  // disso pela capacidade declarada, e não por tentativa e erro.
+  it('monta o adapter de Bitcoin Core para um backend core', () => {
+    const a = createAdapter({
+      kind: 'core',
+      url: 'http://127.0.0.1:38332',
+      isPublic: false,
+      network: 'signet',
+      walletId: 7,
+    })
+    expect(a.capabilities()).toMatchObject({
+      randomAccess: false,
+      needsRegistration: true,
+      isPublic: false,
+    })
+  })
+
+  // Duas carteiras do watchtower no mesmo nó não podem compartilhar a carteira
+  // de observação: `listunspent` devolveria a união das duas, e os UTXOs de
+  // uma apareceriam como saldo da outra.
+  it('dá a cada carteira a sua própria carteira de observação no nó', () => {
+    const a = createAdapter({
+      kind: 'core', url: 'http://127.0.0.1:38332', isPublic: false,
+      network: 'signet', walletId: 7,
+    })
+    const b = createAdapter({
+      kind: 'core', url: 'http://127.0.0.1:38332', isPublic: false,
+      network: 'signet', walletId: 8,
+    })
+    expect(a.capabilities().host).not.toBe(b.capabilities().host)
+  })
+
+  it('recusa montar Core sem saber de que carteira se trata', () => {
+    expect(() =>
+      createAdapter({
+        kind: 'core', url: 'http://127.0.0.1:38332', isPublic: false, network: 'signet',
+      }),
+    ).toThrow(/carteira/i)
   })
 })

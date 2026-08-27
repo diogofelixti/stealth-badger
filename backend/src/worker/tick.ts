@@ -49,6 +49,8 @@ export async function tick(opts: TickOptions = {}): Promise<TickReport> {
       url: w.url,
       isPublic: w.is_public,
       network: w.network,
+      // o modelo de registro precisa saber de quem é a carteira de observação
+      walletId,
     })
 
     let result

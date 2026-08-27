@@ -1,5 +1,7 @@
 import type { BackendKind } from '../config'
 import type { Network } from '../wallet/descriptor'
+import { createCoreAdapter } from './core'
+import { criarRpc } from './core-rpc'
 import { createElectrumAdapter } from './electrum'
 import { createEsploraAdapter } from './esplora'
 import type { ChainAdapter } from './types'
@@ -12,7 +14,19 @@ export interface BackendRow {
   url: string
   isPublic: boolean
   network: Network
+  /**
+   * Qual carteira do watchtower está sendo sincronizada.
+   *
+   * Só o modelo de registro precisa disto, e precisa de verdade: duas
+   * carteiras que compartilhassem a mesma carteira de observação no nó
+   * receberiam de `listunspent` a união das duas, e os UTXOs de uma apareceriam
+   * como saldo da outra.
+   */
+  walletId?: number
 }
+
+/** Onde o cookie do bitcoind fica, quando não é dito. */
+const COOKIE_PADRAO = process.env.CORE_COOKIE_PATH
 
 /**
  * Monta o adapter que a linha de `backends` descreve.
@@ -38,8 +52,32 @@ export function createAdapter(b: BackendRow): ChainAdapter {
     })
   }
 
+  if (kind === 'core') {
+    if (b.walletId === undefined) {
+      throw new Error(
+        'o adapter de Bitcoin Core precisa saber de que carteira se trata: ' +
+          'cada uma tem a sua carteira de observação no nó',
+      )
+    }
+    return createCoreAdapter({
+      rpc: criarRpc({
+        url: b.url,
+        ...(COOKIE_PADRAO ? { cookiePath: COOKIE_PADRAO } : {}),
+      }),
+      // uma carteira de observação por carteira vigiada
+      wallet: 'stealth-badger-' + b.walletId,
+      host: (() => {
+        try {
+          return new URL(b.url).host + ' · carteira ' + b.walletId
+        } catch {
+          return b.url
+        }
+      })(),
+    })
+  }
+
   throw new Error(
     `tipo de backend de cadeia sem adapter: ${b.kind}. ` +
-      'Há adapter para esplora e electrum.',
+      'Há adapter para esplora, electrum e core.',
   )
 }

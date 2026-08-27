@@ -78,8 +78,9 @@ com botão de teste para conferir que o aviso chega antes de precisar
 fica "vigiando em parte" com o motivo à vista, e os outros endereços continuam sendo
 lidos
 
-✅ **Escolha do backend de cadeia por carteira** — Esplora ou Electrum (que cobre Electrs,
-Fulcrum e Floresta de uma vez), o segundo verificado contra um ElectrumX real
+✅ **Escolha do backend de cadeia por carteira** — Esplora, Electrum (que cobre Electrs,
+Fulcrum e Floresta de uma vez) ou o RPC do seu próprio **Bitcoin Core**, sem servidor de
+índice no meio; o Electrum verificado contra um ElectrumX real
 
 ✅ **Aviso de privacidade permanente** — enquanto qualquer carteira consultar por
 explorador público, a advertência fica presa no topo da tela
@@ -132,8 +133,9 @@ Tudo em `.env`, documentado em [`.env.example`](.env.example):
 | `MASTER_KEY_HEX` | 32 bytes em hex. Cifra os xpubs em repouso |
 | `POSTGRES_PASSWORD` | senha do banco |
 | `NETWORK` | `mainnet`, `signet` ou `testnet` |
-| `CHAIN_BACKEND` | `esplora` ou `electrum` |
-| `ESPLORA_URL` / `ELECTRUM_URL` | endereço do backend de cadeia |
+| `CHAIN_BACKEND` | `esplora`, `electrum` ou `core` |
+| `ESPLORA_URL` / `ELECTRUM_URL` / `CORE_URL` | endereço do backend de cadeia |
+| `CORE_COOKIE_PATH` | caminho do `.cookie` do bitcoind, quando o backend é `core` |
 | `PUBLIC_BACKEND` | governa o aviso permanente de privacidade |
 
 ### Avisos no celular
@@ -163,8 +165,8 @@ Não como tema, e sim como funcionamento:
   distingue mempool, 1 confirmação e 6
 - **Blocos e transações** — detecção de reorganização de cadeia comparando hash de bloco
   na altura registrada
-- **APIs e nós** — Esplora por HTTP e Electrum por JSON-RPC sobre TCP, escolhidos por
-  carteira
+- **APIs e nós** — Esplora por HTTP, Electrum por JSON-RPC sobre TCP e Bitcoin Core pelo
+  RPC do nó, escolhidos por carteira
 - **Análise de cadeia** — heurísticas de privacidade sobre a carteira e sobre a
   transação que trouxe os fundos
 
@@ -200,9 +202,14 @@ compensatório e marca os afetados.
 ### Adapters declaram capacidades
 
 Os backends suportados não são variações do mesmo modelo. Esplora e Electrum respondem
-histórico de qualquer script na hora; Floresta e Bitcoin Core exigem registrar o descriptor
-antes e varrer a cadeia a partir de uma altura. O adapter declara o que sabe fazer, e o
-motor decide o caminho.
+histórico de qualquer script na hora; Bitcoin Core exige registrar o descriptor antes e
+varrer a cadeia a partir de uma altura. O adapter declara o que sabe fazer, e o motor
+decide o caminho — os dois estão implementados, e a diferença não vaza para o resto do
+sistema.
+
+No caminho de registro não há gap limit: quem sabe quais endereços existem é o nó, que
+reporta a carteira inteira de uma vez. Por isso sumir da lista é evidência de gasto, o
+que no caminho de sondagem não seria verdade.
 
 ## Documentação
 

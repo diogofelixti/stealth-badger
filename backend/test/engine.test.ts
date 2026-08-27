@@ -556,3 +556,116 @@ describe('busca de UTXO em paralelo', () => {
     expect(rows.map(r => r.txid)).toEqual(['aa', 'bb'])
   })
 })
+
+describe('syncWallet por registro de descriptor', () => {
+  interface Registro {
+    descriptors: string[]
+    utxos: () => { txid: string; vout: number; value: number; height: number | null; address: string; derivationPath: string }[]
+  }
+
+  function adapterDeRegistro(reg: Registro): ChainAdapter {
+    return {
+      capabilities: () => ({
+        randomAccess: false,
+        needsRegistration: true,
+        supportsSubscribe: false,
+        hasTxIndex: true,
+        isPublic: false,
+        host: 'meu nó',
+      }),
+      tipHeight: async () => 200,
+      blockHashAt: async (h: number) => 'h' + h,
+      registerDescriptor: async (d: string) => {
+        reg.descriptors.push(d)
+      },
+      getRegisteredUtxos: async () => reg.utxos(),
+    }
+  }
+
+  // O design chama isto de "os dois modelos incompatíveis". Um backend de
+  // registro não responde histórico de endereço arbitrário: sondar endereço
+  // por endereço devolveria vazio de tudo, e a carteira apareceria zerada sem
+  // erro nenhum.
+  it('registra as duas cadeias em vez de sondar endereço por endereço', async () => {
+    const reg: Registro = { descriptors: [], utxos: () => [] }
+    await syncWallet(walletId, adapterDeRegistro(reg))
+
+    expect(reg.descriptors).toHaveLength(2)
+    expect(reg.descriptors[0]).toMatch(/^wpkh\(.*\/0\/\*\)$/)
+    expect(reg.descriptors[1]).toMatch(/^wpkh\(.*\/1\/\*\)$/)
+  })
+
+  it('cria eventos a partir do que o nó reporta, e projeta o saldo', async () => {
+    const reg: Registro = {
+      descriptors: [],
+      utxos: () => [
+        {
+          txid: 'aa'.repeat(32), vout: 0, value: 51000, height: 195,
+          address: 'tb1qdonode', derivationPath: '0/7',
+        },
+      ],
+    }
+    const r = await syncWallet(walletId, adapterDeRegistro(reg))
+    expect(r.newEvents).toHaveLength(1)
+    expect(await walletBalance(walletId)).toBe(51000)
+  })
+
+  // No modelo de registro é o nó que sabe qual endereço é qual: o motor não
+  // derivou nada. Sem gravar o endereço que ele reporta, o alerta não teria o
+  // que mostrar e o coin control não teria a que se referir.
+  it('registra o endereço e o caminho que o nó informou', async () => {
+    const reg: Registro = {
+      descriptors: [],
+      utxos: () => [
+        { txid: 'bb'.repeat(32), vout: 1, value: 900, height: 190, address: 'tb1qveiodono', derivationPath: '1/3' },
+      ],
+    }
+    await syncWallet(walletId, adapterDeRegistro(reg))
+
+    const { rows } = await pool.query<{ address: string; derivation_path: string; chain: number; idx: number }>(
+      'SELECT address, derivation_path, chain, idx FROM addresses WHERE wallet_id = $1',
+      [walletId],
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ address: 'tb1qveiodono', derivation_path: '1/3', chain: 1, idx: 3 })
+  })
+
+  it('é idempotente: sincronizar de novo não duplica evento', async () => {
+    const reg: Registro = {
+      descriptors: [],
+      utxos: () => [
+        { txid: 'cc'.repeat(32), vout: 0, value: 7000, height: 195, address: 'tb1qx', derivationPath: '0/0' },
+      ],
+    }
+    await syncWallet(walletId, adapterDeRegistro(reg))
+    const segunda = await syncWallet(walletId, adapterDeRegistro(reg))
+    expect(segunda.newEvents).toHaveLength(0)
+    expect(await walletBalance(walletId)).toBe(7000)
+  })
+
+  // O nó reporta a carteira inteira de uma vez, então sumir da lista é
+  // evidência de gasto — diferente do modelo de sondagem, onde só conta o
+  // endereço que foi perguntado.
+  it('declara gasto o UTXO que o nó deixou de reportar', async () => {
+    let tem = true
+    const reg: Registro = {
+      descriptors: [],
+      utxos: () =>
+        tem ? [{ txid: 'dd'.repeat(32), vout: 0, value: 4000, height: 195, address: 'tb1qy', derivationPath: '0/1' }] : [],
+    }
+    await syncWallet(walletId, adapterDeRegistro(reg))
+    expect(await walletBalance(walletId)).toBe(4000)
+
+    tem = false
+    await syncWallet(walletId, adapterDeRegistro(reg))
+    expect(await walletBalance(walletId)).toBe(0)
+  })
+
+  it('marca a carteira como sincronizada', async () => {
+    await syncWallet(walletId, adapterDeRegistro({ descriptors: [], utxos: () => [] }))
+    const { rows } = await pool.query<{ sync_state: string }>(
+      'SELECT sync_state FROM wallets WHERE id = $1', [walletId],
+    )
+    expect(rows[0]!.sync_state).toBe('synced')
+  })
+})

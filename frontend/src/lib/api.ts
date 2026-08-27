@@ -71,7 +71,7 @@ export interface PrivacyReport {
   error: string | null
 }
 
-export type BackendKind = 'esplora' | 'electrum'
+export type BackendKind = 'esplora' | 'electrum' | 'core'
 
 export interface Backend {
   id: number

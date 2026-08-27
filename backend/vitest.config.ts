@@ -32,6 +32,12 @@ export default defineConfig({
     environment: 'node',
     include: ['test/**/*.test.ts'],
     testTimeout: 20_000,
+    // O `beforeEach` esvazia o banco de verdade, e sob disco disputado isso
+    // passa dos 10 s que o vitest dá por padrão a um hook. Quando isso
+    // acontece o caso segue com o banco sujo, e a falha aparece como violação
+    // de chave estrangeira num teste que não tem nada a ver — sintoma que não
+    // aponta para a causa. O limite acompanha o do próprio teste.
+    hookTimeout: 20_000,
     env: {
       DATABASE_URL: process.env.DATABASE_URL ?? bancoDeTeste,
       MASTER_KEY_HEX:

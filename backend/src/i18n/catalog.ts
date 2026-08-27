@@ -120,6 +120,8 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'error.backend.urlRequired': 'Informe o endereço do backend.',
     'error.backend.esploraScheme':
       'O Esplora fala HTTP: o endereço precisa começar com http:// ou https://.',
+    'error.backend.coreScheme':
+      'O RPC do Bitcoin Core fala HTTP: o endereço precisa começar com http:// ou https://.',
     'error.backend.electrumScheme':
       'O endereço do Electrum precisa começar com electrum://, por exemplo electrum://127.0.0.1:50001.',
     'error.backend.invalidUrl': 'Este endereço de backend não é uma url válida.',
@@ -272,6 +274,8 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'error.backend.urlRequired': 'Give the backend address.',
     'error.backend.esploraScheme':
       'Esplora speaks HTTP: the address must start with http:// or https://.',
+    'error.backend.coreScheme':
+      'The Bitcoin Core RPC speaks HTTP: the address must start with http:// or https://.',
     'error.backend.electrumScheme':
       'The Electrum address must start with electrum://, for example electrum://127.0.0.1:50001.',
     'error.backend.invalidUrl': 'That backend address is not a valid url.',

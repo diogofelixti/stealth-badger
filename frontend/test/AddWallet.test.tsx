@@ -125,6 +125,27 @@ describe('AddWallet — escolha de backend', () => {
     )
   })
 
+  // O terceiro modelo de backend: um nó que o próprio usuário roda, falado
+  // por RPC. Sem a opção no seletor, cadastrá-lo dependeria de mexer no `.env`
+  // do servidor — e a postura soberana ficaria fora do alcance de quem usa a
+  // instância sem administrá-la.
+  it('oferece Bitcoin Core como tipo de backend', async () => {
+    addBackend.mockResolvedValue({ ...MEU, kind: 'core', url: 'http://127.0.0.1:38332' })
+    montar()
+
+    await waitFor(() => expect(screen.getByText(/mempool\.space/)).toBeDefined())
+    fireEvent.click(screen.getByRole('button', { name: /outro backend/i }))
+    fireEvent.change(screen.getByLabelText(/tipo/i), { target: { value: 'core' } })
+    fireEvent.change(screen.getByPlaceholderText(/electrum:\/\/host/i), {
+      target: { value: 'http://127.0.0.1:38332' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /adicionar backend/i }))
+
+    await waitFor(() =>
+      expect(addBackend).toHaveBeenCalledWith('core', 'http://127.0.0.1:38332', false),
+    )
+  })
+
   // A descrição do produto promete "endereços e carteiras". Quem publica um
   // endereço de doação quer saber quando alguém paga, sem entregar a carteira
   // inteira ao watchtower.

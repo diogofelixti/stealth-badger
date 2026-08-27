@@ -58,6 +58,25 @@ describe('loadConfig', () => {
     expect(loadConfig().publicBackend).toBe(false)
   })
 
+  it('aponta para o RPC do Bitcoin Core quando CHAIN_BACKEND pede', () => {
+    process.env.MASTER_KEY_HEX = VALID_KEY
+    process.env.CHAIN_BACKEND = 'core'
+    process.env.CORE_URL = 'http://127.0.0.1:38332'
+    const cfg = loadConfig()
+    expect(cfg.backendKind).toBe('core')
+    expect(cfg.backendUrl).toBe('http://127.0.0.1:38332')
+  })
+
+  // Um nó que o usuário mesmo roda é o oposto de um explorador público: é
+  // esta postura que apaga o aviso de privacidade da tela. Herdar o padrão do
+  // Esplora acenderia o aviso em quem fez tudo certo.
+  it('assume postura soberana no Core, que é o nó do próprio usuário', () => {
+    process.env.MASTER_KEY_HEX = VALID_KEY
+    process.env.CHAIN_BACKEND = 'core'
+    delete process.env.PUBLIC_BACKEND
+    expect(loadConfig().publicBackend).toBe(false)
+  })
+
   it('lança erro nomeando o valor inválido quando CHAIN_BACKEND é inválido', () => {
     process.env.MASTER_KEY_HEX = VALID_KEY
     process.env.CHAIN_BACKEND = 'nao-existe'
