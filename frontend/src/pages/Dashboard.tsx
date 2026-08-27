@@ -111,7 +111,19 @@ export function Dashboard({
   }, [recarregar])
 
   const somadas = contabilizadas(wallets)
-  const total = somadas.reduce((soma, w) => soma + Number(w.balanceSats), 0)
+  const totaisPorRede = somadas.reduce<Record<string, { sats: number; utxos: number; congelados: number }>>(
+    (porRede, w) => {
+      const atual = porRede[w.network] ?? { sats: 0, utxos: 0, congelados: 0 }
+      porRede[w.network] = {
+        sats: atual.sats + Number(w.balanceSats),
+        utxos: atual.utxos + w.utxoCount,
+        congelados: atual.congelados + w.frozenCount,
+      }
+      return porRede
+    },
+    {},
+  )
+  const redesOrdenadas = ['mainnet', 'signet', 'testnet'].filter(r => totaisPorRede[r])
   const utxos = somadas.reduce((soma, w) => soma + w.utxoCount, 0)
   const congelados = somadas.reduce((soma, w) => soma + w.frozenCount, 0)
   const altura = wallets.reduce<number | null>(
@@ -163,12 +175,23 @@ export function Dashboard({
             <h2 className="mb-[10px] text-xs font-semibold uppercase tracking-label text-faint">
               {render(catalog, 'balance.total', {}, lang)}
             </h2>
-            <p className="mb-3 flex items-baseline gap-[9px]">
-              <span className="text-2xl font-medium tracking-tight">
-                {total.toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US')}
-              </span>
-              <span className="text-sm text-muted">sats</span>
-            </p>
+            {redesOrdenadas.map(rede => {
+              const totalDaRede = totaisPorRede[rede]!
+              const nomeDaRede = render(catalog, 'network.' + rede, {}, lang)
+              return (
+                <div key={rede} className="mb-3">
+                  <h2 className="mb-[10px] text-xs font-semibold uppercase tracking-label text-faint">
+                    {render(catalog, 'balance.totalByNetwork', { network: nomeDaRede }, lang)}
+                  </h2>
+                  <p className="flex items-baseline gap-[9px]">
+                    <span className="text-2xl font-medium tracking-tight">
+                      {totalDaRede.sats.toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US')}
+                    </span>
+                    <span className="text-sm text-muted">sats</span>
+                  </p>
+                </div>
+              )
+            })}
             <p className="flex flex-wrap items-center gap-[10px] text-xs text-muted">
               <span>{render(catalog, 'balance.wallets', { n: wallets.length }, lang)}</span>
               {separador}

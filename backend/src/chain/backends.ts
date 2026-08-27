@@ -90,9 +90,9 @@ export async function ensureBackendGlobal(network: Network): Promise<number> {
 
 export async function listarBackends(
   userId: number,
-  network: Network,
+  network?: Network,
 ): Promise<BackendResumo[]> {
-  await ensureBackendGlobal(network)
+  await ensureBackendGlobal(loadConfig().network)
   const { rows } = await pool.query<{
     id: string
     kind: BackendKind
@@ -103,9 +103,11 @@ export async function listarBackends(
   }>(
     `SELECT id, kind, url, is_public, network, user_id
        FROM backends
-      WHERE network = $2 AND (user_id IS NULL OR user_id = $1)
-      ORDER BY user_id NULLS FIRST, id`,
-    [userId, network],
+      WHERE (user_id IS NULL OR user_id = $1)
+        AND ($2::text IS NULL OR network = $2)
+      ORDER BY CASE network WHEN 'mainnet' THEN 0 WHEN 'signet' THEN 1 ELSE 2 END,
+               user_id NULLS FIRST, id`,
+    [userId, network ?? null],
   )
   return rows.map(r => ({
     id: Number(r.id),
@@ -145,8 +147,7 @@ export async function criarBackend(
 export async function backendDoUsuario(
   userId: number,
   backendId: number,
-  network: Network,
 ): Promise<BackendResumo | null> {
-  const todos = await listarBackends(userId, network)
+  const todos = await listarBackends(userId)
   return todos.find(b => b.id === backendId) ?? null
 }

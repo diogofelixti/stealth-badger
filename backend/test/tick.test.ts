@@ -10,6 +10,8 @@ import { resetDb } from './helpers/db'
 
 const ZPUB =
   'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs'
+const TPUB =
+  'tpubDCxX2sYFS5bDkSe5GKKYHjBW7tgyN1R3UchpLJvdbf54ohxeGRtd8MbDUe1cguVHe4vnK68DsuD5MXjxi9EXx16rb9EnNsaF5KT99CinaJz'
 const KEY = 'd'.repeat(64)
 
 let firstAddress: string
@@ -115,6 +117,70 @@ describe('tick', () => {
     }
     await tick({ adapterFactory: () => quebrado })
     expect(fechados).toBe(1)
+  })
+
+  it('sincroniza carteiras de redes diferentes no mesmo ciclo', async () => {
+    await resetDb()
+    process.env.MASTER_KEY_HEX = KEY
+    const user = await pool.query<{ id: string }>(
+      "INSERT INTO users (email,password_hash) VALUES ($1,$2) RETURNING id",
+      ["multi@b.c", "x"],
+    )
+    const mainnetKey = parseExtendedKey(ZPUB).canonicalXpub
+    const testnetKey = parseExtendedKey(TPUB).canonicalXpub
+    const mainnetBackend = await pool.query<{ id: string }>(
+      "INSERT INTO backends (kind,url,network,is_public) VALUES ($1,$2,$3,$4) RETURNING id",
+      ["esplora", "http://mainnet", "mainnet", false],
+    )
+    const signetBackend = await pool.query<{ id: string }>(
+      "INSERT INTO backends (kind,url,network,is_public) VALUES ($1,$2,$3,$4) RETURNING id",
+      ["esplora", "http://signet", "signet", false],
+    )
+    await pool.query(
+      "INSERT INTO wallets (user_id,label,xpub_encrypted,xpub_fingerprint,script_type, network,gap_limit,backend_id) " +
+        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8), ($1,$9,$10,$11,$12,$13,$14,$15)",
+      [
+        user.rows[0]!.id,
+        "Mainnet",
+        seal(mainnetKey, KEY),
+        "aabb",
+        "p2wpkh",
+        "mainnet",
+        1,
+        mainnetBackend.rows[0]!.id,
+        "Signet",
+        seal(testnetKey, KEY),
+        "ccdd",
+        "p2wpkh",
+        "signet",
+        1,
+        signetBackend.rows[0]!.id,
+      ],
+    )
+
+    const redes: string[] = []
+    const res = await tick({
+      adapterFactory: backend => {
+        redes.push(backend.network)
+        return {
+          capabilities: () => ({
+            randomAccess: true,
+            needsRegistration: false,
+            supportsSubscribe: false,
+            hasTxIndex: true,
+            isPublic: false,
+            host: backend.url,
+          }),
+          tipHeight: async () => 200,
+          blockHashAt: async (h: number) => "h" + h,
+          getHistoryForAddress: async () => [],
+          getUtxosForAddress: async () => [],
+        }
+      },
+    })
+
+    expect(res.walletsSynced).toBe(2)
+    expect(redes.sort()).toEqual(["mainnet", "signet"])
   })
 
   it('fecha o adapter depois de um ciclo bem-sucedido', async () => {

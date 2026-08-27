@@ -38,6 +38,34 @@ interface CreateWalletBody {
   backendId?: number
 }
 
+function redeEsperadaDaChave(network: Network): KeyNetwork {
+  return network === 'mainnet' ? 'mainnet' : 'testnet'
+}
+
+function nomeDaRedeDaChave(keyNetwork: KeyNetwork): string {
+  return keyNetwork === 'mainnet' ? 'mainnet' : 'testnet ou signet'
+}
+
+function hostDoBackend(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
+}
+
+function mensagemDeRede(
+  redeDaChave: string,
+  redeDoBackend: Network,
+  backend: BackendRow,
+): string {
+  return (
+    'esta chave é de ' + redeDaChave +
+    ', mas a fonte escolhida ' + hostDoBackend(backend.url) +
+    ' vigia ' + redeDoBackend +
+    '. Escolha uma fonte de ' + redeDaChave + ' ou cadastre outra.'
+  )
+}
 
 
 export function registerWalletRoutes(
@@ -79,8 +107,6 @@ export function registerWalletRoutes(
 
     const cfg = loadConfig()
 
-    const network: Network = cfg.network
-
     // O backend é resolvido antes da detecção de tipo de script porque é ele
     // que responderá a consulta: detectar por um backend e vigiar por outro
     // seria perguntar a cadeia em dois lugares sem motivo — e, se um deles for
@@ -90,7 +116,6 @@ export function registerWalletRoutes(
       const escolhido = await backendDoUsuario(
         req.userId,
         Number(req.body.backendId),
-        network,
       )
       if (!escolhido) {
         return reply.code(400).send(
@@ -101,16 +126,18 @@ export function registerWalletRoutes(
           ),
         )
       }
-      backend = { ...escolhido, network }
+      backend = escolhido
     } else {
       backend = {
-        id: await ensureBackendGlobal(network),
+        id: await ensureBackendGlobal(cfg.network),
         kind: cfg.backendKind,
         url: cfg.backendUrl,
         isPublic: cfg.publicBackend,
-        network,
+        network: cfg.network,
       }
     }
+
+    const network: Network = backend.network
 
     // Endereço avulso e carteira divergem só aqui: o que se guarda e o que
     // precisa ser derivado. Daqui para baixo o motor não sabe a diferença.
@@ -124,7 +151,14 @@ export function registerWalletRoutes(
       try {
         avulso = parseWatchAddress(address, network)
       } catch (err) {
-        return reply.code(400).send({ error: (err as Error).message })
+        const mensagem = (err as Error).message.replace(
+          /este watchtower vigia [^.]+/i,
+          'a fonte escolhida ' + hostDoBackend(backend.url) + ' vigia ' + network,
+        )
+        return reply.code(400).send(erro('wallet.networkMismatch', mensagem, {
+          rede_do_backend: network,
+          nome_do_backend: hostDoBackend(backend.url),
+        }))
       }
       scriptType = avulso.scriptType
       enderecoAvulso = avulso.address
@@ -141,14 +175,18 @@ export function registerWalletRoutes(
       // carteira morreria em `error` sem dizer o motivo. Melhor recusar aqui,
       // enquanto ainda dá para explicar. Signet e testnet compartilham as
       // mesmas version bytes, por isso a comparação é com `testnet`.
-      const esperada: KeyNetwork = cfg.network === 'mainnet' ? 'mainnet' : 'testnet'
+      const esperada: KeyNetwork = redeEsperadaDaChave(network)
       if (parsed.keyNetwork !== esperada) {
+        const redeDaChave = nomeDaRedeDaChave(parsed.keyNetwork)
         return reply.code(400).send(
           erro(
-            'wallet.wrongNetwork',
-            `esta chave é de ${parsed.keyNetwork}, mas este watchtower vigia ` +
-              `${cfg.network}. Use uma chave de ${cfg.network}.`,
-            { chave: parsed.keyNetwork, rede: cfg.network },
+            'wallet.networkMismatch',
+            mensagemDeRede(redeDaChave, network, backend),
+            {
+              rede_da_chave: redeDaChave,
+              rede_do_backend: network,
+              nome_do_backend: hostDoBackend(backend.url),
+            },
           ),
         )
       }

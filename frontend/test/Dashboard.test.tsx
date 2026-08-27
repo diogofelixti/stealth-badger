@@ -39,6 +39,10 @@ const CATALOGO: Catalog = {
   'wallets.add': '+ Vigiar carteira',
   'wallets.keyPlaceholder': 'xpub, ypub, zpub, tpub, upub ou vpub',
   'balance.total': 'Saldo total',
+  'balance.totalByNetwork': 'Saldo {network}',
+  'network.mainnet': 'mainnet',
+  'network.signet': 'signet',
+  'network.testnet': 'testnet',
   'balance.wallets': '{n} carteiras',
   'balance.utxos': '{n} UTXOs',
   'privacy.public': 'Explorador público',
@@ -139,6 +143,22 @@ describe('Dashboard — com carteira', () => {
 
     expect(screen.queryByPlaceholderText(/xpub, ypub, zpub/)).toBeNull()
     expect(screen.queryByText(/nenhuma carteira vigiada/i)).toBeNull()
+  })
+})
+
+describe('Dashboard — saldo por rede', () => {
+  it('separa totais de redes diferentes, sem somar tudo em um número só', async () => {
+    wallets.mockResolvedValue([
+      { ...CARTEIRA, id: 1, label: 'Signet', network: 'signet', balanceSats: '11000' },
+      { ...CARTEIRA, id: 2, label: 'Mainnet', network: 'mainnet', balanceSats: '50000' },
+    ])
+    montar()
+
+    await waitFor(() => expect(screen.getByText(/saldo mainnet/i)).toBeDefined())
+    expect(screen.getByText(/saldo signet/i)).toBeDefined()
+    expect(screen.getByText('50.000')).toBeDefined()
+    expect(screen.getByText('11.000')).toBeDefined()
+    expect(screen.queryByText('61.000')).toBeNull()
   })
 })
 

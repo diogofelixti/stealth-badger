@@ -55,6 +55,10 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'feed.empty': 'Nenhum alerta ainda. O watchtower avisa assim que algo se mexer.',
     'feed.tip': 'altura {height}',
     'balance.total': 'Saldo total',
+    'balance.totalByNetwork': 'Saldo {network}',
+    'network.mainnet': 'mainnet',
+    'network.signet': 'signet',
+    'network.testnet': 'testnet',
     'balance.wallets': '{n} carteiras',
     'balance.utxos': '{n} UTXOs',
     'balance.frozen': '{n} congelado',
@@ -109,6 +113,8 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
       'Informe a chave estendida da carteira, ou um endereço avulso a vigiar.',
     'error.wallet.wrongNetwork':
       'Esta chave é de {chave}, e este watchtower vigia {rede}. Use uma chave de {rede}.',
+    'error.wallet.networkMismatch':
+      'Esta chave ou endereço é de {rede_da_chave}, e a fonte escolhida {nome_do_backend} vigia {rede_do_backend}.',
     'error.wallet.backendNotFound': 'O backend escolhido não existe, ou não é seu.',
     'error.channel.unknownKind': 'Não sei entregar por "{tipo}". Aceito ntfy e webhook.',
     'error.channel.topicRequired':
@@ -151,6 +157,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'utxos.dust': 'dust',
     'utxos.empty': 'Nenhum UTXO à vista nesta carteira.',
     'utxos.imported': '{imported} rótulos importados, {ignored} ignorados',
+    'backend.networkRequired': 'Rede',
     'backends.title': 'Vigiar por',
     'backends.global': 'configurado no servidor',
     'backends.own': 'seu',
@@ -209,6 +216,10 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'feed.empty': 'No alerts yet. The watchtower speaks up the moment something moves.',
     'feed.tip': 'height {height}',
     'balance.total': 'Total balance',
+    'balance.totalByNetwork': '{network} balance',
+    'network.mainnet': 'mainnet',
+    'network.signet': 'signet',
+    'network.testnet': 'testnet',
     'balance.wallets': '{n} wallets',
     'balance.utxos': '{n} UTXOs',
     'balance.frozen': '{n} frozen',
@@ -263,6 +274,8 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
       "Give the wallet's extended key, or a single address to watch.",
     'error.wallet.wrongNetwork':
       'This key is for {chave}, and this watchtower watches {rede}. Use a {rede} key.',
+    'error.wallet.networkMismatch':
+      'This key or address is for {rede_da_chave}, and the chosen source {nome_do_backend} watches {rede_do_backend}.',
     'error.wallet.backendNotFound': 'That backend does not exist, or is not yours.',
     'error.channel.unknownKind': 'I cannot deliver through "{tipo}". I accept ntfy and webhook.',
     'error.channel.topicRequired':
@@ -305,6 +318,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'utxos.dust': 'dust',
     'utxos.empty': 'No UTXO in sight for this wallet.',
     'utxos.imported': '{imported} labels imported, {ignored} ignored',
+    'backend.networkRequired': 'Network',
     'backends.title': 'Watch through',
     'backends.global': 'server default',
     'backends.own': 'yours',

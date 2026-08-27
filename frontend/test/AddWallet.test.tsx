@@ -40,6 +40,10 @@ const CATALOGO: Catalog = {
   'backends.isPublic': 'É um serviço público de terceiro',
   'backends.publicNote': 'Um backend público enxerga quais endereços você consulta.',
   'backends.save': 'Adicionar backend',
+  'backend.networkRequired': 'Rede',
+  'network.mainnet': 'mainnet',
+  'network.signet': 'signet',
+  'network.testnet': 'testnet',
 }
 
 const GLOBAL: Backend = {
@@ -142,7 +146,7 @@ describe('AddWallet — escolha de backend', () => {
     fireEvent.click(screen.getByRole('button', { name: /adicionar backend/i }))
 
     await waitFor(() =>
-      expect(addBackend).toHaveBeenCalledWith('core', 'http://127.0.0.1:38332', false),
+      expect(addBackend).toHaveBeenCalledWith('core', 'http://127.0.0.1:38332', false, 'mainnet'),
     )
   })
 

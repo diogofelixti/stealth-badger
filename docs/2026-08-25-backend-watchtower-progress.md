@@ -1320,6 +1320,28 @@ e exportação BIP-329 → roadmap honesto.
 
 Não depende de transação nova chegar na hora, que é a única parte fora do nosso controle.
 
+## Rodada 22 — Item 0: uma instância, mais de uma rede
+
+### O que foi construído
+
+- `POST /api/backends` agora recebe `network`, grava a rede escolhida e `GET /api/backends` lista todas as redes, com filtro opcional por `?network=`.
+- O cadastro de carteira usa a rede do backend escolhido para validar chave ou endereço e para gravar `wallets.network`.
+- A mensagem de rede incompatível passou a nomear a fonte escolhida e os parâmetros novos entram no catálogo bilíngue.
+- O worker sincroniza carteiras de redes diferentes no mesmo ciclo, cada uma com o backend que a carteira escolheu.
+- O painel deixou de somar saldos de redes diferentes num número só e mostra totais rotulados por mainnet, signet e testnet.
+- O formulário de backend da tela permite escolher a rede ao cadastrar uma fonte, e a documentação reescreveu o sentido de `NETWORK`.
+
+### O que quebrou a premissa
+
+- O TDD do item reproduziu a premissa antiga: em uma instância `NETWORK=signet`, cadastrar backend com `network: mainnet` ainda gravava `signet`; a primeira rodada vermelha mostrou **6 falhas no backend** nos testes de backends, wallets e tick.
+- A falha silenciosa do painel foi medida no teste do Dashboard: duas carteiras, uma com **50.000 sats mainnet** e outra com **11.000 sats signet**, apareciam como **61.000 sats** em um total único.
+- Depois de incluir o endereço do critério de pronto, `bc1ql49ydapnjafl5t2cp9zqpjwe6pdgmxy98859v2`, a suíte backend subiu de **423 para 424 testes**; o caso passa por backend mainnet mesmo com a instância em signet.
+
+### O que ficou de dívida
+
+- O saldo real do endereço mainnet não foi conferido contra uma sincronização de explorador nesta rodada; o item 0 fechou o contrato e a regressão de mistura de redes, mas não rodou um ciclo de cadeia real para esse endereço.
+- O Item 1 ainda não foi iniciado; a prova contra bitcoind e Fulcrum local continua sendo a próxima rodada por ordem do backlog.
+
 ## Estado em 27/08
 
 - backend: 37 arquivos de teste, **418 testes**

@@ -91,8 +91,12 @@ describe('erros da API carregam código para a tela traduzir', () => {
       payload: { label: 'x', key: ZPUB },
     })
     expect(res.json()).toMatchObject({
-      code: 'wallet.wrongNetwork',
-      params: { chave: 'mainnet', rede: 'signet' },
+      code: 'wallet.networkMismatch',
+      params: {
+        rede_da_chave: 'mainnet',
+        rede_do_backend: 'signet',
+        nome_do_backend: 'mempool.space',
+      },
     })
   })
 

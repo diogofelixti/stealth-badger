@@ -6,6 +6,7 @@ import {
   type BackendKind,
   type Catalog,
   type Lang,
+  type Network,
 } from '../lib/api'
 import { render } from '../lib/i18n'
 
@@ -41,6 +42,7 @@ export function AddWallet({
   const [novoKind, setNovoKind] = useState<BackendKind>('electrum')
   const [novaUrl, setNovaUrl] = useState('')
   const [novoPublico, setNovoPublico] = useState(false)
+  const [novaRede, setNovaRede] = useState<Network>('mainnet')
 
   useEffect(() => {
     void api
@@ -78,7 +80,7 @@ export function AddWallet({
   async function salvarBackend(): Promise<void> {
     setErro(null)
     try {
-      const criado = await api.addBackend(novoKind, novaUrl.trim(), novoPublico)
+      const criado = await api.addBackend(novoKind, novaUrl.trim(), novoPublico, novaRede)
       // já selecionado: quem acabou de cadastrar um backend quer vigiar por ele
       setBackends(lista => [...lista.filter(b => b.id !== criado.id), criado])
       setEscolhido(criado.id)
@@ -161,7 +163,7 @@ export function AddWallet({
       >
         {backends.map(b => (
           <option key={b.id} value={b.id}>
-            {host(b.url)} · {render(catalog, `backends.${b.scope}`, {}, lang)}
+            {host(b.url)} · {render(catalog, `network.${b.network}`, {}, lang)} · {render(catalog, `backends.${b.scope}`, {}, lang)}
           </option>
         ))}
       </select>
@@ -201,6 +203,18 @@ export function AddWallet({
             placeholder={render(catalog, 'backends.urlPlaceholder', {}, lang)}
             className={`mb-2 ${campo}`}
           />
+          <select
+            aria-label={render(catalog, 'backend.networkRequired', {}, lang)}
+            value={novaRede}
+            onChange={e => setNovaRede(e.target.value as Network)}
+            className={`mb-2 ${campo}`}
+          >
+            {(['mainnet', 'signet', 'testnet'] as const).map(rede => (
+              <option key={rede} value={rede}>
+                {render(catalog, `network.${rede}`, {}, lang)}
+              </option>
+            ))}
+          </select>
           <label className="mb-2 flex items-center gap-2 text-xs text-muted">
             <input
               type="checkbox"

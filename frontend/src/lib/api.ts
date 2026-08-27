@@ -24,6 +24,8 @@ export type Catalog = Record<string, string>
 
 export type WalletKind = 'xpub' | 'address'
 
+export type Network = 'mainnet' | 'signet' | 'testnet'
+
 export interface Wallet {
   id: number
   label: string
@@ -31,7 +33,7 @@ export interface Wallet {
   /** preenchido apenas quando `kind` é `address` */
   address: string | null
   scriptType: string
-  network: string
+  network: Network
   fingerprint: string
   syncState: SyncState
   syncProgress: number
@@ -78,7 +80,7 @@ export interface Backend {
   kind: BackendKind
   url: string
   isPublic: boolean
-  network: string
+  network: Network
   /** `global` é o backend da instância; `own`, o que o usuário cadastrou */
   scope: 'global' | 'own'
 }
@@ -187,10 +189,10 @@ export const api = {
       body: JSON.stringify({ label, ...entrada, backendId }),
     }),
   backends: () => request<Backend[]>('/api/backends'),
-  addBackend: (kind: BackendKind, url: string, isPublic: boolean) =>
+  addBackend: (kind: BackendKind, url: string, isPublic: boolean, network?: Network) =>
     request<Backend>('/api/backends', {
       method: 'POST',
-      body: JSON.stringify({ kind, url, isPublic }),
+      body: JSON.stringify({ kind, url, isPublic, network }),
     }),
   alerts: () => request<Alert[]>('/api/alerts'),
   search: (q: string) => request<Achado[]>(`/api/search?q=${encodeURIComponent(q)}`),

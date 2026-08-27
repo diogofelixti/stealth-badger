@@ -95,12 +95,67 @@ describe('POST /api/wallets', () => {
     expect(res.json().error).toMatch(/watch-only|privada/i)
   })
 
-  // Um backend Esplora atende uma rede só. Aceitar a chave da outra rede
-  // gera endereços que o explorador recusa, e a carteira morre em `error`
-  // sem dizer o motivo — falha silenciosa, que é o que não pode acontecer.
-  it('recusa chave de rede diferente da que o watchtower vigia', async () => {
-    const { app, cookie } = await loggedInApp()
+  it('cadastra chave de mainnet por backend de mainnet numa instância de signet', async () => {
     process.env.NETWORK = 'signet'
+    const { app, cookie } = await loggedInApp()
+    const backend = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: {
+        kind: 'esplora',
+        url: 'https://mempool.space/api',
+        isPublic: true,
+        network: 'mainnet',
+      },
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre', key: ZPUB, backendId: backend.json().id },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(res.json().network).toBe('mainnet')
+
+    const { rows } = await pool.query<{ network: string }>('SELECT network FROM wallets')
+    expect(rows[0]!.network).toBe('mainnet')
+  })
+
+  it('cadastra endereço de mainnet por backend de mainnet numa instância de signet', async () => {
+    process.env.NETWORK = 'signet'
+    const { app, cookie } = await loggedInApp()
+    const backend = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: {
+        kind: 'esplora',
+        url: 'https://mempool.space/api',
+        isPublic: true,
+        network: 'mainnet',
+      },
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: {
+        label: 'Carteira real',
+        address: 'bc1ql49ydapnjafl5t2cp9zqpjwe6pdgmxy98859v2',
+        backendId: backend.json().id,
+      },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(res.json()).toMatchObject({ kind: 'address', network: 'mainnet' })
+  })
+  it('recusa chave de mainnet por backend de signet nomeando a fonte escolhida', async () => {
+    process.env.NETWORK = 'signet'
+    const { app, cookie } = await loggedInApp()
 
     const res = await app.inject({
       method: 'POST',
@@ -110,9 +165,11 @@ describe('POST /api/wallets', () => {
     })
 
     expect(res.statusCode).toBe(400)
-    // a mensagem nomeia as duas redes, senão não dá para agir sobre ela
+    expect(res.json().code).toBe('wallet.networkMismatch')
     expect(res.json().error).toMatch(/mainnet/i)
     expect(res.json().error).toMatch(/signet/i)
+    expect(res.json().error).toMatch(/mempool.space/)
+    expect(res.json().error).not.toMatch(/watchtower vigia/i)
 
     const { rows } = await pool.query('SELECT id FROM wallets')
     expect(rows).toHaveLength(0)
@@ -211,6 +268,41 @@ describe('POST /api/wallets — tipo de script ambíguo', () => {
   // O defeito relatado: a carteira entrava como p2pkh, derivava endereços
   // legados que nunca existiram, sincronizava até `synced` e mostrava saldo
   // zero. Nenhum erro em lugar nenhum.
+  it('aceita tpub por backend de signet e por backend de testnet', async () => {
+    for (const network of ['signet', 'testnet'] as const) {
+      await resetDb()
+      process.env.NETWORK = 'signet'
+      const app = buildApp({ adapterFactory: () => adapterQueConhece(enderecosSegwitDo(TPUB)) })
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { email: network + '@exemplo.com', password: 'senha-longa-de-teste', language: 'pt' },
+      })
+      const login = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: network + '@exemplo.com', password: 'senha-longa-de-teste' },
+      })
+      const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+      const backend = await app.inject({
+        method: 'POST',
+        url: '/api/backends',
+        cookies: { sb_session: cookie },
+        payload: { kind: 'esplora', url: 'http://' + network + '.local/api', isPublic: false, network },
+      })
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/wallets',
+        cookies: { sb_session: cookie },
+        payload: { label: 'Cofre ' + network, key: TPUB, backendId: backend.json().id },
+      })
+
+      expect(res.statusCode).toBe(201)
+      expect(res.json().network).toBe(network)
+    }
+  })
+
   it('descobre native segwit em vez de assumir legado a partir de tpub', async () => {
     process.env.NETWORK = 'signet'
     const app = buildApp({ adapterFactory: () => adapterQueConhece(enderecosSegwitDo(TPUB)) })

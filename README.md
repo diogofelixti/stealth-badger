@@ -132,7 +132,7 @@ Tudo em `.env`, documentado em [`.env.example`](.env.example):
 |---|---|
 | `MASTER_KEY_HEX` | 32 bytes em hex. Cifra os xpubs em repouso |
 | `POSTGRES_PASSWORD` | senha do banco |
-| `NETWORK` | `mainnet`, `signet` ou `testnet` |
+| `NETWORK` | rede do backend pronto da instância (`mainnet`, `signet` ou `testnet`); outras redes entram por backends cadastrados na tela/API |
 | `CHAIN_BACKEND` | `esplora`, `electrum` ou `core` |
 | `ESPLORA_URL` / `ELECTRUM_URL` / `CORE_URL` | endereço do backend de cadeia |
 | `CORE_COOKIE_PATH` | caminho do `.cookie` do bitcoind, quando o backend é `core` |

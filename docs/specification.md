@@ -401,7 +401,7 @@ exemplo — jamais reais.
 | Variável | Efeito |
 |---|---|
 | `MASTER_KEY_HEX` | 32 bytes em hex. Cifra os xpubs em repouso |
-| `NETWORK` | `mainnet`, `signet` ou `testnet`. Define que chaves o sistema aceita |
+| `NETWORK` | rede do backend pronto da instância (`mainnet`, `signet` ou `testnet`). A rede da carteira vem do backend escolhido |
 | `CHAIN_BACKEND` | `esplora`, `electrum` ou `core` |
 | `ESPLORA_URL` | backend de cadeia quando `CHAIN_BACKEND=esplora` |
 | `ELECTRUM_URL` | `electrum://host:porta` quando `CHAIN_BACKEND=electrum` |
@@ -441,8 +441,7 @@ expõe, a linha conta quantos em vez de eleger um.
 Cada cartão de carteira nomeia o seu próprio backend. É ali que o contraste entre uma
 carteira exposta e uma soberana fica visível lado a lado.
 
-> **Limitação:** a instância ainda vigia **uma rede só** (`NETWORK`). Dá para contrastar
-> as duas posturas — explorador público contra nó próprio — mas ambas na mesma rede.
+A instância oferece um backend pronto na rede de `NETWORK`, mas backends cadastrados pelo usuário podem vigiar mainnet, signet e testnet lado a lado. A rede de cada carteira é a rede do backend escolhido.
 
 ### 11.2 Três backends de cadeia
 
@@ -606,11 +605,6 @@ com contrato e critério de pronto, está em
 
 ### 12.2 Limitações conhecidas do que existe
 
-- **Uma instância vigia uma rede só** (`NETWORK`). Dá para contrastar explorador público
-  e nó próprio, mas ambos na mesma rede. **Especificado para cair**: o item 0 do backlog
-  de 27/08 tira a rede da configuração da instância e a põe no backend escolhido, que é o
-  único que sabe qual rede não-mainnet é — `tpub` e `tb1…` não distinguem signet de
-  testnet.
 - **O adapter Electrum foi verificado contra um servidor público**, não contra um nó do
   próprio usuário. Electrs, Fulcrum e florestad continuam sem terem sido exercitados.
 - **O adapter de Bitcoin Core não falou com um bitcoind de verdade.** O RPC, o registro

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildApp } from '../src/app'
 import { pool } from '../src/db/pool'
 import { resetDb } from './helpers/db'
@@ -11,6 +11,11 @@ const REDE_ORIGINAL = process.env.NETWORK
 beforeEach(async () => {
   await resetDb()
   process.env.NETWORK = 'mainnet'
+})
+
+afterEach(() => {
+  if (REDE_ORIGINAL === undefined) delete process.env.NETWORK
+  else process.env.NETWORK = REDE_ORIGINAL
 })
 
 async function logado(email = 'dono@exemplo.com') {
@@ -63,6 +68,40 @@ describe('GET /api/backends', () => {
       cookies: { sb_session: b.cookie },
     })
     expect(JSON.stringify(res.json())).not.toContain('so-meu')
+  })
+
+  it('lista todas as redes, e aceita filtrar por rede', async () => {
+    process.env.NETWORK = 'signet'
+    const { app, cookie } = await logado()
+    await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: {
+        kind: 'esplora',
+        url: 'https://mempool.space/api',
+        isPublic: true,
+        network: 'mainnet',
+      },
+    })
+
+    const todos = await app.inject({
+      method: 'GET',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+    })
+    expect(todos.json().map((b: { network: string }) => b.network).sort()).toEqual([
+      'mainnet',
+      'signet',
+    ])
+
+    const filtrados = await app.inject({
+      method: 'GET',
+      url: '/api/backends?network=mainnet',
+      cookies: { sb_session: cookie },
+    })
+    expect(filtrados.json()).toHaveLength(1)
+    expect(filtrados.json()[0]).toMatchObject({ network: 'mainnet' })
   })
 })
 
@@ -121,6 +160,30 @@ describe('POST /api/backends', () => {
     })
     expect(res.statusCode).toBe(201)
     expect(res.json().kind).toBe('core')
+  })
+
+  it('cadastra backend de mainnet numa instância de signet e grava mainnet', async () => {
+    process.env.NETWORK = 'signet'
+    const { app, cookie } = await logado()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+      payload: {
+        kind: 'esplora',
+        url: 'https://mempool.space/api',
+        isPublic: true,
+        network: 'mainnet',
+      },
+    })
+    expect(res.statusCode).toBe(201)
+    expect(res.json()).toMatchObject({ network: 'mainnet' })
+
+    const { rows } = await pool.query<{ network: string }>(
+      'SELECT network FROM backends WHERE id = $1',
+      [res.json().id],
+    )
+    expect(rows[0]!.network).toBe('mainnet')
   })
 
   // O RPC do Core fala HTTP, não o protocolo do Electrum. Aceitar o esquema
