@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api, mensagemDoErro, type Catalog, type Lang } from '../lib/api'
 import { LangToggle } from '../components/LangToggle'
 import { render } from '../lib/i18n'
+import { Button } from '../components/ui/Button'
 
 export function Login({
   catalog,
@@ -80,23 +81,23 @@ export function Login({
           )}
 
           <div className="flex gap-2">
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="md"
               disabled={enviando || !email || !senha}
               onClick={() => entrar(false)}
-              className="flex-1 rounded px-3 py-2 text-sm font-semibold uppercase tracking-label disabled:opacity-40"
-              style={{ background: 'var(--sb-accent)', color: 'var(--sb-bg)' }}
+              className="flex-1"
             >
               {render(catalog, 'auth.login', {}, lang)}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              size="md"
               disabled={enviando || !email || !senha}
               onClick={() => entrar(true)}
-              className="flex-1 rounded border border-line px-3 py-2 text-sm uppercase tracking-label disabled:opacity-40"
+              className="flex-1"
             >
               {render(catalog, 'auth.register', {}, lang)}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

@@ -1450,10 +1450,69 @@ carteiras paradas. Cadastrar ao vivo é congelar o feed no palco.
   rodada, avançando entre 2 e 17 blocos por segundo. A porta 50001 só abre quando o
   índice termina.
 
+## Rodada 25 — Itens 7, 8 e 9: botões, escala tipográfica e a grade do painel
+
+### O que foi construído
+
+- `components/ui/Button.tsx`, com quatro variantes — `primary`, `secondary`, `ghost` e
+  `danger` — dois tamanhos, `type="button"` por padrão e a variante em `data-variant`.
+- Os dezesseis botões de texto puro das oito telas passaram a usá-lo. **Não sobrou um
+  `<button>` cru em `frontend/src`.**
+- Tokens novos na primeira camada (`--sb-caution-lit`, `--sb-alarm-lit`, `--sb-clay-lit`)
+  e os papéis `--sb-accent-hover`, `--sb-surface-hover`, `--sb-critical-hover`,
+  `--sb-focus`.
+- A escala tipográfica subiu um degrau: `xs` de 11 para **12px**, `sm` 13 → **14px**,
+  `base` 15 → **16px**, `lg` 18 → **20px**, `xl` 24 → **26px**. As treze ocorrências de
+  prosa em `text-xs` viraram `text-sm` — prosa não desce de 14px.
+- A grade do painel inverteu o peso: `lg:grid-cols-[minmax(0,1fr)_360px]`. A coluna do
+  que se vigia cresce com a janela, o feed fica em 360px, e os cartões de carteira passam
+  a caber dois por linha a partir de `xl`.
+
+### O que quebrou a premissa
+
+- **O Tailwind apagou o estilo inteiro dos botões, e nenhum teste viu.** As regras
+  estavam em `@layer components`, e a varredura de classes do Tailwind descarta o que não
+  encontra escrito no código. `Button.tsx` monta `sb-btn--${variant}` em tempo de
+  execução: nome nenhum aparece literal, e o bundle saiu sem `background`, sem borda e
+  sem altura. Os 106 testes passaram verdes — JSDOM não aplica CSS. **Quem pegou foi o
+  screenshot**, que mostrou exatamente a queixa original: botão que é só texto. As regras
+  foram para fora da camada.
+- **`ghost` sem fundo é `ghost` sem affordance.** A tabela do backlog pede "sem fundo até
+  o `:hover`", e a regra da varredura pede que nenhuma ação fique sem borda, fundo ou
+  sublinhado. As duas se contradiziam. Resolvido pela terceira opção: `ghost` ganhou
+  **sublinhado pontilhado** em repouso — trinta e duas linhas de UTXO com contorno
+  viravam grade, e o sublinhado não pesa na lista.
+- **Uma execução da suíte do frontend falhou sob carga**, com a máquina indexando o
+  Fulcrum e rodando um rescan do Core ao mesmo tempo: **55 segundos** contra os 14 de uma
+  execução normal. As duas execuções seguintes passaram inteiras. O nome do caso não foi
+  capturado, então fica como novo dado da intermitência já anotada, e não como caso novo.
+
+### O que ficou conferido
+
+Screenshots do painel autenticado, em 1280px e em 390px, e da `UtxoTable` aberta nas duas
+larguras:
+
+| O que | Medido |
+|---|---|
+| rolagem horizontal | **nenhuma**, nas quatro capturas |
+| botões da tela | `+ vigiar carteira` e `analisar privacidade` com borda, `cadastrar canal` preenchido, `sair` e `moedas e rótulos` sublinhados |
+| par de idiomas | o escolhido acende a borda, e o estado continua no `aria-pressed` |
+| `UtxoTable` em 390px | valor, `txid:vout`, caminho de derivação, campo de rótulo e `congelar` cabem sem cortar |
+| grade em 1280px | coluna esquerda larga, feed em 360px, cartões dois por linha |
+
+### O que ficou de dívida
+
+- **Com os cartões em duas colunas, abrir as moedas de um deixa a coluna vizinha vazia**
+  em telas grandes. O item 10, que leva a carteira para uma página própria, resolve sem
+  remendo — mexer na grade agora seria fazer o trabalho duas vezes.
+- **Nenhum teste cobre o estilo aplicado.** O defeito do `@layer` passou por 106 testes
+  verdes; o que o pegou foi olhar a tela. Teste de CSS aplicado exigiria navegador na
+  suíte, e isso não cabe na véspera — a conferência visual fica no roteiro de regressão.
+
 ## Estado em 27/08
 
 - backend: 37 arquivos de teste, **432 testes**
-- frontend: 12 arquivos de teste, **101 testes**
+- frontend: 13 arquivos de teste, **106 testes**
 - `npx tsc --noEmit` limpo nos dois
 - três backends de cadeia: Esplora, Electrum e **Bitcoin Core**, escolhidos por carteira
 - o resto igual ao estado de 26/08, abaixo
@@ -1487,7 +1546,8 @@ carteiras paradas. Cadastrar ao vivo é congelar o feed no palco.
 ### Técnicas
 
 - **Uma falha isolada na suíte do frontend**, em `Dashboard > anuncia postura pública`,
-  numa execução entre quinze. Não reproduziu depois, e a máquina construía imagem
+  numa execução entre quinze — e **outra em 27/08, sob carga**, numa execução que levou
+  55s contra os 14s normais, com o nome do caso não capturado. Não reproduziu depois, e a máquina construía imagem
   Docker no mesmo instante. Fica anotada em vez de dada por resolvida: intermitência
   que não se explica costuma voltar — **o `hookTimeout` corrigido em 27/08 é candidato
   a explicação**, porque a falha do backend tinha a mesma forma e o mesmo gatilho

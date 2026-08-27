@@ -9,6 +9,7 @@ import {
   type Network,
 } from '../lib/api'
 import { render } from '../lib/i18n'
+import { Button } from './ui/Button'
 
 function host(url: string): string {
   try {
@@ -118,19 +119,15 @@ export function AddWallet({
       />
       <div className="mb-2 flex gap-1" role="group">
         {(['key', 'address'] as const).map(m => (
-          <button
+          <Button
             key={m}
-            type="button"
+            variant={modo === m ? 'secondary' : 'ghost'}
             onClick={() => setModo(m)}
             aria-pressed={modo === m}
-            className="flex-1 rounded border px-2 py-1 text-xs uppercase tracking-label"
-            style={{
-              borderColor: modo === m ? 'var(--sb-accent)' : 'var(--sb-border)',
-              color: modo === m ? 'var(--sb-accent)' : 'var(--sb-faint)',
-            }}
+            className="flex-1"
           >
             {render(catalog, m === 'key' ? 'wallets.modeKey' : 'wallets.modeAddress', {}, lang)}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -150,7 +147,7 @@ export function AddWallet({
             placeholder={render(catalog, 'wallets.addressPlaceholder', {}, lang)}
             className={`mb-2 ${campo}`}
           />
-          <p className="mb-2 font-prose text-xs leading-relaxed text-faint">
+          <p className="mb-2 font-prose text-sm leading-relaxed text-faint">
             {render(catalog, 'wallets.addressNote', {}, lang)}
           </p>
         </>
@@ -175,7 +172,7 @@ export function AddWallet({
             <option value="p2sh-p2wpkh">p2sh-p2wpkh · nested segwit</option>
             <option value="p2pkh">p2pkh · legacy</option>
           </select>
-          <p className="mb-2 font-prose text-xs leading-relaxed text-faint">
+          <p className="mb-2 font-prose text-sm leading-relaxed text-faint">
             {render(catalog, 'wallets.scriptTypeNote', {}, lang)}
           </p>
         </>
@@ -204,20 +201,19 @@ export function AddWallet({
       </select>
 
       {atual?.isPublic && (
-        <p className="mb-2 font-prose text-xs leading-relaxed" style={{ color: 'var(--sb-public)' }}>
+        <p className="mb-2 font-prose text-sm leading-relaxed" style={{ color: 'var(--sb-public)' }}>
           {render(catalog, 'backends.publicNote', {}, lang)}
         </p>
       )}
 
       {!abrindoBackend && (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onClick={() => setAbrindoBackend(true)}
-          className="mb-3 text-xs uppercase tracking-label"
-          style={{ color: 'var(--sb-accent)' }}
+          className="mb-3"
         >
           {render(catalog, 'backends.addToggle', {}, lang)}
-        </button>
+        </Button>
       )}
 
       {abrindoBackend && (
@@ -258,18 +254,13 @@ export function AddWallet({
             />
             {render(catalog, 'backends.isPublic', {}, lang)}
           </label>
-          <button
-            type="button"
-            disabled={!novaUrl.trim()}
-            onClick={() => void salvarBackend()}
-            className="rounded border border-line px-3 py-2 text-xs uppercase tracking-label disabled:opacity-40"
-          >
+          <Button disabled={!novaUrl.trim()} onClick={() => void salvarBackend()}>
             {render(catalog, 'backends.save', {}, lang)}
-          </button>
+          </Button>
         </div>
       )}
 
-      <p className="mb-3 font-prose text-xs leading-relaxed text-faint">
+      <p className="mb-3 font-prose text-sm leading-relaxed text-faint">
         {render(catalog, 'wallets.watchOnly', {}, lang)}
       </p>
 
@@ -279,18 +270,18 @@ export function AddWallet({
         </p>
       )}
 
-      <button
+      <Button
         type="submit"
+        variant="primary"
+        size="md"
         disabled={
           enviando ||
           !label.trim() ||
           (modo === 'key' ? !key.trim() : !endereco.trim())
         }
-        className="rounded px-3 py-2 text-sm font-semibold uppercase tracking-label disabled:opacity-40"
-        style={{ background: 'var(--sb-accent)', color: 'var(--sb-bg)' }}
       >
         {render(catalog, enviando ? 'wallets.submitting' : 'wallets.submit', {}, lang)}
-      </button>
+      </Button>
     </form>
   )
 }

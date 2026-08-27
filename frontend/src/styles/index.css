@@ -41,3 +41,106 @@
     color: var(--sb-text);
   }
 }
+
+/* ── BOTÕES ────────────────────────────────────────────────────────────
+   Ação sem affordance é ação que ninguém encontra. Toda ação que muda
+   estado tem borda, fundo ou os dois; link que navega continua link.
+
+   Fora de `@layer components` de propósito: o Tailwind varre o código à
+   procura dos nomes de classe e descarta o que não encontra. `Button.tsx`
+   monta `sb-btn--${variant}` em tempo de execução, então a varredura não
+   acha nome nenhum — dentro da camada, todo o estilo do botão era apagado
+   do bundle, e a tela mostrava texto puro. Nada nos testes pega isso. */
+
+.sb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sb-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--sb-radius);
+  font-family: var(--sb-font-ui);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--sb-track-label);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.sb-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sb-btn:focus-visible {
+  outline: 2px solid var(--sb-focus);
+  outline-offset: 2px;
+}
+
+.sb-btn--sm {
+  height: 32px;
+  padding: 0 var(--sb-space-3);
+  font-size: var(--sb-text-xs);
+}
+
+.sb-btn--md {
+  height: 40px;
+  padding: 0 var(--sb-space-4);
+  font-size: var(--sb-text-sm);
+}
+
+.sb-btn--primary {
+  background: var(--sb-accent);
+  color: var(--sb-bg);
+}
+
+.sb-btn--primary:hover:not(:disabled) {
+  background: var(--sb-accent-hover);
+}
+
+.sb-btn--secondary {
+  background: var(--sb-surface-raised);
+  border-color: var(--sb-border);
+  color: var(--sb-text);
+}
+
+.sb-btn--secondary:hover:not(:disabled) {
+  background: var(--sb-surface-hover);
+}
+
+/* Terciário dentro de lista não pode ganhar borda — trinta e duas linhas de
+   UTXO com contorno viram grade. Ganha sublinhado pontilhado, que é a terceira
+   affordance que a regra aceita e não pesa na lista. */
+.sb-btn--ghost {
+  background: transparent;
+  color: var(--sb-text-muted);
+  text-decoration: underline dotted;
+  text-decoration-color: var(--sb-border);
+  text-underline-offset: 5px;
+}
+
+.sb-btn--ghost:hover:not(:disabled) {
+  background: var(--sb-surface-hover);
+  color: var(--sb-text);
+  text-decoration-color: var(--sb-accent);
+}
+
+.sb-btn--danger {
+  background: transparent;
+  border-color: var(--sb-critical);
+  color: var(--sb-critical);
+}
+
+.sb-btn--danger:hover:not(:disabled) {
+  background: var(--sb-critical-hover);
+  color: var(--sb-bg);
+  border-color: var(--sb-critical-hover);
+}
+
+/* Alternativa escolhida num grupo: a borda acesa diz qual está valendo,
+   e o estado é lido por leitor de tela pelo aria-pressed. */
+.sb-btn[aria-pressed='true'] {
+  border-color: var(--sb-accent);
+  color: var(--sb-accent);
+}

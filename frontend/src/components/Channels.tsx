@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, mensagemDoErro, type Catalog, type Channel, type Lang } from '../lib/api'
 import { render } from '../lib/i18n'
+import { Button } from './ui/Button'
 
 type Resultado = { id: number; ok: boolean; error?: string }
 
@@ -62,7 +63,7 @@ export function Channels({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
       </h2>
 
       {canais.length === 0 && (
-        <p className="mb-2 font-prose text-xs leading-relaxed text-muted">
+        <p className="mb-2 font-prose text-sm leading-relaxed text-muted">
           {render(catalog, 'channels.empty', {}, lang)}
         </p>
       )}
@@ -72,22 +73,15 @@ export function Channels({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
           <li key={c.id} className="flex items-center justify-between gap-2">
             <span className="text-xs uppercase tracking-label">{c.kind}</span>
             <span className="flex items-center gap-3">
-              <button
-                type="button"
-                disabled={ocupado}
-                onClick={() => void testar(c.id)}
-                className="text-xs uppercase tracking-label disabled:opacity-40"
-                style={{ color: 'var(--sb-accent)' }}
-              >
+              <Button disabled={ocupado} onClick={() => void testar(c.id)}>
                 {render(catalog, 'channels.test', {}, lang)}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
                 onClick={() => void api.removeChannel(c.id).then(recarregar)}
-                className="text-xs uppercase tracking-label text-faint hover:text-ink"
               >
                 {render(catalog, 'channels.remove', {}, lang)}
-              </button>
+              </Button>
             </span>
           </li>
         ))}
@@ -96,7 +90,7 @@ export function Channels({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
       {resultado && (
         <p
           role="status"
-          className="mb-2 font-prose text-xs leading-relaxed"
+          className="mb-2 font-prose text-sm leading-relaxed"
           style={{ color: resultado.ok ? 'var(--sb-sovereign)' : 'var(--sb-critical)' }}
         >
           {resultado.ok
@@ -113,7 +107,7 @@ export function Channels({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
       />
       {/* O tópico é a única barreira entre as notificações e quem quiser
           lê-las: quem cadastra precisa saber disso na hora de escolher. */}
-      <p className="mb-2 font-prose text-xs leading-relaxed text-faint">
+      <p className="mb-2 font-prose text-sm leading-relaxed text-faint">
         {render(catalog, 'channels.topicHint', {}, lang)}
       </p>
 
@@ -123,14 +117,13 @@ export function Channels({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
         </p>
       )}
 
-      <button
-        type="button"
+      <Button
+        variant="primary"
         disabled={ocupado || !topico.trim()}
         onClick={() => void cadastrar()}
-        className="rounded border border-line px-3 py-2 text-xs uppercase tracking-label disabled:opacity-40"
       >
         {render(catalog, 'channels.add', {}, lang)}
-      </button>
+      </Button>
     </section>
   )
 }

@@ -4,6 +4,7 @@ import { formatSats, shorten } from '../lib/format'
 import { render } from '../lib/i18n'
 import { PrivacyPanel } from './PrivacyPanel'
 import { UtxoTable } from './UtxoTable'
+import { Button } from './ui/Button'
 
 /** Verde acima de 80, âmbar acima de 50, vermelho abaixo. */
 function corDoScore(score: number): string {
@@ -84,7 +85,7 @@ export function WalletCard({
               style={{ width: `${wallet.syncProgress}%`, background: 'var(--sb-warning)' }}
             />
           </div>
-          <p className="font-prose text-xs leading-relaxed text-muted">
+          <p className="font-prose text-sm leading-relaxed text-muted">
             {render(catalog, 'wallet.importingNote', {}, lang)}
           </p>
         </>
@@ -144,14 +145,7 @@ export function WalletCard({
               {render(catalog, 'privacy.scanning', {}, lang)}
             </span>
           ) : (
-            <button
-              type="button"
-              onClick={onScan}
-              className="text-xs uppercase tracking-label"
-              style={{ color: 'var(--sb-accent)' }}
-            >
-              {render(catalog, 'privacy.scan', {}, lang)}
-            </button>
+            <Button onClick={onScan}>{render(catalog, 'privacy.scan', {}, lang)}</Button>
           ))}
       </div>
 
@@ -162,14 +156,13 @@ export function WalletCard({
       {/* Fechado por padrão: uma carteira com trinta UTXOs empurraria o resto
           do painel para fora da tela antes de alguém pedir para ver. */}
       <div className="mt-[10px]">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onClick={() => setMoedasAbertas(v => !v)}
           aria-expanded={moedasAbertas}
-          className="text-xs uppercase tracking-label text-faint hover:text-ink"
         >
           {render(catalog, 'utxos.toggle', {}, lang)}
-        </button>
+        </Button>
         {moedasAbertas && (
           <UtxoTable walletId={wallet.id} catalog={catalog} lang={lang} />
         )}
@@ -203,7 +196,7 @@ export function WalletCard({
             {render(catalog, 'wallet.syncDegraded', {}, lang)}
           </p>
           {wallet.syncError && (
-            <p className="font-prose text-xs leading-relaxed text-muted">
+            <p className="font-prose text-sm leading-relaxed text-muted">
               {wallet.syncError}
             </p>
           )}
@@ -216,7 +209,7 @@ export function WalletCard({
             {render(catalog, 'wallet.syncError', {}, lang)}
           </p>
           {wallet.syncError && (
-            <p className="font-prose text-xs leading-relaxed text-muted">
+            <p className="font-prose text-sm leading-relaxed text-muted">
               {wallet.syncError}
             </p>
           )}

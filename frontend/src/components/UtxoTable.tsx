@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, mensagemDoErro, type Catalog, type Lang, type Utxo } from '../lib/api'
 import { formatSats } from '../lib/format'
 import { render } from '../lib/i18n'
+import { Button } from './ui/Button'
 
 /**
  * Limiar de poeira, o mesmo do motor de alertas. Abaixo dele o UTXO custa mais
@@ -149,14 +150,12 @@ export function UtxoTable({
                     }}
                     className="min-w-0 flex-1 rounded border border-line bg-bg px-2 py-1 text-xs placeholder:text-faint"
                   />
-                  <button
-                    type="button"
+                  <Button
+                    variant={u.frozen ? 'secondary' : 'ghost'}
                     onClick={() => void marcar(u, { frozen: !u.frozen })}
-                    className="text-xs uppercase tracking-label"
-                    style={{ color: u.frozen ? 'var(--sb-warning)' : 'var(--sb-faint)' }}
                   >
                     {render(catalog, u.frozen ? 'utxos.unfreeze' : 'utxos.freeze', {}, lang)}
-                  </button>
+                  </Button>
                 </div>
 
                 {(poeira || u.frozen || u.tags.length > 0) && (

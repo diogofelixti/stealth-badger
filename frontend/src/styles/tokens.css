@@ -32,6 +32,13 @@
   --sb-alarm:   #C4472F; /* crítico */
   --sb-moss:    #7E9E8E; /* soberano · nada a reportar */
 
+  /* Acesos: a mesma cor sob o cursor. Existem na primeira camada porque
+     trocar a paleta tem de trocar o hover junto — hover calculado no
+     componente é a cor que ninguém encontra quando a paleta muda. */
+  --sb-caution-lit: #EDB758;
+  --sb-alarm-lit:   #D65B41;
+  --sb-clay-lit:    #34291F;
+
   /* ── PAPÉIS SEMÂNTICOS · o que as telas escrevem ──────────────────── */
   --sb-bg:             var(--sb-sett);
   --sb-surface:        var(--sb-soil);
@@ -41,7 +48,11 @@
   --sb-text-muted:     var(--sb-muted);
   --sb-text-faint:     var(--sb-faint);
 
-  --sb-accent:    var(--sb-caution); /* ação primária e links */
+  --sb-accent:       var(--sb-caution); /* ação primária e links */
+  --sb-accent-hover:   var(--sb-caution-lit);
+  --sb-surface-hover:  var(--sb-clay-lit);
+  --sb-critical-hover: var(--sb-alarm-lit);
+  --sb-focus:          var(--sb-caution);
   --sb-info:      var(--sb-faint);   /* informativo não ganha cor */
   --sb-warning:   var(--sb-caution);
   --sb-critical:  var(--sb-alarm);
@@ -56,12 +67,15 @@
   --sb-font-ui:    var(--sb-font-data);
   --sb-font-mono:  var(--sb-font-data);
 
-  --sb-text-xs:   0.6875rem;
-  --sb-text-sm:   0.8125rem;
-  --sb-text-base: 0.9375rem;
-  --sb-text-lg:   1.125rem;
-  --sb-text-xl:   1.5rem;
-  --sb-text-2xl:  2.5rem;
+  /* Onze pixels em monoespaçada sobre fundo escuro é pequeno para quem tem a
+     vista boa. A escala subiu um degrau inteiro em 27/08, e `xs` passou a ser
+     só rótulo em caixa alta — prosa nunca desce abaixo de `sm`. */
+  --sb-text-xs:   0.75rem;   /* 12px · rótulo em caixa alta */
+  --sb-text-sm:   0.875rem;  /* 14px · dado secundário, carimbo de data */
+  --sb-text-base: 1rem;      /* 16px · corpo */
+  --sb-text-lg:   1.25rem;   /* 20px · título de seção */
+  --sb-text-xl:   1.625rem;  /* 26px · número grande */
+  --sb-text-2xl:  2.5rem;    /* 40px · saldo total */
 
   --sb-track-tight: -0.01em;
   --sb-track-label:  0.14em; /* rótulos em caixa alta, espaçados */

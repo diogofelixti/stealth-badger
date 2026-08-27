@@ -8,6 +8,7 @@ import { WalletCard } from '../components/WalletCard'
 import { Channels } from '../components/Channels'
 import { Search } from '../components/Search'
 import { render } from '../lib/i18n'
+import { Button } from '../components/ui/Button'
 
 /**
  * Só entra no total a carteira cujo saldo já é conhecido.
@@ -145,17 +146,16 @@ export function Dashboard({
         <>
           <LangToggle lang={lang} onChange={onLang} />
           <span className="text-xs text-faint">{me.email}</span>
-          <button
-            type="button"
-            onClick={() => void api.logout().then(onSaiu)}
-            className="text-xs uppercase tracking-label text-faint hover:text-ink"
-          >
+          <Button variant="ghost" onClick={() => void api.logout().then(onSaiu)}>
             {render(catalog, 'auth.logout', {}, lang)}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="grid lg:grid-cols-[460px_minmax(0,1fr)]">
+      {/* O peso das duas colunas é o inverso do que era: à esquerda saldo,
+          carteiras, busca, canais e cartões; à direita uma lista. A esquerda
+          cresce com a janela, o feed fica em 360px. */}
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* o que você vigia */}
         <aside className="flex flex-col gap-5 border-b border-line px-4 py-6 sm:px-7 lg:border-b-0 lg:border-r">
           {semCarteira && (
@@ -164,7 +164,7 @@ export function Dashboard({
                 {render(catalog, 'wallets.title', {}, lang)}
               </h2>
               <p className="mb-2 text-sm">{render(catalog, 'wallets.empty', {}, lang)}</p>
-              <p className="font-prose text-xs leading-relaxed text-muted">
+              <p className="font-prose text-sm leading-relaxed text-muted">
                 {render(catalog, 'wallets.emptyHint', {}, lang)}
               </p>
             </section>
@@ -216,15 +216,9 @@ export function Dashboard({
                 <h2 className="text-xs font-semibold uppercase tracking-label text-faint">
                   {render(catalog, 'wallets.title', {}, lang)}
                 </h2>
-                <button
-                  type="button"
-                  onClick={() => setAbrindoForm(v => !v)}
-                  aria-expanded={abrindoForm}
-                  className="text-xs uppercase tracking-label"
-                  style={{ color: 'var(--sb-accent)' }}
-                >
+                <Button onClick={() => setAbrindoForm(v => !v)} aria-expanded={abrindoForm}>
                   {render(catalog, 'wallets.add', {}, lang)}
-                </button>
+                </Button>
               </div>
             </>
           )}
@@ -249,15 +243,17 @@ export function Dashboard({
             </>
           )}
 
-          {wallets.map(w => (
-            <WalletCard
-              key={w.id}
-              wallet={w}
-              catalog={catalog}
-              lang={lang}
-              onScan={() => void api.scanPrivacy(w.id).then(recarregar)}
-            />
-          ))}
+          <div className="grid gap-5 xl:grid-cols-2">
+            {wallets.map(w => (
+              <WalletCard
+                key={w.id}
+                wallet={w}
+                catalog={catalog}
+                lang={lang}
+                onScan={() => void api.scanPrivacy(w.id).then(recarregar)}
+              />
+            ))}
+          </div>
         </aside>
 
         {/* o que ele viu */}

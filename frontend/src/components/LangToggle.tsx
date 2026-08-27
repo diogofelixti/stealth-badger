@@ -1,4 +1,5 @@
 import type { Lang } from '../lib/api'
+import { Button } from './ui/Button'
 
 const IDIOMAS: Lang[] = ['pt', 'en']
 
@@ -12,20 +13,14 @@ export function LangToggle({
   return (
     <div className="flex items-center overflow-hidden rounded border border-line">
       {IDIOMAS.map(l => (
-        <button
+        <Button
           key={l}
-          type="button"
+          variant={l === lang ? 'secondary' : 'ghost'}
           onClick={() => onChange(l)}
           aria-pressed={l === lang}
-          className="px-[10px] py-[6px] text-xs font-semibold uppercase tracking-label"
-          style={
-            l === lang
-              ? { background: 'var(--sb-surface-raised)', color: 'var(--sb-text)' }
-              : { color: 'var(--sb-text-faint)' }
-          }
         >
           {l}
-        </button>
+        </Button>
       ))}
     </div>
   )

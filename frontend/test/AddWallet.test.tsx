@@ -74,6 +74,9 @@ function montar() {
 
 beforeEach(() => {
   backends.mockResolvedValue([GLOBAL])
+  // limpo a cada caso: sem isto, "não foi chamado" enxerga as chamadas dos
+  // testes anteriores e passa a ser impossível de escrever
+  addWallet.mockReset()
   addWallet.mockResolvedValue({})
   addBackend.mockReset()
 })
@@ -261,5 +264,22 @@ describe('AddWallet — tipo de script', () => {
     await waitFor(() =>
       expect(addWallet).toHaveBeenCalledWith('Cofre', { key: TPUB }, 1),
     )
+  })
+})
+
+describe('AddWallet — ações que não são enviar', () => {
+  // O padrão do HTML para <button> é `submit`: abrir o cadastro de backend
+  // dentro do <form> enviava a carteira pela metade.
+  it('abrir o cadastro de backend não submete o formulário', async () => {
+    montar()
+    await waitFor(() => expect(screen.getByText(/mempool\.space/)).toBeDefined())
+
+    fireEvent.change(screen.getByPlaceholderText('Rótulo'), {
+      target: { value: 'Cofre' },
+    })
+    fireEvent.click(screen.getByText('+ outro backend'))
+
+    expect(addWallet).not.toHaveBeenCalled()
+    expect(screen.getByPlaceholderText('https://... ou electrum://host:50001')).toBeDefined()
   })
 })
