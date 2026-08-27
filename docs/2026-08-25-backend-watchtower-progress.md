@@ -1110,6 +1110,48 @@ Com o ciclo em seis segundos, faz sentido poder aproximar o alerta.
 `WORKER_INTERVAL_MS` tem piso de cinco segundos, porque intervalo menor que o ciclo
 empilha sincronizações da mesma carteira sobre o mesmo log append-only.
 
+## Décima nona rodada — 26/08, as três pendências que sobraram
+
+### A intermitência não reproduz
+
+~34 execuções da suíte do frontend, incluindo quatro com os quatro núcleos saturados —
+a condição que coincidiu com a falha original. Todas verdes. Fica registrada como **não
+reproduzida sob pressão**, e não como resolvida: não sei o que era.
+
+O que foi corrigido em volta dela, e provavelmente ajudou: o teste do painel passou a
+simular os fetches de canais e de busca, que antes atualizavam estado depois das
+asserções.
+
+### BIP-329: uma não conformidade com a spec
+
+Fui buscar a especificação para conferir o formato e achei um defeito nosso.
+
+A BIP diz, sobre `spendable`: *"Omitting it means the importing wallet should preserve
+existing values."* **Omitir é preservar, não é negar.** Nós tratávamos ausência como
+"gastável" — importar um arquivo de carteira que não escreve o campo descongelaria em
+silêncio tudo que o usuário tinha congelado, e congelar é a decisão de coin control
+mais direta que existe.
+
+A exportação passa a escrever o campo sempre — omitir faria o nosso "não está
+congelado" nunca chegar ao destino —, e a importação distingue "não mencionado" de
+"gastável".
+
+**O arquivo de exemplo da própria BIP virou teste.** Não há implementação de BIP-329
+publicada no npm para cruzar, então ler o que a spec publica é o substituto mais forte
+disponível para "abrir no Sparrow". Ele inclui `spscan`, tipo acrescentado depois pela
+BIP-392: um parser que engasgasse com tipo novo perderia o arquivo inteiro quando a spec
+crescesse.
+
+### A postura soberana: até onde dá sem um nó
+
+A única imagem de Floresta disponível é de terceiro sem procedência conhecida. Rodar
+código arbitrário com acesso à rede na máquina de alguém, num projeto cuja tese é
+privacidade, é decisão do dono da máquina — fica para ele.
+
+O que deu para verificar: cadastrar um backend soberano e conferir na tela que escolhê-lo
+**apaga o aviso de exposição**, e que voltar ao público o acende. O caminho está correto;
+falta o nó do outro lado.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
