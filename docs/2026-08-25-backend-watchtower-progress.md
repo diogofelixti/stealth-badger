@@ -1152,6 +1152,31 @@ O que deu para verificar: cadastrar um backend soberano e conferir na tela que e
 **apaga o aviso de exposição**, e que voltar ao público o acende. O caminho está correto;
 falta o nó do outro lado.
 
+## Vigésima rodada — 26/08, o projeto funciona a partir do zero?
+
+Ninguém tinha verificado o que o README promete: clonar, copiar o `.env.example`, subir
+e usar. Nove migrações se acumularam desde a última vez que um banco vazio foi criado, e
+nada garantia que elas aplicassem em ordem numa base limpa.
+
+Feito num **projeto Compose separado**, com portas próprias, para não tocar na base de
+demonstração — um clone raso do próprio repositório, seguindo o README ao pé da letra.
+
+| Passo | Resultado |
+|---|---|
+| clone + `.env.example` + duas chaves | funciona |
+| `docker compose up -d --build` | sobe os cinco containers |
+| migrações num banco vazio | as nove aplicam em ordem |
+| `GET /api/health` | responde |
+| criar conta pela tela | funciona |
+| tela de estreia com formulário aberto e aviso watch-only | funciona |
+| cadastrar endereço e vê-lo listado | funciona |
+| selo de privacidade aceso | funciona |
+| respostas 4xx/5xx durante o percurso | **nenhuma** |
+
+Uma armadilha do Compose que vale registrar para quem for repetir: `ports` num arquivo
+de override é **somado** ao original, não substituído. Sem `!override`, o teste tentou
+publicar a mesma porta duas vezes e bateu na do ambiente de desenvolvimento.
+
 ## Roteiro da demonstração — estado real, conferido em 26/08
 
 O roteiro da §12.1 do design é a intenção. Isto é o que sobe no palco.
