@@ -591,7 +591,9 @@ própria BIP-329** é lido por teste.
 
 ## 12. O que ainda não existe
 
-Escrito para ser lido antes que alguém pergunte.
+Escrito para ser lido antes que alguém pergunte. O que está **planejado e especificado**,
+com contrato e critério de pronto, está em
+[`2026-08-27-backlog-interface-e-fontes.md`](2026-08-27-backlog-interface-e-fontes.md).
 
 ### 12.1 Não implementado
 

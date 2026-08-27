@@ -1340,6 +1340,14 @@ Não depende de transação nova chegar na hora, que é a única parte fora do n
 
 ## Pendências
 
+> **O backlog de 27/08 está em
+> [`docs/2026-08-27-backlog-interface-e-fontes.md`](2026-08-27-backlog-interface-e-fontes.md)**
+> — treze itens de fontes de consulta, interface e acessos externos, cada um com
+> contrato, arquivos, testes e critério de pronto, mais as quatro decisões fechadas com o
+> dono do projeto naquele dia. As pendências abaixo continuam valendo; o item 1 do backlog
+> fecha a mais antiga delas, porque **há um bitcoind de signet sincronizado nesta
+> máquina**.
+
 ### Em execução
 
 - **Nada.** Os sete tipos da taxonomia da §8.1 estão implementados, e o caminho de
