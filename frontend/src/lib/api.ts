@@ -181,7 +181,7 @@ export const api = {
   wallets: () => request<Wallet[]>('/api/wallets'),
   addWallet: (
     label: string,
-    entrada: { key?: string; address?: string },
+    entrada: { key?: string; address?: string; scriptType?: string },
     backendId?: number,
   ) =>
     request<Wallet>('/api/wallets', {

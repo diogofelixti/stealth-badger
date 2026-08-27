@@ -101,6 +101,20 @@ histórico. A ordem de tentativa é `p2wpkh`, `p2sh-p2wpkh`, `p2pkh`, `p2tr`.
 Se nenhum candidato tem histórico, a carteira é nova e não há o que detectar: o sistema
 assume **`p2wpkh`**, que é o que qualquer carteira criada hoje usa.
 
+**Nem sempre há a quem perguntar.** Um backend que exige registro de descriptor —
+Bitcoin Core — não responde consulta por endereço: a detecção não tem como acontecer, e
+antes de 27/08 a chave ambígua entrava como legado. Medido contra o nó daquele dia: uma
+carteira native segwit com **7.552.468 sats em 32 UTXOs** apareceria com **zero**.
+
+Por isso `POST /api/wallets` aceita **`scriptType`** opcional — `p2pkh`, `p2sh-p2wpkh`
+ou `p2wpkh` — e a tela oferece o campo **só quando a chave é ambígua**. Declarado, o
+tipo vale e a cadeia não é consultada. Ausente e sem detecção possível, vale o padrão
+`p2wpkh`, e não o palpite legado da SLIP-132.
+
+Detectar pelo próprio nó seria possível com `scantxoutset`, e não é feito: a varredura
+custou **3 min 40 s** na signet desta máquina. Cadastro que trava quatro minutos é pior
+que o problema que resolveria.
+
 ### 4.3 Recusas, todas com mensagem acionável
 
 | Entrada | Resposta |
@@ -109,6 +123,9 @@ assume **`p2wpkh`**, que é o que qualquer carteira criada hoje usa.
 | chave de rede diferente da vigiada | `400` — nomeia as duas redes: *"esta chave é de mainnet, mas este watchtower vigia signet"* |
 | base58check inválido, tamanho ≠ 78 bytes, version bytes desconhecidas | `400` descrevendo o defeito |
 | rótulo vazio | `400` |
+| `scriptType` que não existe | `400` — nomeia os aceitos |
+| `scriptType` junto de endereço avulso | `400` — o endereço já diz o tipo dele |
+| `scriptType` que contradiz as version bytes da chave | `400` — nomeia o tipo da chave e o pedido |
 
 A recusa por rede errada existe porque um backend Esplora atende **uma rede só**.
 Aceitar a chave da outra rede faria o watchtower derivar endereços que o explorador

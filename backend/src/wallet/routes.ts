@@ -36,7 +36,17 @@ interface CreateWalletBody {
   gapLimit?: number
   /** backend escolhido na tela; ausente usa o configurado na instância */
   backendId?: number
+  /**
+   * Tipo de script declarado por quem cadastra. Só faz sentido com chave
+   * estendida ambígua — `xpub`/`tpub` — e existe porque um backend de
+   * registro não responde por endereço: sem ninguém a quem perguntar, o
+   * palpite errado mostra saldo zero e nenhum erro.
+   */
+  scriptType?: string
 }
+
+/** Os tipos que o cadastro aceita declarar. Taproot ainda não deriva. */
+const TIPOS_DECLARAVEIS: ScriptType[] = ['p2pkh', 'p2sh-p2wpkh', 'p2wpkh']
 
 function redeEsperadaDaChave(network: Network): KeyNetwork {
   return network === 'mainnet' ? 'mainnet' : 'testnet'
@@ -94,6 +104,29 @@ export function registerWalletRoutes(
           ),
         )
     }
+    const declarado = req.body.scriptType?.trim()
+    if (declarado !== undefined && declarado !== '') {
+      if (!TIPOS_DECLARAVEIS.includes(declarado as ScriptType)) {
+        return reply.code(400).send(
+          erro(
+            'wallet.unknownScriptType',
+            'tipo de script desconhecido: ' + declarado + '. Use ' +
+              TIPOS_DECLARAVEIS.join(', ') + '.',
+            { tipo: declarado, aceitos: TIPOS_DECLARAVEIS.join(', ') },
+          ),
+        )
+      }
+      if (address?.trim()) {
+        return reply.code(400).send(
+          erro(
+            'wallet.scriptTypeWithAddress',
+            'o endereço já diz o tipo de script dele; declarar outro só ' +
+              'poderia contradizê-lo',
+          ),
+        )
+      }
+    }
+
     if (!key?.trim() && !address?.trim()) {
       return reply
         .code(400)
@@ -198,8 +231,26 @@ export function registerWalletRoutes(
       // Descobrir exige perguntar à cadeia por endereço, e um backend de
       // registro não responde isso: com ele, o padrão é assumido e o usuário
       // informa o tipo se quiser outro.
-      scriptType = parsed.scriptType
-      if (parsed.scriptTypeAmbiguous && backend.kind !== 'core') {
+      // As version bytes de `zpub`/`vpub`/`ypub` dizem o tipo. Aceitar uma
+      // declaração que as contradiga seria escolher em silêncio qual das duas
+      // vale — e a carteira derivaria endereços que ninguém tem.
+      if (declarado && !parsed.scriptTypeAmbiguous && declarado !== parsed.scriptType) {
+        return reply.code(400).send(
+          erro(
+            'wallet.scriptTypeConflict',
+            'esta chave já declara ' + parsed.scriptType + ', e o cadastro ' +
+              'pediu ' + declarado + '. Use a chave do tipo que quer vigiar.',
+            { tipo_da_chave: parsed.scriptType, tipo_pedido: declarado },
+          ),
+        )
+      }
+
+      scriptType = (declarado as ScriptType) || parsed.scriptType
+      // Sem declaração e com chave ambígua, pergunta-se à cadeia. Um backend
+      // de registro não responde por endereço e `detectScriptType` devolve
+      // `null` — daí cair no padrão, que é native segwit. Assumir legado era
+      // o que fazia uma carteira com saldo aparecer com zero.
+      if (!declarado && parsed.scriptTypeAmbiguous) {
         const adapter = adapterFactory(backend)
         try {
           scriptType =

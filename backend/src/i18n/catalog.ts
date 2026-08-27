@@ -81,6 +81,13 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallets.watchOnly':
       'Somente chaves públicas. O Stealth Badger é watch-only e recusa qualquer ' +
       'material que permita gastar.',
+    'wallets.scriptType': 'Tipo de script',
+    'wallets.scriptTypeAuto': 'descobrir pela cadeia',
+    'wallets.scriptTypeNote':
+      'Esta chave não diz o tipo de script: xpub e tpub servem a legacy, ' +
+      'nested segwit e native segwit. Quando a fonte escolhida exige registro ' +
+      'de descriptor não há a quem perguntar, e o palpite errado mostra saldo ' +
+      'zero sem erro nenhum.',
     'wallets.submit': 'Começar a vigiar',
     'wallets.submitting': 'cadastrando...',
     'wallet.coins': 'Moedas',
@@ -116,6 +123,12 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'error.wallet.networkMismatch':
       'Esta chave ou endereço é de {rede_da_chave}, e a fonte escolhida {nome_do_backend} vigia {rede_do_backend}.',
     'error.wallet.backendNotFound': 'O backend escolhido não existe, ou não é seu.',
+    'error.wallet.unknownScriptType':
+      'Não conheço o tipo de script "{tipo}". Aceito {aceitos}.',
+    'error.wallet.scriptTypeConflict':
+      'Esta chave já declara {tipo_da_chave}, e o cadastro pediu {tipo_pedido}. Use a chave do tipo que quer vigiar.',
+    'error.wallet.scriptTypeWithAddress':
+      'O endereço já diz o tipo de script dele. Declarar outro só poderia contradizê-lo.',
     'error.channel.unknownKind': 'Não sei entregar por "{tipo}". Aceito ntfy e webhook.',
     'error.channel.topicRequired':
       'Escolha um tópico. É ele que separa as suas notificações das dos outros, então use algo longo e difícil de adivinhar.',
@@ -242,6 +255,13 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallets.watchOnly':
       'Public keys only. Stealth Badger is watch-only and refuses anything that ' +
       'could spend.',
+    'wallets.scriptType': 'Script type',
+    'wallets.scriptTypeAuto': 'discover from the chain',
+    'wallets.scriptTypeNote':
+      'This key does not say its script type: xpub and tpub serve legacy, ' +
+      'nested segwit and native segwit alike. When the chosen source needs a ' +
+      'descriptor registered there is no one to ask, and the wrong guess shows ' +
+      'a zero balance with no error at all.',
     'wallets.submit': 'Start watching',
     'wallets.submitting': 'adding...',
     'wallet.coins': 'Coins',
@@ -277,6 +297,12 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'error.wallet.networkMismatch':
       'This key or address is for {rede_da_chave}, and the chosen source {nome_do_backend} watches {rede_do_backend}.',
     'error.wallet.backendNotFound': 'That backend does not exist, or is not yours.',
+    'error.wallet.unknownScriptType':
+      'I do not know the script type "{tipo}". I accept {aceitos}.',
+    'error.wallet.scriptTypeConflict':
+      'This key already declares {tipo_da_chave}, and the request asked for {tipo_pedido}. Use a key of the type you want to watch.',
+    'error.wallet.scriptTypeWithAddress':
+      'The address already says its own script type. Declaring another could only contradict it.',
     'error.channel.unknownKind': 'I cannot deliver through "{tipo}". I accept ntfy and webhook.',
     'error.channel.topicRequired':
       'Pick a topic. It is what separates your notifications from everyone else\'s, so make it long and hard to guess.',

@@ -1320,6 +1320,11 @@ e exportação BIP-329 → roadmap honesto.
 
 Não depende de transação nova chegar na hora, que é a única parte fora do nosso controle.
 
+**As carteiras vigiadas pelo nó são cadastradas antes da apresentação.** O primeiro
+import do Bitcoin Core varre a cadeia desde o gênesis duas vezes, uma por cadeia de
+derivação, e o ciclo do worker espera — 17 minutos medidos em 27/08, com todas as outras
+carteiras paradas. Cadastrar ao vivo é congelar o feed no palco.
+
 ## Rodada 22 — Item 0: uma instância, mais de uma rede
 
 ### O que foi construído
@@ -1374,10 +1379,81 @@ Não depende de transação nova chegar na hora, que é a única parte fora do n
 - A conferência do Fulcrum local, item 1.2, ainda falta.
 - A carteira de teste `stealth-badger-4`, criada pela primeira tentativa ambígua, foi abortada/removida do banco, mas continuou carregada no Core.
 
+## Rodada 24 — Item 1: a carteira do dono, pelo nó e pelo explorador
+
+### O que foi construído
+
+- `POST /api/wallets` passou a aceitar **`scriptType`** opcional: `p2pkh`, `p2sh-p2wpkh`
+  ou `p2wpkh`. Existe porque um backend de registro não responde por endereço, e sem
+  ninguém a quem perguntar o palpite errado não dá erro nenhum.
+- O cadastro recusa tipo que não existe (`wallet.unknownScriptType`), tipo declarado
+  junto de endereço avulso (`wallet.scriptTypeWithAddress`) e tipo que contradiz as
+  version bytes da chave (`wallet.scriptTypeConflict`) — as três frases nas duas línguas.
+- Chave ambígua sem declaração e sem cadeia a quem perguntar passou a assumir
+  **native segwit**, e não legado, como já fazia todo o resto do cadastro.
+- O formulário mostra o campo **só quando a chave é ambígua** (`xpub`/`tpub`), com a
+  frase que explica por quê; `vpub`, `zpub`, `upub` e `ypub` não ganham campo nenhum.
+- A `tpub` do dono do projeto foi conferida contra o nó desta máquina e vigiada por dois
+  caminhos ao mesmo tempo — Bitcoin Core local e Esplora público — que é o passo 5 do
+  roteiro.
+
+### O que quebrou a premissa
+
+- **`tpub` crua com backend Core mostrava saldo zero, sem erro.** `wallet/routes.ts` só
+  detectava o tipo de script quando o backend **não** era `core`, e o corpo do `POST`
+  não aceitava tipo nenhum — o comentário do código dizia que "o usuário informa o tipo
+  se quiser outro", e não havia por onde. Medido: a carteira tem **7.552.468 sats em 32
+  UTXOs** derivados por `wpkh`, e a varredura dos seis descriptors possíveis
+  (`pkh`, `sh(wpkh)` e `wpkh`, cadeias 0 e 1, range 0–200) deu **exatamente o mesmo
+  total** da varredura só de `wpkh` — ou seja, **zero** em legado e em nested segwit.
+  Cadastrada como `p2pkh`, a tela mostraria 0 onde há 7,5 milhões de sats.
+- **O primeiro import do Core congela o worker inteiro.** `tick()` percorre as carteiras
+  em série e `loop.ts` espera o ciclo terminar de propósito, para não empilhar
+  sincronizações no log append-only. Medido: a carteira do Core ficou **17 minutos** em
+  `importing` enquanto a gêmea pelo Esplora não saiu de `pending` — mesma chave, mesmo
+  ciclo. São **dois rescans**, um por cadeia, cada um varrendo a signet desde o gênesis.
+- **A espera de rescan de 600 s é curta para o primeiro import.** A carteira foi para
+  `error` com *"Bitcoin Core ainda está escaneando a carteira de observação depois de
+  600s"* enquanto o nó, correto, ainda estava em 97,2% aos 1009 s. O ciclo seguinte
+  encontrou o descriptor já importado e a carteira se recuperou sozinha — o `error` é
+  transitório, mas aparece na tela.
+- **`scantxoutset` custou 3 min 40 s** nesta máquina, com o `bitcoind` também alimentando
+  o índice do Fulcrum. É a razão de não detectar tipo de script pelo nó no cadastro:
+  um formulário que trava quatro minutos é pior que o problema que resolveria.
+
+### O que ficou conferido
+
+| O que | Medido |
+|---|---|
+| tipo de script da chave | `wpkh`, contra `pkh` que as version bytes sugeriam |
+| UTXOs pelo `scantxoutset` do nó | **32** — 31 na cadeia 0, 1 na cadeia de `change` |
+| saldo pelo `scantxoutset` | **7.552.468 sats**, altura 319608 |
+| carteira pelo **Bitcoin Core local** | `synced`, **7.552.468 sats**, **32 UTXOs**, altura 319611 |
+| carteira pelo **Esplora público** | `synced`, **7.552.468 sats**, **32 UTXOs**, altura 319611 |
+| `backendIsPublic` | `false` na do Core, `true` na do Esplora — selo apagado e aceso |
+| conversão `tpub` → `vpub` | `0/1`, `0/27`, `0/35` e `1/0` derivam os mesmos `scriptPubKey` que o nó achou |
+| menor UTXO | **500 sats** — `dust` de verdade, e não um caso inventado |
+| estabilidade das fontes | em uma hora, o Esplora público falhou duas vezes com `fetch failed`; o Core local, nenhuma |
+
+### O que ficou de dívida
+
+- **O primeiro import do Core continua bloqueando o ciclo, e isso não foi corrigido.**
+  A decisão, tomada com o dono do projeto em 27/08, foi registrar a limitação em vez de
+  mexer na concorrência do worker na véspera da entrega: carteira pelo nó se cadastra
+  **antes** da apresentação, nunca ao vivo. Só o primeiro import bloqueia.
+- **`xpub_fingerprint` guarda o fingerprint do *pai*, não o da chave.**
+  `descriptor.ts:115` lê os bytes 5..9, que na BIP-32 são o fingerprint do pai; o Core
+  mostra `f47ff685` para a mesma chave onde a nossa tela mostra `fd281824`. Não quebra
+  nada — o campo só é exibido, e nenhum descriptor é montado com ele — mas quem comparar
+  com o Sparrow vai achar que é outra carteira.
+- **Item 1.2, o Fulcrum, continua pendente**: o índice estava em 83,5% ao fim desta
+  rodada, avançando entre 2 e 17 blocos por segundo. A porta 50001 só abre quando o
+  índice termina.
+
 ## Estado em 27/08
 
-- backend: 37 arquivos de teste, **426 testes**
-- frontend: 12 arquivos de teste, **97 testes**
+- backend: 37 arquivos de teste, **432 testes**
+- frontend: 12 arquivos de teste, **101 testes**
 - `npx tsc --noEmit` limpo nos dois
 - três backends de cadeia: Esplora, Electrum e **Bitcoin Core**, escolhidos por carteira
 - o resto igual ao estado de 26/08, abaixo
@@ -1417,9 +1493,21 @@ Não depende de transação nova chegar na hora, que é a única parte fora do n
   a explicação**, porque a falha do backend tinha a mesma forma e o mesmo gatilho
 - **Abrir o arquivo BIP-329 exportado no Sparrow de verdade.** A ida e volta está
   coberta por teste de round-trip, mas nenhuma outra carteira leu o arquivo ainda
-- **A postura soberana não foi demonstrada.** O adapter Electrum falou com um servidor
-  real, mas público, e o adapter de Bitcoin Core não falou com bitcoind nenhum; mostrar
-  "soberano" exige um nó do próprio apresentador
+- ~~**A postura soberana não foi demonstrada.**~~ **Fechada em 27/08, pelo Bitcoin Core
+  desta máquina**: a mesma chave vigiada pelo nó local e por explorador público devolveu
+  os mesmos 7.552.468 sats em 32 UTXOs, com o selo apagado numa e aceso na outra. O lado
+  Electrum, pelo Fulcrum local, continua pendente — é o item 1.2, e depende do índice
+  terminar
+- **Cadastrar carteira por Bitcoin Core trava o ciclo do worker durante o primeiro
+  import** — dois rescans desde o gênesis, 17 minutos medidos em 27/08, e nenhuma outra
+  carteira sincroniza enquanto isso. **Limitação aceita, com decisão registrada**: na
+  apresentação, carteira pelo nó se cadastra antes, nunca ao vivo. Corrigir exigiria
+  mexer na serialização do `tick()`, que é o que protege o log append-only
+- **A espera de rescan de 600 s não cobre o primeiro import**, e a carteira passa por
+  `error` antes de se recuperar sozinha no ciclo seguinte
+- **`xpub_fingerprint` guarda o fingerprint do pai da chave**, não o da chave: a tela
+  mostra `fd281824` onde o Bitcoin Core mostra `f47ff685`. Só é exibido, nenhum
+  descriptor é montado com ele
 - **`rescanFrom` implementado e não chamado**, e `internal: false` também na cadeia de
   troco — as duas razões estão na vigésima primeira rodada
 - Itens não-código do checklist: pitch ensaiado e plano B gravado

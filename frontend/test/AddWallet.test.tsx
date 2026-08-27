@@ -30,6 +30,10 @@ const CATALOGO: Catalog = {
   'wallets.addressPlaceholder': 'bc1..., 3..., 1...',
   'wallets.addressNote': 'Vigia só este endereço.',
   'wallets.watchOnly': 'Somente chaves públicas.',
+  'wallets.scriptType': 'Tipo de script',
+  'wallets.scriptTypeAuto': 'descobrir pela cadeia',
+  'wallets.scriptTypeNote':
+    'Esta chave não diz o tipo de script. Se a fonte escolhida não puder ser perguntada, declare o tipo aqui.',
   'wallets.submit': 'Começar a vigiar',
   'wallets.submitting': 'cadastrando...',
   'backends.title': 'Vigiar por',
@@ -184,5 +188,78 @@ describe('AddWallet — escolha de backend', () => {
     await waitFor(() => expect(screen.getByLabelText(/vigiar por/i)).toBeDefined())
     fireEvent.click(screen.getByRole('button', { name: /um endereço/i }))
     expect(screen.getByText(/vigia só este endereço/i)).toBeDefined()
+  })
+})
+
+// Medido em 27/08 contra o Bitcoin Core desta máquina: uma carteira native
+// segwit cadastrada por `tpub` cru entrou como p2pkh e mostrou 0 sats onde
+// havia 7.552.468. `xpub` e `tpub` não dizem o tipo de script, e um backend
+// que exige registro de descriptor não tem como ser perguntado — então quem
+// cadastra precisa poder declarar.
+const TPUB =
+  'tpubDCxX2sYFS5bDkSe5GKKYHjBW7tgyN1R3UchpLJvdbf54ohxeGRtd8MbDUe1cguVHe4vnK68DsuD5MXjxi9EXx16rb9EnNsaF5KT99CinaJz'
+const VPUB =
+  'vpub5YvMuJNjRSYon44z9QmCfdf8SqJRVNvz6m55Qy5iVjZQxDfUgtiQjnc7CC1fAbED2tAGCZRERUfvtn2DstZGU6HMns6dXXH2wujSc2wfi2x'
+
+function digitar(valor: string): void {
+  fireEvent.change(screen.getByPlaceholderText('xpub, ypub, zpub'), {
+    target: { value: valor },
+  })
+}
+
+describe('AddWallet — tipo de script', () => {
+  it('pergunta o tipo quando a chave não diz qual é', async () => {
+    montar()
+    await waitFor(() => expect(screen.getByText(/mempool\.space/)).toBeDefined())
+
+    digitar(TPUB)
+
+    expect(screen.getByLabelText(/tipo de script/i)).toBeDefined()
+  })
+
+  it('não pergunta o tipo quando as version bytes já dizem', async () => {
+    montar()
+    await waitFor(() => expect(screen.getByText(/mempool\.space/)).toBeDefined())
+
+    digitar(VPUB)
+
+    expect(screen.queryByLabelText(/tipo de script/i)).toBeNull()
+  })
+
+  it('envia o tipo escolhido junto do cadastro', async () => {
+    montar()
+    await waitFor(() => expect(screen.getByText(/mempool\.space/)).toBeDefined())
+
+    fireEvent.change(screen.getByPlaceholderText('Rótulo'), {
+      target: { value: 'Cofre' },
+    })
+    digitar(TPUB)
+    fireEvent.change(screen.getByLabelText(/tipo de script/i), {
+      target: { value: 'p2sh-p2wpkh' },
+    })
+    fireEvent.click(screen.getByText('Começar a vigiar'))
+
+    await waitFor(() =>
+      expect(addWallet).toHaveBeenCalledWith(
+        'Cofre',
+        { key: TPUB, scriptType: 'p2sh-p2wpkh' },
+        1,
+      ),
+    )
+  })
+
+  it('não declara tipo nenhum enquanto o usuário deixa a cadeia descobrir', async () => {
+    montar()
+    await waitFor(() => expect(screen.getByText(/mempool\.space/)).toBeDefined())
+
+    fireEvent.change(screen.getByPlaceholderText('Rótulo'), {
+      target: { value: 'Cofre' },
+    })
+    digitar(TPUB)
+    fireEvent.click(screen.getByText('Começar a vigiar'))
+
+    await waitFor(() =>
+      expect(addWallet).toHaveBeenCalledWith('Cofre', { key: TPUB }, 1),
+    )
   })
 })

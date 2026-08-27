@@ -33,6 +33,11 @@ export function AddWallet({
   // Vigiar a carteira inteira é o caso comum; um endereço só é o de quem
   // publica endereço de doação e não quer entregar a carteira ao watchtower.
   const [modo, setModo] = useState<'key' | 'address'>('key')
+  // `xpub` e `tpub` usam as mesmas version bytes para legado, segwit
+  // aninhado e native segwit. Quando a fonte escolhida exige registro de
+  // descriptor não há a quem perguntar, e o palpite errado mostra saldo zero
+  // sem erro nenhum — por isso o campo aparece só para essas chaves.
+  const [tipoDeScript, setTipoDeScript] = useState('')
   const [erro, setErro] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
 
@@ -63,12 +68,15 @@ export function AddWallet({
     try {
       await api.addWallet(
         label.trim(),
-        modo === 'address' ? { address: endereco.trim() } : { key: key.trim() },
+        modo === 'address'
+          ? { address: endereco.trim() }
+          : { key: key.trim(), ...(tipoDeScript ? { scriptType: tipoDeScript } : {}) },
         escolhido ?? undefined,
       )
       setLabel('')
       setKey('')
       setEndereco('')
+      setTipoDeScript('')
       onAdded()
     } catch (err) {
       setErro(mensagemDoErro(catalog, err, lang))
@@ -90,6 +98,8 @@ export function AddWallet({
       setErro(mensagemDoErro(catalog, err, lang))
     }
   }
+
+  const chaveAmbigua = /^[xt]pub[1-9A-HJ-NP-Za-km-z]+$/.test(key.trim())
 
   const campo =
     'w-full rounded border border-line bg-bg px-3 py-2 text-sm placeholder:text-faint'
@@ -142,6 +152,31 @@ export function AddWallet({
           />
           <p className="mb-2 font-prose text-xs leading-relaxed text-faint">
             {render(catalog, 'wallets.addressNote', {}, lang)}
+          </p>
+        </>
+      )}
+
+      {modo === 'key' && chaveAmbigua && (
+        <>
+          <label
+            htmlFor="tipo-de-script"
+            className="mb-1 block text-xs uppercase tracking-label text-faint"
+          >
+            {render(catalog, 'wallets.scriptType', {}, lang)}
+          </label>
+          <select
+            id="tipo-de-script"
+            value={tipoDeScript}
+            onChange={e => setTipoDeScript(e.target.value)}
+            className={`mb-2 ${campo}`}
+          >
+            <option value="">{render(catalog, 'wallets.scriptTypeAuto', {}, lang)}</option>
+            <option value="p2wpkh">p2wpkh · native segwit</option>
+            <option value="p2sh-p2wpkh">p2sh-p2wpkh · nested segwit</option>
+            <option value="p2pkh">p2pkh · legacy</option>
+          </select>
+          <p className="mb-2 font-prose text-xs leading-relaxed text-faint">
+            {render(catalog, 'wallets.scriptTypeNote', {}, lang)}
           </p>
         </>
       )}

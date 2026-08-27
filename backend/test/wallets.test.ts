@@ -578,3 +578,164 @@ describe('POST /api/wallets com endereço avulso', () => {
     })
   })
 })
+
+// Um backend que exige registro de descriptor não responde por endereço:
+// `detectScriptType` não tem a quem perguntar, e a chave ambígua entrava
+// como legado. Medido em 27/08 contra o Bitcoin Core desta máquina: uma
+// carteira native segwit com 7.552.468 sats aparecia com 0, sem erro nenhum.
+// Daí o tipo poder ser declarado no cadastro.
+function adapterDeRegistro(): ChainAdapter {
+  return {
+    capabilities: () => ({
+      randomAccess: false,
+      needsRegistration: true,
+      supportsSubscribe: false,
+      hasTxIndex: true,
+      isPublic: false,
+      host: 'core-falso',
+    }),
+    tipHeight: async () => 100,
+    blockHashAt: async () => 'hash',
+  }
+}
+
+async function appComBackendDeRegistro(): Promise<{
+  app: ReturnType<typeof buildApp>
+  cookie: string
+  backendId: number
+}> {
+  process.env.NETWORK = 'signet'
+  const app = buildApp({ adapterFactory: () => adapterDeRegistro() })
+  await app.inject({
+    method: 'POST',
+    url: '/api/auth/register',
+    payload: { email: 'core@exemplo.com', password: 'senha-longa-de-teste', language: 'pt' },
+  })
+  const login = await app.inject({
+    method: 'POST',
+    url: '/api/auth/login',
+    payload: { email: 'core@exemplo.com', password: 'senha-longa-de-teste' },
+  })
+  const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+  const backend = await app.inject({
+    method: 'POST',
+    url: '/api/backends',
+    cookies: { sb_session: cookie },
+    payload: {
+      kind: 'core',
+      url: 'http://127.0.0.1:38332',
+      isPublic: false,
+      network: 'signet',
+    },
+  })
+  return { app, cookie, backendId: backend.json().id }
+}
+
+describe('POST /api/wallets — tipo de script declarado', () => {
+  it('usa o tipo declarado quando o backend não responde por endereço', async () => {
+    const { app, cookie, backendId } = await appComBackendDeRegistro()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: {
+        label: 'Cofre aninhado',
+        key: TPUB,
+        backendId,
+        scriptType: 'p2sh-p2wpkh',
+      },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(res.json().scriptType).toBe('p2sh-p2wpkh')
+  })
+
+  it('assume native segwit, e não legado, quando ninguém tem como saber', async () => {
+    const { app, cookie, backendId } = await appComBackendDeRegistro()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre sem tipo', key: TPUB, backendId },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(res.json().scriptType).toBe('p2wpkh')
+  })
+
+  it('o tipo declarado vence a detecção pela cadeia', async () => {
+    process.env.NETWORK = 'signet'
+    const app = buildApp({ adapterFactory: () => adapterQueConhece(enderecosSegwitDo(TPUB)) })
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'declara@exemplo.com', password: 'senha-longa-de-teste', language: 'pt' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'declara@exemplo.com', password: 'senha-longa-de-teste' },
+    })
+    const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre legado', key: TPUB, scriptType: 'p2pkh' },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(res.json().scriptType).toBe('p2pkh')
+  })
+
+  it('recusa tipo de script que não existe', async () => {
+    const { app, cookie, backendId } = await appComBackendDeRegistro()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre', key: TPUB, backendId, scriptType: 'p2wsh' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('wallet.unknownScriptType')
+  })
+
+  it('recusa tipo declarado que contradiz as version bytes da chave', async () => {
+    process.env.NETWORK = 'mainnet'
+    const { app, cookie } = await loggedInApp()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre', key: ZPUB, scriptType: 'p2pkh' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('wallet.scriptTypeConflict')
+  })
+
+  it('recusa declarar tipo de script para endereço avulso', async () => {
+    process.env.NETWORK = 'mainnet'
+    const { app, cookie } = await loggedInApp()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: {
+        label: 'Endereço',
+        address: 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu',
+        scriptType: 'p2pkh',
+      },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('wallet.scriptTypeWithAddress')
+  })
+})
