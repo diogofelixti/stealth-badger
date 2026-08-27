@@ -1,11 +1,33 @@
 import type { FastifyInstance } from 'fastify'
 import { subscribeToAlerts } from '../stream/sse'
-import { recentAlerts } from './store'
+import { listarAlertas } from './store'
+
+interface FiltroDaQuery {
+  limit?: string
+  cursor?: string
+  type?: string
+  severity?: string
+  walletId?: string
+  since?: string
+  until?: string
+}
 
 export function registerAlertRoutes(app: FastifyInstance): void {
-  app.get('/api/alerts', async (req, reply) => {
+  app.get<{ Querystring: FiltroDaQuery }>('/api/alerts', async (req, reply) => {
     if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
-    return reply.send(await recentAlerts(req.userId))
+
+    const q = req.query ?? {}
+    return reply.send(
+      await listarAlertas(req.userId, {
+        ...(q.limit ? { limit: Number(q.limit) } : {}),
+        ...(q.cursor ? { cursor: q.cursor } : {}),
+        ...(q.type ? { type: q.type } : {}),
+        ...(q.severity ? { severity: q.severity } : {}),
+        ...(q.walletId ? { walletId: Number(q.walletId) } : {}),
+        ...(q.since ? { since: q.since } : {}),
+        ...(q.until ? { until: q.until } : {}),
+      }),
+    )
   })
 
   app.get('/api/stream', (req, reply) => {

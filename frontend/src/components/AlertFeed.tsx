@@ -1,6 +1,7 @@
 import type { Alert, Catalog, Lang, Severity } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import { render, renderAlert } from '../lib/i18n'
+import { Button } from './ui/Button'
 
 /**
  * A cor reforça a severidade; quem carrega a informação é a palavra ao lado.
@@ -21,10 +22,15 @@ export function AlertFeed({
   alerts,
   catalog,
   lang,
+  temMais = false,
+  onLoadMore,
 }: {
   alerts: Alert[]
   catalog: Catalog
   lang: Lang
+  /** há página seguinte no cursor do servidor */
+  temMais?: boolean
+  onLoadMore?: () => void
 }) {
   if (alerts.length === 0) {
     return <p className="text-sm text-faint">{render(catalog, 'feed.empty', {}, lang)}</p>
@@ -64,6 +70,15 @@ export function AlertFeed({
           </article>
         )
       })}
+
+      {/* O que chega pelo SSE entra por cima e não mexe no cursor, que aponta
+          para baixo. Por isso "carregar mais" continua válido depois de um
+          alerta novo chegar. */}
+      {temMais && onLoadMore && (
+        <Button variant="ghost" onClick={onLoadMore} className="self-start">
+          {render(catalog, 'feed.loadMore', {}, lang)}
+        </Button>
+      )}
     </div>
   )
 }

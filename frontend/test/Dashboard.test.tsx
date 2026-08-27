@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import type { Alert, Catalog, Me, Wallet } from '../src/lib/api'
 
 const wallets = vi.fn<(arquivadas?: boolean) => Promise<Wallet[]>>()
-const alerts = vi.fn<() => Promise<Alert[]>>()
+const alerts = vi.fn<() => Promise<{ items: Alert[]; nextCursor: string | null }>>()
 // O painel renderiza a seção de canais, que busca sozinha. Sem simular, o
 // fetch real falha em jsdom e a atualização de estado chega depois das
 // asserções — que foi a origem de falhas intermitentes neste arquivo.
@@ -83,7 +83,7 @@ function montar() {
 }
 
 beforeEach(() => {
-  alerts.mockResolvedValue([])
+  alerts.mockResolvedValue({ items: [], nextCursor: null })
   channels.mockResolvedValue([])
   search.mockResolvedValue([])
 })

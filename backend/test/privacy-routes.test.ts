@@ -255,7 +255,7 @@ describe('GET /api/wallets com privacidade', () => {
       url: '/api/alerts',
       cookies: { sb_session: cookie },
     })
-    const queda = alertas.json().find((a: { type: string }) => a.type === 'score_dropped')
+    const queda = alertas.json().items.find((a: { type: string }) => a.type === 'score_dropped')
     expect(queda).toBeDefined()
     expect(queda.params).toMatchObject({ from: 88, to: 60, drop: 28 })
     expect(queda.severity).toBe('warning')
@@ -277,7 +277,7 @@ describe('GET /api/wallets com privacidade', () => {
       cookies: { sb_session: cookie },
     })
     expect(
-      alertas.json().filter((a: { type: string }) => a.type === 'score_dropped'),
+      alertas.json().items.filter((a: { type: string }) => a.type === 'score_dropped'),
     ).toHaveLength(0)
   })
 })
@@ -335,7 +335,7 @@ describe('kyc_origin — origem dos fundos', () => {
       url: '/api/alerts',
       cookies: { sb_session: cookie },
     })
-    const origem = alertas.json().find((a: { type: string }) => a.type === 'kyc_origin')
+    const origem = alertas.json().items.find((a: { type: string }) => a.type === 'kyc_origin')
     expect(origem).toBeDefined()
     expect(origem.params).toMatchObject({
       kind: '@entity.exchange',
@@ -362,7 +362,7 @@ describe('kyc_origin — origem dos fundos', () => {
       cookies: { sb_session: cookie },
     })
     expect(
-      alertas.json().filter((a: { type: string }) => a.type === 'kyc_origin'),
+      alertas.json().items.filter((a: { type: string }) => a.type === 'kyc_origin'),
     ).toHaveLength(0)
   })
 

@@ -10,6 +10,12 @@ export type SyncState = 'pending' | 'importing' | 'synced' | 'degraded' | 'error
  * Sem title nem body: o alerta guarda o tipo e os parâmetros, e o texto é
  * escolhido na hora de exibir, no idioma de quem lê.
  */
+export interface PaginaDeAlertas {
+  items: Alert[]
+  /** cursor opaco da página seguinte; `null` quando acabou */
+  nextCursor: string | null
+}
+
 export interface Alert {
   id: number
   walletId: number
@@ -226,7 +232,13 @@ export const api = {
     auth?: { mode: 'cookie' | 'userpass'; cookiePath?: string; user?: string; password?: string }
   }) =>
     request<Backend>('/api/backends', { method: 'POST', body: JSON.stringify(corpo) }),
-  alerts: () => request<Alert[]>('/api/alerts'),
+  alerts: (params: { limit?: number; cursor?: string } = {}) => {
+    const q = new URLSearchParams()
+    if (params.limit) q.set('limit', String(params.limit))
+    if (params.cursor) q.set('cursor', params.cursor)
+    const busca = q.toString()
+    return request<PaginaDeAlertas>('/api/alerts' + (busca ? '?' + busca : ''))
+  },
   search: (q: string) => request<Achado[]>(`/api/search?q=${encodeURIComponent(q)}`),
   channels: () => request<Channel[]>('/api/channels'),
   addChannel: (config: { kind: ChannelKind; topic?: string; server?: string; url?: string }) =>

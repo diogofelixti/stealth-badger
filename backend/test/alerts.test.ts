@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { confirmationState, dedupeKey } from '../src/alerts/dedupe'
 import { alertsForEvent, alertsForOrigin, alertsForScan } from '../src/alerts/rules'
-import { saveAlert } from '../src/alerts/store'
+import { listarAlertas, saveAlert } from '../src/alerts/store'
 import { pool } from '../src/db/pool'
 import type { StoredEvent } from '../src/events/log'
 import { renderAlert } from '../src/i18n/render'
@@ -254,5 +254,111 @@ describe('alertsForOrigin — origem dos fundos', () => {
     expect(a!.dedupeKey).toBe(b!.dedupeKey)
     expect(a!.dedupeKey).toContain('exchange')
     expect(a!.dedupeKey).toContain(ctx.txid)
+  })
+})
+
+describe('paginação do feed por cursor', () => {
+  let userId: number
+  let walletId: number
+
+  async function alerta(quando: string, tipo = 'funds_received'): Promise<number> {
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO alerts (user_id, wallet_id, type, severity, params, dedupe_key, created_at)
+       VALUES ($1,$2,$3,'info','{}'::jsonb,$4,$5) RETURNING id`,
+      [userId, walletId, tipo, 'chave-' + Math.random(), quando],
+    )
+    return Number(rows[0]!.id)
+  }
+
+  beforeEach(async () => {
+    await resetDb()
+    const u = await pool.query<{ id: string }>(
+      `INSERT INTO users (email,password_hash) VALUES ('a@b.c','x') RETURNING id`,
+    )
+    userId = Number(u.rows[0]!.id)
+    const b = await pool.query<{ id: string }>(
+      `INSERT INTO backends (kind,url,network) VALUES ('esplora','http://x','signet') RETURNING id`,
+    )
+    const w = await pool.query<{ id: string }>(
+      `INSERT INTO wallets (user_id,label,xpub_encrypted,xpub_fingerprint,script_type,network,backend_id)
+       VALUES ($1,'C',$2,'aabb','p2wpkh','signet',$3) RETURNING id`,
+      [userId, Buffer.from([0]), b.rows[0]!.id],
+    )
+    walletId = Number(w.rows[0]!.id)
+  })
+
+  it('duas páginas de dois em cinco alertas devolvem os cinco, sem repetir nem pular', async () => {
+    for (let i = 0; i < 5; i += 1) {
+      await alerta(`2026-08-27T10:0${i}:00Z`)
+    }
+
+    const vistos: number[] = []
+    let cursor: string | null = null
+    for (let pagina = 0; pagina < 3; pagina += 1) {
+      const p = await listarAlertas(userId, { limit: 2, ...(cursor ? { cursor } : {}) })
+      vistos.push(...p.items.map(a => Number(a['id'])))
+      cursor = p.nextCursor
+    }
+
+    expect(vistos).toHaveLength(5)
+    expect(new Set(vistos).size).toBe(5)
+  })
+
+  // A falha silenciosa deste item: com OFFSET, o alerta que chega pelo topo
+  // entre uma página e a seguinte empurra a janela, e o leitor vê o mesmo
+  // alerta duas vezes — ou pula um e nunca fica sabendo.
+  it('alerta novo entre uma página e a outra não desloca a segunda', async () => {
+    const antigos: number[] = []
+    for (let i = 0; i < 4; i += 1) antigos.push(await alerta(`2026-08-27T10:0${i}:00Z`))
+
+    const primeira = await listarAlertas(userId, { limit: 2 })
+    const novo = await alerta('2026-08-27T23:59:00Z')
+    const segunda = await listarAlertas(userId, {
+      limit: 2,
+      cursor: primeira.nextCursor!,
+    })
+
+    const ids = [...primeira.items, ...segunda.items].map(a => Number(a['id']))
+    // as duas páginas trazem os quatro que existiam, na ordem, e o que chegou
+    // por cima depois da primeira página não aparece nem desloca ninguém
+    expect(ids).toEqual([antigos[3], antigos[2], antigos[1], antigos[0]])
+    expect(ids).not.toContain(novo)
+  })
+
+  // O worker grava vários alertas no mesmo ciclo, e portanto no mesmo instante:
+  // sem o id desempatando, a paginação trava num laço na mesma página.
+  it('alertas do mesmo instante paginam sem laço', async () => {
+    const mesmo = '2026-08-27T12:00:00Z'
+    for (let i = 0; i < 4; i += 1) await alerta(mesmo)
+
+    const vistos: number[] = []
+    let cursor: string | null = null
+    for (let pagina = 0; pagina < 3; pagina += 1) {
+      const p = await listarAlertas(userId, { limit: 2, ...(cursor ? { cursor } : {}) })
+      vistos.push(...p.items.map(a => Number(a['id'])))
+      cursor = p.nextCursor
+      if (!cursor) break
+    }
+
+    expect(new Set(vistos).size).toBe(4)
+  })
+
+  it('limite acima do teto é limitado, e não recusado', async () => {
+    for (let i = 0; i < 3; i += 1) await alerta(`2026-08-27T10:0${i}:00Z`)
+
+    const p = await listarAlertas(userId, { limit: 5000 })
+
+    expect(p.items).toHaveLength(3)
+  })
+
+  it('filtra por tipo sem perder a paginação', async () => {
+    await alerta('2026-08-27T10:00:00Z', 'funds_received')
+    await alerta('2026-08-27T10:01:00Z', 'address_reused')
+    await alerta('2026-08-27T10:02:00Z', 'address_reused')
+
+    const p = await listarAlertas(userId, { limit: 10, type: 'address_reused' })
+
+    expect(p.items).toHaveLength(2)
+    expect(p.items.every(a => a['type'] === 'address_reused')).toBe(true)
   })
 })

@@ -1690,10 +1690,52 @@ público*, *host.docker.internal:50001 · Soberano*.
   O apelido resolve, e o catálogo do item 2 o oferece; fontes cadastradas antes dele não
   têm.
 
+## Rodada 29 — Item 6: paginação do feed por cursor
+
+### O que foi construído
+
+- `listarAlertas()` com **cursor keyset em `(created_at, id)`** decrescente, filtros de
+  tipo, severidade, carteira e período, limite padrão 20 e teto 100.
+- O cursor é **opaco** — base64 de `created_at|id`. Cliente que aprende a lê-lo passa a
+  depender da ordenação, e mudá-la depois quebra o cliente.
+- `GET /api/alerts` devolve `{ items, nextCursor }`; a consulta pede um item a mais que o
+  limite, que é como saber se há página seguinte sem uma segunda consulta contando tudo.
+- O feed ganhou "carregar mais", e o painel costura as páginas: o que chega pelo SSE entra
+  **por cima** sem invalidar o cursor, que aponta para baixo.
+
+### O que quebrou a premissa
+
+- **Uma asserção minha estava errada, e o código estava certo.** O caso "alerta novo entre
+  uma página e a outra" exigia que o mais antigo *não* aparecesse — o que a paginação
+  correta faz é justamente trazê-lo, na ordem, e deixar de fora o que chegou por cima. A
+  asserção foi reescrita para dizer o que o caso quer dizer: as duas páginas trazem os
+  quatro que existiam, na ordem, e o novo não aparece nem desloca ninguém. Teste que
+  passa por engano é pior que teste que falha.
+- **A mudança de forma da resposta quebrou quatro testes de outra suíte** — os de
+  `privacy-routes`, que liam `alertas.json()` como lista. Ajustados para `.items`. É o
+  preço de trocar o contrato, e ele apareceu na hora certa: nos testes, não na tela.
+
+### O que ficou conferido, no navegador
+
+| O que | Medido |
+|---|---|
+| primeira página | **20 alertas** |
+| botão "carregar mais" | visível enquanto há cursor |
+| depois de um clique | **40 alertas** na tela |
+| segunda chamada | `/api/alerts?cursor=MjAyNi0wOC0yN1QxOToyNToxNi4yMjRafDE4NQ%3D%3D` |
+| API direta | `?limit=3` devolveu 3 itens e um `nextCursor` |
+
+### O que ficou de dívida
+
+- **Os filtros existem na API e não na tela.** Tipo, severidade, carteira e período estão
+  implementados e testados no backend; a página `/alertas` que os usa é o item 10.
+- **"Carregar mais" não tem estado de carregando.** Numa conexão lenta o clique parece
+  não fazer nada. É pequeno, e não foi feito por ordem de prioridade do backlog.
+
 ## Estado em 27/08
 
-- backend: 37 arquivos de teste, **460 testes**
-- frontend: 15 arquivos de teste, **120 testes**
+- backend: 37 arquivos de teste, **465 testes**
+- frontend: 15 arquivos de teste, **123 testes**
 - migrações aplicadas: `001` a `011`
 - **a postura soberana está demonstrada**: Bitcoin Core e Fulcrum desta máquina, com o
   mesmo saldo do explorador público

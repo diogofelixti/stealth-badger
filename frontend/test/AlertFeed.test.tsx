@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { render as renderDom, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render as renderDom, screen } from '@testing-library/react'
 import { AlertFeed } from '../src/components/AlertFeed'
 import type { Alert } from '../src/lib/api'
 
@@ -58,5 +58,71 @@ describe('AlertFeed', () => {
   it('mostra estado vazio quando não há alerta', () => {
     renderDom(<AlertFeed alerts={[]} catalog={catalogo} lang="pt" />)
     expect(screen.getByText(/nenhum alerta/i)).toBeDefined()
+  })
+})
+
+describe('AlertFeed — carregar mais', () => {
+  const alerta = (id: number, quando: string): Alert => ({
+    id,
+    walletId: 1,
+    type: 'funds_received',
+    severity: 'info',
+    params: { value: 1000, state: '@state.conf1' },
+    createdAt: quando,
+    readAt: null,
+  })
+
+  it('oferece carregar mais enquanto houver página seguinte', () => {
+    const mais = vi.fn()
+    renderDom(
+      <AlertFeed
+        alerts={[alerta(2, '2026-08-27T10:01:00Z')]}
+        catalog={{ ...catalogo, "feed.loadMore": "Carregar mais" }}
+        lang="pt"
+        temMais
+        onLoadMore={mais}
+      />,
+    )
+
+    fireEvent.click(screen.getByText(/carregar mais/i))
+
+    expect(mais).toHaveBeenCalled()
+  })
+
+  it('não oferece carregar mais quando a lista acabou', () => {
+    renderDom(
+      <AlertFeed
+        alerts={[alerta(2, '2026-08-27T10:01:00Z')]}
+        catalog={{ ...catalogo, "feed.loadMore": "Carregar mais" }}
+        lang="pt"
+        temMais={false}
+        onLoadMore={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByText(/carregar mais/i)).toBeNull()
+  })
+
+  // O que chega pelo SSE entra por cima; o que vem de "carregar mais" entra
+  // por baixo. A ordem na tela é sempre a do relógio, e não a da chegada.
+  it('mostra o mais recente em cima, venha ele de onde vier', () => {
+    const { container } = renderDom(
+      <AlertFeed
+        alerts={[
+          alerta(1, '2026-08-27T10:00:00Z'),
+          alerta(3, '2026-08-27T12:00:00Z'),
+          alerta(2, '2026-08-27T11:00:00Z'),
+        ]}
+        catalog={{ ...catalogo, "feed.loadMore": "Carregar mais" }}
+        lang="pt"
+        temMais={false}
+        onLoadMore={vi.fn()}
+      />,
+    )
+
+    const datas = Array.from(container.querySelectorAll('article')).map(
+      a => a.textContent ?? '',
+    )
+    expect(datas).toHaveLength(3)
   })
 })

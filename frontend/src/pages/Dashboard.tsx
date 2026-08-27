@@ -81,6 +81,7 @@ export function Dashboard({
 }) {
   const [wallets, setWallets] = useState<Wallet[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
+  const [cursor, setCursor] = useState<string | null>(null)
   const [abrindoForm, setAbrindoForm] = useState(false)
   // As arquivadas moram numa lista à parte e só são buscadas quando alguém
   // pede: fora da tela, fora do total, e fora do worker.
@@ -95,9 +96,26 @@ export function Dashboard({
   const recarregar = useCallback(async () => {
     const [w, a] = await Promise.all([api.wallets(), api.alerts()])
     setWallets(w)
-    setAlerts(a)
+    // A primeira página chega inteira; o que já estava carregado abaixo dela
+    // continua na tela. Sem esta costura, um alerta novo pelo SSE apagaria as
+    // páginas que o usuário pediu para ver.
+    setAlerts(anteriores => {
+      const vistos = new Set(a.items.map(x => x.id))
+      return [...a.items, ...anteriores.filter(x => !vistos.has(x.id))]
+    })
+    setCursor(anterior => anterior ?? a.nextCursor)
     setCarregado(true)
   }, [])
+
+  const carregarMais = useCallback(async () => {
+    if (!cursor) return
+    const pagina = await api.alerts({ cursor })
+    setAlerts(anteriores => {
+      const vistos = new Set(anteriores.map(x => x.id))
+      return [...anteriores, ...pagina.items.filter(x => !vistos.has(x.id))]
+    })
+    setCursor(pagina.nextCursor)
+  }, [cursor])
 
   useEffect(() => {
     void api
@@ -354,7 +372,13 @@ export function Dashboard({
             </span>
           </div>
 
-          <AlertFeed alerts={alerts} catalog={catalog} lang={lang} />
+          <AlertFeed
+            alerts={alerts}
+            catalog={catalog}
+            lang={lang}
+            temMais={cursor !== null}
+            onLoadMore={() => void carregarMais()}
+          />
 
           {altura !== null && (
             <p className="pt-1 text-xs text-faint">
