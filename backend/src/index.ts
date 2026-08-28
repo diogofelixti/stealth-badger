@@ -1,3 +1,4 @@
+import { setDefaultResultOrder } from 'node:dns'
 import { buildApp } from './app'
 import { loadConfig } from './config'
 import { migrate } from './db/migrate'
@@ -6,6 +7,25 @@ import { startWorkerLoop } from './worker/loop'
 import { tick } from './worker/tick'
 import { varrerSaude } from './chain/saude'
 import { ensureBackendsPublicos } from './chain/backends'
+
+/**
+ * IPv4 antes de IPv6 na resolução de nomes.
+ *
+ * ── Por que isto existe ───────────────────────────────────────────────────
+ * Medido em 28/08: o container do backend tem **só `::1`** como endereço IPv6,
+ * ou seja, nenhuma saída IPv6 para a internet. É o padrão do Docker. O DNS,
+ * porém, devolve AAAA para `blockstream.info` e `mempool.space`, e o Node
+ * tentava o IPv6 primeiro.
+ *
+ * O erro que isso produz é `fetch failed`, sem host, sem código e sem causa. Ele
+ * apareceu como "falha na sincronização" em três carteiras de mainnet e mandou
+ * procurar defeito no explorador, que estava de pé o tempo todo: forçando IPv4,
+ * o mesmo host respondeu em 0,76 s.
+ *
+ * Vale para o processo inteiro, e `privacy/scan.ts` repassa a mesma ordem ao
+ * scanner, que é outro processo Node e herdaria o mesmo tropeço.
+ */
+setDefaultResultOrder('ipv4first')
 
 const config = loadConfig()
 

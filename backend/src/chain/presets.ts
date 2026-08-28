@@ -18,6 +18,7 @@ export type PresetId =
   | 'electrs'
   | 'floresta'
   | 'mempool'
+  | 'bitaroo'
   | 'blockstream'
   | 'esplora'
   | 'electrum'
@@ -65,6 +66,17 @@ export const PRESETS: Record<PresetId, Preset> = {
     kind: 'esplora',
     pede: 'nada',
     url: (_e, rede) => `https://mempool.space${caminhoDaRede(rede)}/api`,
+    isPublic: true,
+  },
+  // Espelho independente, e não variedade por variedade: em 28/08 os dois
+  // exploradores semeados estavam fora ao mesmo tempo — um inalcançável desta
+  // rede, o outro devolvendo 429 — e a instância ficou sem nenhuma fonte de
+  // mainnet que respondesse. Um terceiro operador é um terceiro ponto de falha
+  // independente.
+  bitaroo: {
+    kind: 'esplora',
+    pede: 'nada',
+    url: (_e, rede) => `https://mempool.bitaroo.net${caminhoDaRede(rede)}/api`,
     isPublic: true,
   },
   blockstream: {

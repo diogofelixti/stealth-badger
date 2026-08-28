@@ -2398,6 +2398,59 @@ Medido depois da correcao, contra as cinco fontes reais:
 `frontend` 25 arquivos e **254** testes. `npx tsc --noEmit` passou nos dois
 lados, e a sonda foi rodada contra as cinco fontes reais desta maquina.
 
+## Rodada de 28/08, noite - IPv6 no container, e o explorador que nao respondia
+
+**O que foi construido.** `setDefaultResultOrder('ipv4first')` no processo, e a
+mesma ordem repassada ao scanner pelo `NODE_OPTIONS` do processo filho. O
+catalogo ganhou o preset `bitaroo`, e a instancia passou a semear um terceiro
+operador de mainnet.
+
+**O que quebrou a premissa.** Tres carteiras de mainnet pararam de sincronizar
+ao mesmo tempo, por tres motivos diferentes, e o registro dizia so
+`fetch failed`:
+
+1. **O container nao tem IPv6.** So `::1` na interface, que e o padrao do
+   Docker. O DNS devolve AAAA para `blockstream.info` e `mempool.space`, e o
+   Node tentava IPv6 primeiro. O erro resultante e `fetch failed` seco, sem
+   host, sem codigo e sem causa, e ele manda procurar defeito no explorador.
+   Medido: com `--dns-result-order=ipv4first` o mesmo host respondeu em 0,76 s;
+2. **O `mempool.space` continua inalcancavel desta rede**, agora tambem por
+   IPv4, e medido tambem de fora do Docker;
+3. **O `blockstream.info` passou a devolver 429** nas duas redes, com o corpo
+   `Too Many Requests`. O worker reciclava as tres carteiras a cada 30 s com
+   quatro tentativas cada, o que mantinha o limite quente. O `mempool.emzy.de`
+   tambem respondeu 429, o que indica limite por IP e nao por host.
+
+Medido depois das correcoes, com as carteiras apontadas para o terceiro
+operador:
+
+```
+Mainnet-test  synced    0 UTXOs
+Silk Road     synced   35 UTXOs · 1.290.825 sats
+MtGox-Hack    degraded 552 UTXOs · o Esplora respondeu 400 em /utxo,
+                       "Too many history entries", num endereco so
+```
+
+O `degraded` e o estado que o produto ja tinha para isto: vigia o que da, e
+escreve qual endereco ficou de fora e por que.
+
+**O que ficou de divida**, com a razao:
+
+- **Nao ha recuo depois de 429.** A carteira em erro por limite de taxa e
+  retentada no ciclo seguinte como qualquer outra, e e isso que mantem o limite
+  aceso. Um recuo por carteira resolveria, e nao coube antes da entrega;
+- **Falha de varredura de endereco nao e persistida.** `erroDoUltimoAddressScan`
+  vive em memoria, entao depois de um restart a tela volta a dizer "ainda nao ha
+  analise salva" para um endereco cuja varredura falhou. E a diferenca entre
+  "nao sei" e "nao consegui" faltando num canto so;
+- **Analise profunda de signet depende de um Esplora publico que agora esta
+  limitado.** A fonte de cadeia e o Fulcrum local e nao sofre disso, mas o
+  scanner sim.
+
+**Validacao.** Suite completa: `backend` 55 arquivos e **659** testes;
+`frontend` 25 arquivos e **256** testes. `npx tsc --noEmit` passou nos dois
+lados, e as cinco fontes semeadas foram medidas de dentro do container.
+
 ## Pendências
 
 > **O backlog de 27/08 está em

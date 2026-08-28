@@ -182,6 +182,16 @@ export function cliRunner(timeoutMs: number, comando = 'am-i-exposed'): ScanRunn
         timeout: timeoutMs,
         // o relatório de uma carteira grande passa folgado do padrão de 1 MB
         maxBuffer: 64 * 1024 * 1024,
+        env: {
+          ...process.env,
+          // O scanner é outro processo Node, e herda o mesmo problema que o
+          // nosso: num container sem IPv6, resolver AAAA primeiro faz toda
+          // consulta morrer como `fetch failed`. A razão longa está em
+          // `index.ts`, onde a mesma ordem é imposta ao processo principal.
+          NODE_OPTIONS:
+            (process.env.NODE_OPTIONS ? process.env.NODE_OPTIONS + ' ' : '') +
+            '--dns-result-order=ipv4first',
+        },
       })
       return stdout
     } catch (err) {

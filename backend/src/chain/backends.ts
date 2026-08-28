@@ -218,7 +218,7 @@ export async function ensureBackendGlobal(network: Network): Promise<number> {
 }
 
 /**
- * As duas fontes públicas que existem sem ninguém cadastrar nada.
+ * As fontes públicas que existem sem ninguém cadastrar nada.
  *
  * Antes disto, a instância só garantia a fonte da própria `NETWORK`, e a
  * pergunta de 28/08 — *"está tudo apontando só pra signet, por quê?"* — tinha
@@ -237,6 +237,11 @@ const PUBLICAS_PRONTAS: { url: string; network: Network; preset: PresetId }[] = 
   // catálogo é o atrito que o item B existiu para tirar.
   { url: 'https://blockstream.info/api', network: 'mainnet', preset: 'blockstream' },
   { url: 'https://blockstream.info/signet/api', network: 'signet', preset: 'blockstream' },
+  // Um terceiro operador de mainnet, e a razão é medida: em 28/08, às 17h, o
+  // mempool.space estava inalcançável desta rede e o blockstream.info devolvia
+  // 429. A instância ficou sem nenhuma fonte de mainnet que respondesse, e três
+  // carteiras pararam de sincronizar ao mesmo tempo por motivos diferentes.
+  { url: 'https://mempool.bitaroo.net/api', network: 'mainnet', preset: 'bitaroo' },
 ]
 
 export async function ensureBackendsPublicos(): Promise<void> {
