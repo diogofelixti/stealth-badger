@@ -12,6 +12,7 @@ import { formatSats } from '../lib/format'
 import { render, renderAlert } from '../lib/i18n'
 import { RecommendationView } from './PrivacyPanel'
 import { Button } from './ui/Button'
+import { Identificador } from './ui/Identificador'
 
 const linha = 'flex flex-wrap items-baseline gap-2 text-sm'
 const rotulo = 'text-xs uppercase tracking-label text-faint'
@@ -116,11 +117,27 @@ export function AlertDetail({
           <div className="mb-4 flex flex-col gap-2">
             <div>
               <span className={rotulo}>{render(catalog, 'alert.txid', {}, lang)}</span>
-              <p className="break-all font-mono text-sm">{detalhe.event.txid}</p>
+              {/* Identificador de cadeia é feito para ser colado num explorador
+                  ou numa carteira, nunca digitado. Selecionar 64 caracteres
+                  monoespaçados à mão arrisca levar um a menos, e aí a pessoa vai
+                  procurar defeito no explorador. */}
+              <p>
+                {detalhe.event.txid && (
+                  <Identificador valor={detalhe.event.txid} catalog={catalog} lang={lang} />
+                )}
+              </p>
             </div>
             <p className={linha}>
               <span className={rotulo}>{render(catalog, 'alert.height', {}, lang)}</span>
-              <span>{detalhe.event.height ?? '—'}</span>
+              {detalhe.event.height === null ? (
+                <span>—</span>
+              ) : (
+                <Identificador
+                  valor={String(detalhe.event.height)}
+                  catalog={catalog}
+                  lang={lang}
+                />
+              )}
               <span className="text-faint">
                 {detalhe.confirmations && detalhe.confirmations > 0
                   ? render(catalog, 'alert.confirmations', { n: detalhe.confirmations }, lang)
@@ -130,7 +147,11 @@ export function AlertDetail({
             {detalhe.event.blockHash && (
               <p className={linha}>
                 <span className={rotulo}>{render(catalog, 'alert.blockHash', {}, lang)}</span>
-                <span className="break-all font-mono text-sm">{detalhe.event.blockHash}</span>
+                <Identificador
+                  valor={detalhe.event.blockHash}
+                  catalog={catalog}
+                  lang={lang}
+                />
               </p>
             )}
             <p className={linha}>

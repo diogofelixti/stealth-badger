@@ -30,7 +30,12 @@ const CATALOGO: Catalog = {
   'utxos.export': 'Exportar rótulos',
   'utxos.import': 'Importar rótulos',
   'utxos.dust': 'poeira',
+  'utxos.spent': 'gasto',
   'utxos.empty': 'Nenhum UTXO.',
+  'utxos.address': 'Endereço',
+  'access.copy': 'copiar',
+  'access.copied': 'copiado',
+  'access.copyFailed': 'não deu para copiar',
 }
 
 const TXID = 'aa'.repeat(32)
@@ -41,6 +46,8 @@ const utxo = (over: Partial<Utxo> = {}): Utxo => ({
   addressId: 1,
   valueSats: 412850,
   height: 319233,
+  spent: false,
+  spentAtTxid: null,
   address: 'tb1qexemplo000000000000000000000000000',
   derivationPath: '0/0',
   addressPrivacyScore: null,
@@ -121,6 +128,15 @@ describe('UtxoTable', () => {
     expect(container.querySelector('[data-address-privacy-grade="F"]')).not.toBeNull()
   })
 
+  it('mostra UTXO gasto como histórico, sem botão de congelar', async () => {
+    utxos.mockResolvedValue([utxo({ spent: true, spentAtTxid: 'bb'.repeat(32) })])
+    const { container } = montar()
+
+    await waitFor(() => expect(screen.getByText(/gasto/)).toBeDefined())
+    expect(container.querySelector('[data-spent="true"]')).not.toBeNull()
+    expect(screen.queryByRole('button', { name: /congelar/i })).toBeNull()
+  })
+
   it('oferece baixar o arquivo de rótulos', async () => {
     montar()
     await waitFor(() => expect(screen.getByText(/412\.850/)).toBeDefined())
@@ -162,6 +178,40 @@ describe('UtxoTable', () => {
       expect((screen.getByPlaceholderText(/rótulo/i) as HTMLInputElement).value).toBe(
         'veio do Sparrow',
       ),
+    )
+  })
+
+  /*
+   * O endereço sempre veio da API e a tabela nunca o desenhava.
+   *
+   * Sem ele, decidir o que congelar ou o que gastar junto exige sair da tela e
+   * cruzar o `derivationPath` à mão em outro lugar — que é o trabalho que este
+   * painel existe para poupar.
+   */
+  it('mostra o endereço em que a moeda está', async () => {
+    utxos.mockResolvedValue([utxo()])
+    render(<UtxoTable walletId={1} catalog={CATALOGO} lang="pt" />)
+
+    await waitFor(() => expect(screen.getByText('Endereço')).toBeDefined())
+    // As pontas na tela, o valor inteiro no `title` e no botão de copiar:
+    // encurtar o que vai para a área de transferência seria o defeito.
+    expect(screen.getByTitle('tb1qexemplo000000000000000000000000000')).toBeDefined()
+  })
+
+  it('oferece copiar o endereço, e copia o valor inteiro', async () => {
+    const escrito: string[] = []
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText: async (t: string) => void escrito.push(t) },
+      configurable: true,
+    })
+    utxos.mockResolvedValue([utxo()])
+    render(<UtxoTable walletId={1} catalog={CATALOGO} lang="pt" />)
+
+    await waitFor(() => expect(screen.getByText('Endereço')).toBeDefined())
+    fireEvent.click(screen.getAllByRole('button', { name: 'copiar' })[0]!)
+
+    await waitFor(() =>
+      expect(escrito).toEqual(['tb1qexemplo000000000000000000000000000']),
     )
   })
 })

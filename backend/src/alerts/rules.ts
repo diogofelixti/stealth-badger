@@ -185,3 +185,43 @@ export function alertsForOrigin(
     eventId: ctx.eventId,
   }))
 }
+
+export interface TxTypeAlertContext extends OriginAlertContext {
+  txType: string | null | undefined
+}
+
+function classeDeTxType(txType: string | null | undefined): 'coinjoin' | 'payjoin' | null {
+  const normalizado = txType?.toLowerCase() ?? ''
+  if (normalizado.includes('payjoin')) return 'payjoin'
+  if (normalizado.includes('coinjoin')) return 'coinjoin'
+  return null
+}
+
+/**
+ * Alerta informativo sobre forma de transação relevante para privacidade.
+ *
+ * Coinjoin e payjoin não são vazamento por si. Para quem fez, podem ser a
+ * medida de privacidade; para quem recebeu, são contexto que muda a leitura do
+ * UTXO antes de gastar junto com outros. O alerta preserva esse lado em vez de
+ * transformar a heurística do scanner em acusação.
+ */
+export function alertsForTxType(ctx: TxTypeAlertContext): AlertCandidate[] {
+  const classe = classeDeTxType(ctx.txType)
+  if (!classe) return []
+
+  return [
+    {
+      userId: ctx.userId,
+      walletId: ctx.walletId,
+      type: 'privacy_tx_type',
+      severity: 'info',
+      params: {
+        txid: ctx.txid.slice(0, 12) + '...',
+        txType: ctx.txType,
+        meaning: '@tx_type.' + classe + '.received',
+      },
+      dedupeKey: 'wallet:' + ctx.walletId + ':tx-type:' + ctx.txid + ':' + classe,
+      eventId: ctx.eventId,
+    },
+  ]
+}

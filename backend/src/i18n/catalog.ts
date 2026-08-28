@@ -17,6 +17,13 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
       'A transação {txid} {basis} {kind}. Confiança declarada pelo scanner: ' +
       '{confidence}. Fundos de origem conhecida ligam sua identidade a tudo que ' +
       'você gastar junto com eles.',
+    'alert.privacy_tx_type.title': 'Transação de privacidade detectada',
+    'alert.privacy_tx_type.body':
+      'A transação {txid} foi classificada pelo scanner como {txType}. {meaning}',
+    'tx_type.coinjoin.received':
+      'Para quem fez, coinjoin costuma melhorar a privacidade. Para você, que recebeu, trate este UTXO como contexto sensível antes de misturar com outros.',
+    'tx_type.payjoin.received':
+      'Payjoin costuma proteger os dois lados contra heurísticas simples. Mesmo assim, este UTXO merece atenção antes de ser gasto junto com outros.',
     'basis.database': 'foi reconhecida pela base de entidades do scanner como',
     'basis.behavior': 'tem forma compatível com',
     'entity.exchange': 'saque em lote de exchange',
@@ -62,15 +69,17 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'theme.cypherpunk': 'cypherpunk · fósforo sobre preto',
     'prefs.price': 'Preço do BTC',
     'prefs.priceNote':
-      'Nenhuma fonte ligada de fábrica. Ligar uma faz este servidor perguntar o preço a ' +
-      'ela: a consulta leva só o par de moedas, sem endereço, sem txid e sem nada que ' +
-      'identifique você, e o IP que aparece é o do servidor, não o seu. Preço não vaza ' +
-      'endereço, e por isso não acende a listra de exposição.',
+      'Desligado de fábrica. É uma consulta pública: ela leva só o par de moedas, e ' +
+      'expõe o IP deste servidor. Nenhum endereço Bitcoin sai daqui.',
     'prefs.currency': 'Moeda',
     'prefs.fees': 'Estimativa de taxa',
     'prefs.feeOff': 'desligada',
     'prefs.feeNode': 'pelo seu nó',
     'prefs.feeMempool': 'pelo mempool.space',
+    'prefs.save': 'Salvar preferências',
+    'prefs.saving': 'salvando…',
+    'prefs.saved': 'salvo, e o topo já está mostrando',
+    'prefs.unsaved': 'há mudanças não salvas',
     'fees.blocks': '{n} blocos',
     'fees.next': 'próximo bloco',
     'error.fees.needsCoreBackend':
@@ -83,9 +92,11 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
       'Não conheço a fonte de taxa "{fonte}". Aceito {aceitas}.',
     'nav.panel': 'Painel',
     'nav.wallets': 'Carteiras',
+    'nav.addresses': 'Endereços',
     'nav.alerts': 'Alertas',
+    'nav.privacy': 'Privacidade',
     'nav.settings': 'Configurações',
-    'nav.access': 'Acessos',
+    'nav.access': 'Acesso Externo',
     'alerts.filterType': 'Todos os tipos',
     'alerts.filterSeverity': 'Todas as severidades',
     'alerts.filterWallet': 'Todas as carteiras',
@@ -93,6 +104,22 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallet.notFoundOnScreen': 'Esta carteira não existe, ou não é sua.',
     'wallets.loading': 'carregando...',
     'backends.hasCredentials': 'com credencial guardada',
+    'backends.whatYouHave': 'O que você tem?',
+    'backends.group.no': 'Um nó Bitcoin Core meu',
+    'backends.group.servidor': 'Um servidor Electrum ou Esplora meu',
+    'backends.group.publico': 'Nenhum dos dois: usar um explorador público',
+    'backends.network': 'Rede',
+    'backends.up': 'responde',
+    'backends.down': 'não respondeu',
+    'backends.unknownState': 'ainda não medida',
+    'backends.measuredAt': 'medido {when}',
+    'backends.hiddenDown':
+      '{n} fonte(s) fora desta lista porque não responderam. Elas continuam em ' +
+      'Configurações, com o motivo.',
+    'backends.test': 'Testar',
+    'backends.testing': 'testando…',
+    'backends.testOk': 'responde · bloco {height}',
+    'backends.testFail': 'não respondeu: {reason}',
     'settings.session': 'Sessão',
     'settings.sessionNote':
       'A sessão vive num cookie de sessão, e sair a encerra neste navegador.',
@@ -127,9 +154,24 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'access.all': 'todos os acessos',
     'access.docs': 'documentação completa deste caminho',
     'access.details': 'passo a passo, estado e QR deste caminho',
+    'access.script':
+      'Ou o caminho curto, que não exige decorar as flags do compose. O mesmo script cria os containers dos três perfis de uma vez, com preparar, que é o passo único de que o painel precisa para poder ligar e desligar sozinho depois.',
     'access.activate': 'Ativar',
     'access.deactivate': 'Desativar',
+    'access.configure': 'Configurar',
+    'access.configTitle': 'Configurar acesso',
+    'access.hostname': 'Hostname',
+    'access.authKey': 'TS_AUTHKEY',
+    'access.tunnelToken': 'TUNNEL_TOKEN',
+    'access.saveConfig': 'Salvar configuração',
+    'access.configSaved': 'configuração salva cifrada',
+    'access.configured': 'configurado',
+    'access.notConfigured': 'não configurado',
     'access.working': 'falando com o Docker…',
+    'access.creating':
+      'Criando o container deste caminho. Na primeira vez isto puxa a imagem e ' +
+      'pode levar alguns minutos; o estado acima muda sozinho quando terminar.',
+    'access.createFailed': 'Não deu para criar o container: {reason}',
     'access.controlTitle': 'Ligar e desligar por aqui',
     'access.socketNote':
       'Esta instância subiu com o socket do Docker montado. Enquanto ele estiver aí, uma sessão do painel vale execução de código na máquina que hospeda; se o painel estiver publicado num túnel, isso vale para quem obtiver uma sessão de fora. O que estreita isso: só o admin da instância chega aqui, e só três perfis e dois verbos atravessam, montados pelo backend e nunca recebidos prontos.',
@@ -186,6 +228,28 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'error.access.noSocket':
       'Esta instância subiu sem DOCKER_SOCKET: o painel lê os acessos, e não os controla.',
     'error.access.badRequest': 'Perfil ou ação fora da lista branca.',
+    'error.access.badConfig': 'Configuração incompleta: {motivo}.',
+    'error.privacy.needsAnalysisSource':
+      'A análise profunda precisa de uma fonte tipo Esplora. A fonte de cadeia desta carteira é um {chainKind}, que sincroniza saldo e UTXO mas não responde REST, e o scanner não sabe falar com ele. Escolha uma fonte de análise para esta rede; ela é perguntada uma vez só.',
+    'error.privacy.analysisSource.notEsplora':
+      'Esta fonte não é um Esplora. O scanner só fala REST nesse formato, e não conversa com Bitcoin Core nem com Electrum.',
+    'error.privacy.analysisSource.wrongNetwork':
+      'Esta fonte é de outra rede. A fonte de análise é escolhida por rede.',
+    'error.privacy.analysisSource.notFound': 'Esta fonte não existe, ou não é sua.',
+    'error.privacy.badAnalysisSource': 'Informe a fonte escolhida.',
+    'error.privacy.blindScan':
+      'A análise não conseguiu consultar a cadeia: o scanner respondeu que esta carteira não tem endereço, transação nem UTXO, e o watchtower já sincronizou UTXO nela. O resultado foi descartado em vez de guardado, porque um score que não mediu nada parece um diagnóstico e não é. Confira a fonte de análise desta rede.',
+    'privacy.analysisSource': 'Fonte de análise',
+    'privacy.analysisSourceNote':
+      'Qual Esplora roda a análise de privacidade. O scanner só fala esse formato: Bitcoin Core e Electrum sincronizam saldo e UTXO, e não servem para analisar. Quem vigia por um Esplora não precisa escolher nada aqui, porque a fonte da carteira já serve.',
+    'privacy.analysisNone':
+      'Nenhuma fonte tipo Esplora nesta rede. Cadastre uma em Fontes de consulta, acima.',
+    'privacy.analysisBy': 'análise por {host}',
+    'privacy.analysisChoose': 'Escolher e analisar',
+    'privacy.analysisNote':
+      'Este host passa a ver os endereços desta carteira quando a análise roda. A escolha vale para esta rede e é perguntada uma vez só; dá para trocar depois em Configurações.',
+    'privacy.analysisOwn': 'sua',
+    'privacy.analysisPublic': 'pública',
     'alert.txid': 'Transação',
     'alert.height': 'Altura',
     'alert.blockHash': 'Hash do bloco',
@@ -220,6 +284,12 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'balance.wallets': '{n} carteiras',
     'balance.utxos': '{n} UTXOs',
     'balance.frozen': '{n} congelado',
+    'addresses.title': 'Endereços avulsos',
+    'addresses.add': '+ Vigiar endereço',
+    'addresses.empty': 'Nenhum endereço avulso vigiado ainda.',
+    'addresses.note':
+      'Um endereço solto, sem chave estendida. Ele não deriva endereço novo e ' +
+      'não tem gap limit: o que se vigia é exatamente o que está aqui.',
     'wallets.title': 'Carteiras',
     'wallets.empty': 'Nenhuma carteira vigiada ainda.',
     'wallets.emptyHint':
@@ -267,8 +337,17 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallet.importing': 'Importando {progress}%',
     'wallet.importingNote':
       'Varrendo a cadeia de change. O saldo total acima ainda não inclui esta carteira.',
+    'wallet.importingNode': 'Rescan no seu nó',
+    'wallet.importingCoreNote':
+      'O seu nó está varrendo a cadeia desde o gênesis para achar o histórico desta carteira. Leva minutos, e não há barra porque o Bitcoin Core não reporta andamento enquanto rescaneia: ele responde quando termina. Acompanhe pelo nó com getwalletinfo, no campo scanning. O saldo total acima ainda não inclui esta carteira.',
     'wallet.syncError': 'Falha na sincronização',
+    'wallet.syncSourceFailed': 'Fonte {host} falhou',
+    'wallet.syncSourceFailedNote':
+      'A fonte {host} não respondeu: {reason}. Troque a fonte desta carteira ou espere ela voltar antes de ler saldo como definitivo.',
     'wallet.syncDegraded': 'Vigiando em parte',
+    'wallet.historyOnly': 'Sem UTXO ativo, com histórico',
+    'wallet.historyOnlyNote':
+      '{addresses} endereço(s) com histórico e {spent} UTXO gasto(s) nesta carteira.',
     'auth.tagline': 'Watchtower de privacidade para Bitcoin',
     'auth.email': 'e-mail',
     'auth.password': 'senha (mínimo 12 caracteres)',
@@ -282,7 +361,27 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'privacy.scan': 'Analisar privacidade',
     'privacy.scanning': 'analisando...',
     'privacy.never': 'privacidade ainda não analisada',
+    'privacy.measuredHere': 'Medido aqui, sem sair para a rede',
+    'privacy.measuredHereNote':
+      'Estes números vêm do que este watchtower sincronizou pela fonte de cadeia ' +
+      'desta carteira. Nenhuma consulta a terceiro foi feita para calculá-los. O ' +
+      'scanner acrescenta o que só ele tem: base de entidades conhecidas, ' +
+      'heurísticas de transação e a matriz de Boltzmann.',
     'privacy.findings': 'O que o scanner viu',
+    'privacy.pageTitle': 'Privacidade',
+    'privacy.pageNote':
+      'Mostra o que este servidor já mediu no banco. Abrir endereço mostra análise salva; quando não houver, a tela diz que não sabe.',
+    'privacy.walletSelect': 'Carteira',
+    'privacy.generalScore': 'Score médio',
+    'privacy.generalAlerts': 'Alertas',
+    'privacy.address': 'Endereço',
+    'privacy.path': 'Caminho',
+    'privacy.balance': 'Saldo',
+    'privacy.addressScoreShort': 'Score',
+    'privacy.noAddresses': 'Nenhum endereço sincronizado ainda.',
+    'privacy.addressDetail': 'Detalhe do endereço',
+    'privacy.addressUnknown': 'Ainda não há análise salva para este endereço.',
+    'privacy.addressScore': 'Privacidade do endereço {score}/100 · {grade}',
     'privacy.scanUsedAddresses': 'Analisar endereços usados',
     'privacy.addressScanQueued': '{n} endereços na fila',
     'privacy.chartScore': 'Score',
@@ -320,7 +419,9 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
       'resposta da API. Quem alcança o RPC do seu nó pode pará-lo.',
     'backends.datadir': 'Diretório de dados do nó',
     'backends.datadirHint':
-      'Onde o bitcoind guarda os dados, por exemplo /mnt/dados2 ou ~/.bitcoin.',
+      'A pasta que o bitcoind usa. Na instalação padrão é ~/.bitcoin; em pacote de ' +
+      'sistema costuma ser /var/lib/bitcoind. Se o seu nó está em disco separado, é ' +
+      'o caminho desse disco.',
     'backends.detect': 'Procurar o nó',
     'backends.detectFound': 'Achei um nó de {network} na altura {blocks}.',
     'backends.dockerHint':
@@ -369,6 +470,20 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'search.used': 'usado',
     'search.unused': 'nunca usado',
     'channels.title': 'Avisar no celular',
+    'channels.howTitle': 'Como isto funciona',
+    'channels.how1':
+      'O ntfy entrega push por tópico, e não por conta: não há cadastro, não há ' +
+      'senha. Quem assina um tópico recebe tudo o que for publicado nele.',
+    'channels.how2':
+      'Instale o app ntfy no celular, pela Play Store, App Store ou F-Droid. ' +
+      'Assine um tópico só seu, e cole o mesmo tópico aqui.',
+    'channels.how3':
+      'Daí em diante este servidor publica cada alerta nesse tópico, e o celular ' +
+      'toca. Sem servidor informado, o tópico é publicado no ntfy.sh público.',
+    'channels.how4':
+      'O que vai na mensagem: o rótulo da carteira, o título e o texto do alerta. ' +
+      'Em dust e em address reuse, vai também o endereço envolvido. Quem souber o ' +
+      'tópico lê tudo isso: escolha um tópico longo e aleatório, e trate-o como segredo.',
     'channels.empty': 'Nenhum canal. Os alertas só aparecem aqui na tela.',
     'channels.topicPlaceholder': 'tópico do ntfy, longo e difícil de adivinhar',
     'channels.topicHint':
@@ -383,10 +498,12 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'utxos.freeze': 'congelar',
     'utxos.unfreeze': 'descongelar',
     'utxos.frozen': 'congelado',
+    'utxos.address': 'Endereço',
     'utxos.labelPlaceholder': 'rótulo',
     'utxos.export': 'Exportar rótulos',
     'utxos.import': 'Importar rótulos',
     'utxos.dust': 'dust',
+    'utxos.spent': 'gasto',
     'utxos.empty': 'Nenhum UTXO à vista nesta carteira.',
     'utxos.imported': '{imported} rótulos importados, {ignored} ignorados',
     'backend.networkRequired': 'Rede',
@@ -399,7 +516,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'backends.urlPlaceholder': 'https://... ou electrum://host:50001',
     'backends.isPublic': 'É um serviço público de terceiro',
     'backends.publicNote':
-      'Um backend público enxerga quais endereços você consulta. O aviso no topo fica aceso enquanto qualquer carteira usar um.',
+      'Um explorador público responde na hora e não exige instalar nada. Em troca, ele enxerga todos os endereços que você consultar, e consegue ligá-los entre si. É escolha legítima, e o aviso no topo fica aceso enquanto qualquer carteira usar um.',
     'backends.save': 'Adicionar backend',
   },
   en: {
@@ -412,6 +529,13 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
       'Transaction {txid} {basis} {kind}. Confidence declared by the scanner: ' +
       '{confidence}. Funds with a known origin link your identity to whatever ' +
       'you spend alongside them.',
+    'alert.privacy_tx_type.title': 'Privacy transaction detected',
+    'alert.privacy_tx_type.body':
+      'Transaction {txid} was classified by the scanner as {txType}. {meaning}',
+    'tx_type.coinjoin.received':
+      'For the sender, coinjoin often improves privacy. For you as the receiver, treat this UTXO as sensitive context before mixing it with others.',
+    'tx_type.payjoin.received':
+      'Payjoin often protects both sides from simple heuristics. Even so, this UTXO deserves attention before being spent alongside others.',
     'basis.database': 'was matched by the scanner entity database as',
     'basis.behavior': 'has the shape of',
     'entity.exchange': 'an exchange batch withdrawal',
@@ -457,15 +581,17 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'theme.cypherpunk': 'cypherpunk · phosphor on black',
     'prefs.price': 'BTC price',
     'prefs.priceNote':
-      'No source is on out of the box. Turning one on makes this server ask it for the ' +
-      'price: the query carries only the currency pair, no address, no txid and nothing ' +
-      'that identifies you, and the IP it sees is the server\'s, not yours. Price does ' +
-      'not leak addresses, and that is why it does not light the exposure stripe.',
+      'Off out of the box. It is a public query: it carries only the currency pair, and ' +
+      'exposes this server\'s IP. No Bitcoin address leaves here.',
     'prefs.currency': 'Currency',
     'prefs.fees': 'Fee estimate',
     'prefs.feeOff': 'off',
     'prefs.feeNode': 'from your node',
     'prefs.feeMempool': 'from mempool.space',
+    'prefs.save': 'Save preferences',
+    'prefs.saving': 'saving…',
+    'prefs.saved': 'saved, and the header already shows it',
+    'prefs.unsaved': 'unsaved changes',
     'fees.blocks': '{n} blocks',
     'fees.next': 'next block',
     'error.fees.needsCoreBackend':
@@ -478,9 +604,11 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
       'I do not know the fee source "{fonte}". I accept {aceitas}.',
     'nav.panel': 'Panel',
     'nav.wallets': 'Wallets',
+    'nav.addresses': 'Addresses',
     'nav.alerts': 'Alerts',
+    'nav.privacy': 'Privacy',
     'nav.settings': 'Settings',
-    'nav.access': 'Access',
+    'nav.access': 'External Access',
     'alerts.filterType': 'All types',
     'alerts.filterSeverity': 'All severities',
     'alerts.filterWallet': 'All wallets',
@@ -488,6 +616,22 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallet.notFoundOnScreen': 'That wallet does not exist, or is not yours.',
     'wallets.loading': 'loading...',
     'backends.hasCredentials': 'credential stored',
+    'backends.whatYouHave': 'What do you have?',
+    'backends.group.no': 'A Bitcoin Core node of my own',
+    'backends.group.servidor': 'An Electrum or Esplora server of my own',
+    'backends.group.publico': 'Neither: use a public explorer',
+    'backends.network': 'Network',
+    'backends.up': 'answers',
+    'backends.down': 'no answer',
+    'backends.unknownState': 'not measured yet',
+    'backends.measuredAt': 'measured {when}',
+    'backends.hiddenDown':
+      '{n} source(s) left out of this list because they did not answer. They are ' +
+      'still in Settings, with the reason.',
+    'backends.test': 'Test',
+    'backends.testing': 'testing…',
+    'backends.testOk': 'answers · block {height}',
+    'backends.testFail': 'no answer: {reason}',
     'settings.session': 'Session',
     'settings.sessionNote':
       'The session lives in a session cookie, and logging out ends it in this browser.',
@@ -522,9 +666,24 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'access.all': 'all access paths',
     'access.docs': 'full documentation for this path',
     'access.details': 'step by step, state and QR for this path',
+    'access.script':
+      'Or the short way, which saves memorising the compose flags. The same script creates the containers for all three profiles at once, with preparar, which is the one step the panel needs before it can turn them on and off by itself.',
     'access.activate': 'Turn on',
     'access.deactivate': 'Turn off',
+    'access.configure': 'Configure',
+    'access.configTitle': 'Configure access',
+    'access.hostname': 'Hostname',
+    'access.authKey': 'TS_AUTHKEY',
+    'access.tunnelToken': 'TUNNEL_TOKEN',
+    'access.saveConfig': 'Save configuration',
+    'access.configSaved': 'configuration saved encrypted',
+    'access.configured': 'configured',
+    'access.notConfigured': 'not configured',
     'access.working': 'talking to Docker…',
+    'access.creating':
+      'Creating the container for this path. The first time this pulls the image ' +
+      'and can take a few minutes; the state above changes on its own when it is done.',
+    'access.createFailed': 'Could not create the container: {reason}',
     'access.controlTitle': 'Turning it on and off from here',
     'access.socketNote':
       'This instance came up with the Docker socket mounted. While it is there, a panel session is worth code execution on the host machine; if the panel is published through a tunnel, that goes for whoever obtains a session from outside. What narrows it: only the instance admin reaches this, and only three profiles and two verbs get through, assembled by the backend and never received ready made.',
@@ -581,6 +740,28 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'error.access.noSocket':
       'This instance came up without DOCKER_SOCKET: the panel reads the access paths, it does not control them.',
     'error.access.badRequest': 'Profile or action outside the allowlist.',
+    'error.access.badConfig': 'Incomplete configuration: {motivo}.',
+    'error.privacy.needsAnalysisSource':
+      'Deep analysis needs an Esplora style source. This wallet chain source is a {chainKind}, which syncs balance and UTXOs but does not answer REST, and the scanner cannot talk to it. Pick an analysis source for this network; you are asked once.',
+    'error.privacy.analysisSource.notEsplora':
+      'This source is not an Esplora. The scanner only speaks REST in that format, and does not talk to Bitcoin Core or Electrum.',
+    'error.privacy.analysisSource.wrongNetwork':
+      'This source belongs to another network. The analysis source is chosen per network.',
+    'error.privacy.analysisSource.notFound': 'This source does not exist, or is not yours.',
+    'error.privacy.badAnalysisSource': 'Name the source you picked.',
+    'error.privacy.blindScan':
+      'The analysis could not reach the chain: the scanner answered that this wallet has no address, transaction or UTXO, and the watchtower has already synced UTXOs in it. The result was discarded rather than stored, because a score that measured nothing looks like a diagnosis and is not. Check the analysis source for this network.',
+    'privacy.analysisSource': 'Analysis source',
+    'privacy.analysisSourceNote':
+      'Which Esplora runs the privacy analysis. The scanner only speaks that format: Bitcoin Core and Electrum sync balance and UTXOs, and cannot analyse. If you watch through an Esplora you need not choose anything here, because the wallet source already serves.',
+    'privacy.analysisNone':
+      'No Esplora style source on this network. Add one under query sources, above.',
+    'privacy.analysisBy': 'analysed by {host}',
+    'privacy.analysisChoose': 'Pick and analyse',
+    'privacy.analysisNote':
+      'This host gets to see the addresses of this wallet when the analysis runs. The choice applies to this network and is asked once; you can change it later in Settings.',
+    'privacy.analysisOwn': 'yours',
+    'privacy.analysisPublic': 'public',
     'alert.txid': 'Transaction',
     'alert.height': 'Height',
     'alert.blockHash': 'Block hash',
@@ -615,6 +796,12 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'balance.wallets': '{n} wallets',
     'balance.utxos': '{n} UTXOs',
     'balance.frozen': '{n} frozen',
+    'addresses.title': 'Standalone addresses',
+    'addresses.add': '+ Watch an address',
+    'addresses.empty': 'No standalone address watched yet.',
+    'addresses.note':
+      'A single address, with no extended key. It derives nothing new and has no ' +
+      'gap limit: what is watched is exactly what is here.',
     'wallets.title': 'Wallets',
     'wallets.empty': 'No wallet watched yet.',
     'wallets.emptyHint':
@@ -663,8 +850,17 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'wallet.importing': 'Importing {progress}%',
     'wallet.importingNote':
       'Scanning the change chain. The total above does not include this wallet yet.',
+    'wallet.importingNode': 'Rescan on your node',
+    'wallet.importingCoreNote':
+      'Your node is scanning the chain from genesis to find this wallet history. It takes minutes, and there is no bar because Bitcoin Core reports no progress while it rescans: it answers when it is done. Follow it on the node with getwalletinfo, in the scanning field. The total above does not include this wallet yet.',
     'wallet.syncError': 'Sync failed',
+    'wallet.syncSourceFailed': 'Source {host} failed',
+    'wallet.syncSourceFailedNote':
+      'Source {host} did not respond: {reason}. Change this wallet source or wait for it to return before reading the balance as final.',
     'wallet.syncDegraded': 'Watching partially',
+    'wallet.historyOnly': 'No active UTXO, with history',
+    'wallet.historyOnlyNote':
+      '{addresses} address(es) with history and {spent} spent UTXO(s) in this wallet.',
     'auth.tagline': 'Bitcoin privacy watchtower',
     'auth.email': 'email',
     'auth.password': 'password (at least 12 characters)',
@@ -678,7 +874,27 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'privacy.scan': 'Analyze privacy',
     'privacy.scanning': 'analyzing...',
     'privacy.never': 'privacy not analyzed yet',
+    'privacy.measuredHere': 'Measured here, without leaving the network',
+    'privacy.measuredHereNote':
+      'These numbers come from what this watchtower synced through this wallet ' +
+      'own chain source. No third party was queried to compute them. The scanner ' +
+      'adds what only it has: the known entity database, transaction heuristics ' +
+      'and the Boltzmann matrix.',
     'privacy.findings': 'What the scanner saw',
+    'privacy.pageTitle': 'Privacy',
+    'privacy.pageNote':
+      'Shows what this server has already measured in the database. Opening an address shows saved analysis; when there is none, the screen says it does not know.',
+    'privacy.walletSelect': 'Wallet',
+    'privacy.generalScore': 'Average score',
+    'privacy.generalAlerts': 'Alerts',
+    'privacy.address': 'Address',
+    'privacy.path': 'Path',
+    'privacy.balance': 'Balance',
+    'privacy.addressScoreShort': 'Score',
+    'privacy.noAddresses': 'No synchronized address yet.',
+    'privacy.addressDetail': 'Address detail',
+    'privacy.addressUnknown': 'There is no saved analysis for this address yet.',
+    'privacy.addressScore': 'Address privacy {score}/100 · {grade}',
     'privacy.scanUsedAddresses': 'Analyze used addresses',
     'privacy.addressScanQueued': '{n} addresses queued',
     'privacy.chartScore': 'Score',
@@ -716,7 +932,9 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
       'in an API response. Whoever reaches your node RPC can stop it.',
     'backends.datadir': 'Node data directory',
     'backends.datadirHint':
-      'Where bitcoind stores its data, for example /mnt/dados2 or ~/.bitcoin.',
+      'The folder bitcoind uses. On a default install it is ~/.bitcoin; from a system ' +
+      'package it is usually /var/lib/bitcoind. If your node lives on a separate disk, ' +
+      'it is that path.',
     'backends.detect': 'Find the node',
     'backends.detectFound': 'Found a {network} node at height {blocks}.',
     'backends.dockerHint':
@@ -765,6 +983,20 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'search.used': 'used',
     'search.unused': 'never used',
     'channels.title': 'Notify my phone',
+    'channels.howTitle': 'How this works',
+    'channels.how1':
+      'ntfy delivers push by topic, not by account: no sign-up, no password. ' +
+      'Whoever subscribes to a topic receives everything published to it.',
+    'channels.how2':
+      'Install the ntfy app on your phone, from the Play Store, App Store or F-Droid. ' +
+      'Subscribe to a topic of your own, and paste the same topic here.',
+    'channels.how3':
+      'From then on this server publishes every alert to that topic and your phone ' +
+      'rings. With no server given, the topic is published on the public ntfy.sh.',
+    'channels.how4':
+      'What the message carries: the wallet label, the alert title and body. For dust ' +
+      'and for address reuse, the address involved goes too. Anyone who knows the topic ' +
+      'reads all of that: pick a long random topic, and treat it as a secret.',
     'channels.empty': 'No channel. Alerts show up on this screen only.',
     'channels.topicPlaceholder': 'ntfy topic, long and hard to guess',
     'channels.topicHint':
@@ -779,10 +1011,12 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'utxos.freeze': 'freeze',
     'utxos.unfreeze': 'unfreeze',
     'utxos.frozen': 'frozen',
+    'utxos.address': 'Address',
     'utxos.labelPlaceholder': 'label',
     'utxos.export': 'Export labels',
     'utxos.import': 'Import labels',
     'utxos.dust': 'dust',
+    'utxos.spent': 'spent',
     'utxos.empty': 'No UTXO in sight for this wallet.',
     'utxos.imported': '{imported} labels imported, {ignored} ignored',
     'backend.networkRequired': 'Network',
@@ -795,7 +1029,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'backends.urlPlaceholder': 'https://... or electrum://host:50001',
     'backends.isPublic': "It is someone else's public service",
     'backends.publicNote':
-      'A public backend sees which addresses you look up. The banner at the top stays lit while any wallet uses one.',
+      'A public explorer answers right away and needs nothing installed. In exchange, it sees every address you look up, and can link them to each other. It is a legitimate choice, and the banner at the top stays lit while any wallet uses one.',
     'backends.save': 'Add backend',
   },
 }

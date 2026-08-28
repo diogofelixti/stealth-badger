@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify'
 import { erro } from '../http/erro'
 import type { ChainAdapter } from '../chain/types'
 import { createAdapter, type BackendRow } from '../chain/adapter'
-import { backendDoUsuario, ensureBackendGlobal } from '../chain/backends'
+import { backendDoUsuario, fontePublicaPadrao } from '../chain/backends'
 import { scanEmAndamento } from '../privacy/andamento'
 import { loadConfig } from '../config'
 import { seal } from '../crypto/secretbox'
@@ -34,6 +34,11 @@ const SELECT_DA_CARTEIRA = `SELECT w.id, w.label, w.kind, w.script_type AS "scri
               w.sync_progress AS "syncProgress", w.sync_height AS "syncHeight",
               w.sync_error AS "syncError", w.archived_at AS "archivedAt",
               b.is_public AS "backendIsPublic", b.url AS "backendUrl",
+              -- a tela precisa do tipo da fonte para dizer a verdade durante o
+              -- import: o Core faz rescan do nó, e os outros varrem a cadeia de
+              -- change. São esperas diferentes, e a nota que descreve uma mente
+              -- sobre a outra.
+              b.kind AS "backendKind",
               p.score AS "privacyScore", p.grade AS "privacyGrade",
               p.scanned_at AS "privacyScannedAt",
               COALESCE((
@@ -47,7 +52,15 @@ const SELECT_DA_CARTEIRA = `SELECT w.id, w.label, w.kind, w.script_type AS "scri
               (
                 SELECT count(*) FROM utxos u
                 WHERE u.wallet_id = w.id AND NOT u.spent AND u.frozen
-              )::int AS "frozenCount"
+              )::int AS "frozenCount",
+              (
+                SELECT count(*) FROM utxos u
+                WHERE u.wallet_id = w.id AND u.spent
+              )::int AS "spentUtxoCount",
+              (
+                SELECT count(*) FROM addresses a
+                WHERE a.wallet_id = w.id AND a.is_used
+              )::int AS "usedAddressCount"
          FROM wallets w
          JOIN backends b ON b.id = w.backend_id
          -- LATERAL em vez de subconsulta por coluna: uma varredura só traz
@@ -203,13 +216,21 @@ export function registerWalletRoutes(
       }
       backend = escolhido
     } else {
-      backend = {
-        id: await ensureBackendGlobal(cfg.network),
-        kind: cfg.backendKind,
-        url: cfg.backendUrl,
-        isPublic: cfg.publicBackend,
-        network: cfg.network,
+      // Sem escolha explícita, a fonte é uma pública da rede da instância — e
+      // não mais o `CHAIN_BACKEND` do `.env`, que é a máquina de quem hospeda
+      // e não existe em nenhuma outra instalação.
+      const padrao = await fontePublicaPadrao(cfg.network)
+      if (!padrao) {
+        return reply.code(400).send(
+          erro(
+            'wallet.noBackend',
+            'nenhuma fonte de consulta disponível para a rede ' +
+              cfg.network +
+              '. Cadastre uma em Configurações antes de vigiar uma carteira.',
+          ),
+        )
       }
+      backend = padrao
     }
 
     const network: Network = backend.network

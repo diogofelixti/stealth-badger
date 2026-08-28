@@ -8,7 +8,15 @@ import {
   type Network,
 } from '../lib/api'
 import { render } from '../lib/i18n'
-import { PRESETS, pareceLocalhost, presetPor, type PresetId } from '../lib/presets'
+import {
+  GRUPOS,
+  pareceLocalhost,
+  presetPadraoDoGrupo,
+  presetPor,
+  presetsDoGrupo,
+  type GrupoDeFonte,
+  type PresetId,
+} from '../lib/presets'
 import { Button } from './ui/Button'
 
 const campo =
@@ -34,7 +42,12 @@ export function BackendForm({
   network: Network
   onSaved: (backendId: number) => void
 }) {
-  const [presetId, setPresetId] = useState<PresetId>('core')
+  // Abre em "tenho um nó", e dentro dele no preset de um campo só. Antes o
+  // padrão era `core` por host e porta: quatro campos e três conceitos, com o
+  // atalho do item C escondido três linhas abaixo num `select` de nove itens.
+  const [grupo, setGrupo] = useState<GrupoDeFonte>('no')
+  const [presetId, setPresetId] = useState<PresetId>(presetPadraoDoGrupo('no'))
+  const [rede, setRede] = useState<Network>(network)
   const [host, setHost] = useState('')
   const [porta, setPorta] = useState<string>('')
   const [url, setUrl] = useState('')
@@ -51,7 +64,7 @@ export function BackendForm({
   const [salvando, setSalvando] = useState(false)
 
   const preset = presetPor(presetId)
-  const portaEfetiva = porta || String(preset.portaPadrao?.[network] ?? '')
+  const portaEfetiva = porta || String(preset.portaPadrao?.[rede] ?? '')
   const deteccaoValida =
     preset.pede !== 'datadir' || (deteccao?.found === true && deteccao.reachable !== false)
 
@@ -60,7 +73,15 @@ export function BackendForm({
     setPorta('')
     setErro(null)
     setDeteccao(null)
+    // A postura vem do preset, e não de uma caixa que a pessoa marca: quem
+    // cadastra o próprio nó é soberano, quem escolhe explorador público é
+    // exposto. Deixar isso marcável permitia que o selo do topo mentisse.
     setPublico(presetPor(id).isPublic)
+  }
+
+  function trocarGrupo(g: GrupoDeFonte): void {
+    setGrupo(g)
+    trocarPreset(presetPadraoDoGrupo(g))
   }
 
   /**
@@ -95,7 +116,9 @@ export function BackendForm({
         ...(achado?.cookiePath
           ? { auth: { mode: 'cookie' as const, cookiePath: achado.cookiePath } }
           : {}),
-        network: achado?.network ?? network,
+        // A rede detectada no nó ganha da escolhida: o cookie em
+        // `signet/.cookie` prova a rede melhor que um `select`.
+        network: achado?.network ?? rede,
         isPublic: publico,
         ...(preset.pede === 'host-porta'
           ? { host: host.trim(), port: Number(portaEfetiva) }
@@ -121,18 +144,86 @@ export function BackendForm({
 
   return (
     <div className="rounded border border-line px-3 py-3">
-      <label htmlFor="fonte-preset" className={rotulo}>
-        {render(catalog, 'backends.preset', {}, lang)}
+      {/* Primeiro o que a pessoa tem, e só depois qual programa é. Nove
+          presets numa lista plana obrigavam a saber que Fulcrum é `electrum` e
+          que mempool.space é `esplora` — vocabulário de quem construiu. */}
+      <span className={rotulo}>{render(catalog, 'backends.whatYouHave', {}, lang)}</span>
+      <div className="mb-3 flex flex-col gap-2">
+        {GRUPOS.map(g => (
+          <label key={g} className="flex items-baseline gap-2 text-sm">
+            <input
+              type="radio"
+              name="grupo-de-fonte"
+              value={g}
+              checked={grupo === g}
+              onChange={() => trocarGrupo(g)}
+            />
+            <span>
+              {render(catalog, `backends.group.${g}`, {}, lang)}
+              <span
+                className="ml-2 text-xs"
+                style={{
+                  color: g === 'publico' ? 'var(--sb-public)' : 'var(--sb-sovereign)',
+                }}
+              >
+                {render(
+                  catalog,
+                  g === 'publico' ? 'privacy.public' : 'privacy.sovereign',
+                  {},
+                  lang,
+                )}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      {/* A lista de programas só aparece quando o grupo tem mais de um. */}
+      {presetsDoGrupo(grupo).length > 1 && (
+        <>
+          <label htmlFor="fonte-preset" className={rotulo}>
+            {render(catalog, 'backends.preset', {}, lang)}
+          </label>
+          <select
+            id="fonte-preset"
+            value={presetId}
+            onChange={e => trocarPreset(e.target.value as PresetId)}
+            className={`mb-2 ${campo}`}
+          >
+            {presetsDoGrupo(grupo).map(p => (
+              <option key={p.id} value={p.id}>
+                {p.nome}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+
+      {/* Explorador público não é defeito: é escolha, e ela é dita antes do
+          cadastro e não depois. */}
+      {grupo === 'publico' && (
+        <p
+          className="mb-3 font-prose text-sm leading-relaxed"
+          style={{ color: 'var(--sb-warning)' }}
+        >
+          {render(catalog, 'backends.publicNote', {}, lang)}
+        </p>
+      )}
+
+      {/* A rede era herdada da primeira fonte da lista, em silêncio. Cadastrar
+          uma fonte de mainnet numa instância de signet dava fonte de signet. */}
+      <label htmlFor="fonte-rede" className={rotulo}>
+        {render(catalog, 'backends.network', {}, lang)}
       </label>
       <select
-        id="fonte-preset"
-        value={presetId}
-        onChange={e => trocarPreset(e.target.value as PresetId)}
-        className={`mb-2 ${campo}`}
+        id="fonte-rede"
+        value={rede}
+        onChange={e => setRede(e.target.value as Network)}
+        className={`mb-3 ${campo}`}
       >
-        {PRESETS.map(p => (
-          <option key={p.id} value={p.id}>
-            {p.nome}
+        {(['mainnet', 'signet', 'testnet'] as Network[]).map(n => (
+          <option key={n} value={n}>
+            {n}
           </option>
         ))}
       </select>
@@ -306,20 +397,22 @@ export function BackendForm({
         </>
       )}
 
-      <label htmlFor="fonte-apelido" className={rotulo}>
-        {render(catalog, 'backends.labelField', {}, lang)}
-      </label>
-      <input
-        id="fonte-apelido"
-        value={apelido}
-        onChange={e => setApelido(e.target.value)}
-        className={`mb-2 ${campo}`}
-      />
-
-      <label className="mb-2 flex items-center gap-2 text-xs text-muted">
-        <input type="checkbox" checked={publico} onChange={e => setPublico(e.target.checked)} />
-        {render(catalog, 'backends.isPublic', {}, lang)}
-      </label>
+      {/* Apelido só para o que é da pessoa: `mempool.space` já tem nome
+          próprio, e o campo vazio ali era pergunta sem resposta útil.
+          A caixa "é pública" saiu: o grupo escolhido decide a postura. */}
+      {grupo !== 'publico' && (
+        <>
+          <label htmlFor="fonte-apelido" className={rotulo}>
+            {render(catalog, 'backends.labelField', {}, lang)}
+          </label>
+          <input
+            id="fonte-apelido"
+            value={apelido}
+            onChange={e => setApelido(e.target.value)}
+            className={`mb-2 ${campo}`}
+          />
+        </>
+      )}
 
       {erro && (
         <p role="alert" className="mb-2 text-xs" style={{ color: 'var(--sb-critical)' }}>

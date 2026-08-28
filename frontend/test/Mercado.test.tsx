@@ -77,5 +77,8 @@ describe('Mercado', () => {
     await waitFor(() => expect(screen.getByText(/12/)).toBeDefined())
     expect(screen.getByText(/8/)).toBeDefined()
     expect(screen.getByText(/5/)).toBeDefined()
+    expect(screen.getByText(/próximo bloco/)).toBeDefined()
+    expect(screen.getByText(/3 blocos/)).toBeDefined()
+    expect(screen.getByText(/6 blocos/)).toBeDefined()
   })
 })

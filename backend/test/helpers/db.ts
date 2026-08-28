@@ -52,6 +52,7 @@ export async function resetDb(): Promise<void> {
     ready = true
   }
 
+  await pool.query('DELETE FROM access_configs')
   await pool.query('DELETE FROM users')
   await pool.query('DELETE FROM backends')
 

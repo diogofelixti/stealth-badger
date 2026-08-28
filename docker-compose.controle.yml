@@ -36,8 +36,28 @@ services:
   backend:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # O diretório do projeto, em leitura, é o que dá ao backend o
+      # `docker-compose.yml` para o CLI do compose ler. Sem ele o painel liga e
+      # desliga o que já existe, e devolve o comando de `create` na mão.
+      #
+      # **O caminho de dentro é igual ao de fora, e isso é obrigatório.** O
+      # compose resolve `./services/tor/torrc` contra o diretório dele e entrega
+      # o caminho absoluto ao daemon — que é outro processo, no sistema de
+      # arquivos do host. Montado em `/projeto`, o daemon procurava
+      # `/projeto/services/tor/torrc` no host, não achava, e **criava um
+      # diretório vazio ali**: o Tor subia sem `torrc` e morria com
+      # `Unable to open configuration file`. Medido em 28/08.
+      #
+      # `:ro` aqui protege de verdade, ao contrário do socket acima: isto é
+      # arquivo, e o kernel recusa a escrita. O que ele **não** esconde é o
+      # `.env`, que o compose precisa ler para resolver as variáveis do
+      # arquivo. O backend já recebe MASTER_KEY_HEX e POSTGRES_PASSWORD pelo
+      # ambiente, então não há segredo novo aqui; há o mesmo segredo por um
+      # segundo caminho, e isso fica escrito em vez de descoberto depois.
+      - ${PWD}:${PWD}:ro
     environment:
       DOCKER_SOCKET: /var/run/docker.sock
+      COMPOSE_DIR: ${PWD}
       # O filtro por projeto existe para o painel não alcançar o `tor` de outro
       # compose que por acaso rode na mesma máquina.
       COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-coin-controll}

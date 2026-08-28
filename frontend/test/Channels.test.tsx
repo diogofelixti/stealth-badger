@@ -33,6 +33,12 @@ const CATALOGO: Catalog = {
   'channels.testOk': 'Chegou. O canal funciona.',
   'channels.testFail': 'Não chegou: {error}',
   'channels.topicHint': 'Quem souber o tópico recebe seus alertas.',
+  'channels.howTitle': 'Como isto funciona',
+  'channels.how1': 'O ntfy entrega push por tópico, e não por conta.',
+  'channels.how2': 'Instale o app ntfy, assine um tópico só seu, e cole aqui.',
+  'channels.how3': 'Este servidor publica cada alerta nesse tópico.',
+  'channels.how4':
+    'O que vai na mensagem: o rótulo da carteira, o título e o texto do alerta — e, em dust e address reuse, o endereço envolvido.',
 }
 
 function montar() {
@@ -99,5 +105,23 @@ describe('Channels', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /remover/i })).toBeDefined())
     fireEvent.click(screen.getByRole('button', { name: /remover/i }))
     await waitFor(() => expect(removeChannel).toHaveBeenCalledWith(7))
+  })
+})
+
+describe('o cartão de como funciona', () => {
+  it('explica o tópico antes de pedir um', async () => {
+    // O campo pedia "tópico" sem nada dizendo o que é um tópico nem onde se
+    // assina. Quem nunca usou ntfy não tinha como responder.
+    montar()
+    await waitFor(() => expect(screen.getByText('Como isto funciona')).toBeTruthy())
+    expect(screen.getByText(/push por tópico/)).toBeTruthy()
+    expect(screen.getByText(/Instale o app ntfy/)).toBeTruthy()
+  })
+
+  it('avisa que o endereço vai na mensagem', async () => {
+    // `dust_received` e `address_reused` levam `address` em `params`, e o push
+    // renderiza isso. Dizer que o aviso não vaza endereço seria falso.
+    montar()
+    await waitFor(() => expect(screen.getByText(/o endereço envolvido/)).toBeTruthy())
   })
 })

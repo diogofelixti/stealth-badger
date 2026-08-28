@@ -2117,6 +2117,287 @@ O working tree carrega, sem commit, os itens A, H, B, C, D, E e G1 a G5 do backl
 - ciclo de sincronização em **6 segundos** contra a signet
 - repositório **público**, licença MIT
 
+## Rodada de 28/08, ponto 6 - rótulo da carteira nos alertas
+
+**O que foi construído.** O feed de alertas passou a receber
+`wallet: { id, label }` pela consulta do backend e a mostrar o rótulo acima do
+título. O envio por canais consulta a carteira antes de renderizar e prefixa o
+título do ntfy com o rótulo, por exemplo `Cofre frio · Fundos recebidos`.
+
+**O que quebrou a premissa.** A primeira hipótese foi colocar `{walletLabel}`
+nas frases do catálogo. Ela caiu porque o motor de alertas gera candidatos com
+parâmetros mínimos, e os testes de renderização já provam esse contrato: sem
+injeção obrigatória de rótulo, a UI renderizaria `{walletLabel}` cru. O rótulo é
+contexto da carteira, não fato do evento.
+
+**O que ficou de dívida.** O modal de detalhe já mostrava `wallet.label` e não
+foi redesenhado para usar exatamente a mesma linha visual do feed. Ficou fora
+porque o defeito medido era feed e push, e mexer ali seria cosmética em cima de
+dado que já estava correto.
+
+**Validação.** `backend` passou em 52 arquivos e **618** testes; `frontend`
+passou em 25 arquivos e **240** testes. `npx tsc --noEmit` passou nos dois
+lados, e `git diff --check` passou.
+
+## Rodada de 28/08, ponto 7 - tela de Privacidade
+
+**O que foi construído.** Criada a rota `/privacidade`, com item na barra
+lateral e herança da `Shell`. A tela mostra resumo global do que já está no
+banco, seletor de carteira, lista de endereços e detalhe salvo de análise por
+endereço.
+
+**O que quebrou a premissa.** UTXO não é lista de endereço. Usar só
+`/api/wallets/:id/utxos` deixaria invisível justamente uma carteira sem saldo e
+com histórico, que é o caso levantado no teste manual. Por isso entrou
+`GET /api/wallets/:id/addresses`, lendo apenas banco local e trazendo
+`used`, saldo, contagem de UTXO e último score salvo.
+
+**O que ficou de dívida.** A página não dispara análise profunda sozinha. A
+decisão de produto permite isso se a tela nomear o host, mas este ponto fechou
+a visibilidade do dado local e o detalhe salvo; mandar endereço novo para um
+terceiro ficou para uma rodada própria.
+
+**Validação.** `backend` passou em 52 arquivos e **620** testes; `frontend`
+passou em 25 arquivos e **242** testes. `npx tsc --noEmit` passou nos dois
+lados, e `git diff --check` passou.
+
+## Rodada de 28/08, ponto 8 - gráficos do painel de privacidade
+
+**O que foi construído.** Os gráficos do `PrivacyPanel` passaram a ficar em
+caixas próprias, com a mesma régua visual dos cartões de acesso. O histograma
+de faixas de UTXO passou de `flex` para grade de cinco colunas, e o rótulo
+`10k-100k` ficou sem quebra.
+
+**O que quebrou a premissa.** A falha não era dado nem escala do gráfico, era
+layout: a faixa mais larga não cabia dentro de uma célula fluida estreita. O
+teste novo trava a estrutura que evita a regressão, embora overflow real ainda
+dependa de validação visual em navegador.
+
+**O que ficou de dívida.** Não houve screenshot de navegador nesta rodada. A
+correção foi coberta por teste estrutural e pela suíte completa, mas a medição
+de pixel em coluna estreita ficou para validação manual.
+
+**Validação.** `backend` passou em 52 arquivos e **620** testes; `frontend`
+passou em 25 arquivos e **243** testes. `npx tsc --noEmit` passou nos dois
+lados, e `git diff --check` passou.
+
+## Rodada de 28/08, ponto 9 - mercado e taxas no Painel
+
+**O que foi construído.** Preço e taxa saíram do cabeçalho. O `Mercado` passou
+a desenhar uma caixa própria no Painel, perto do saldo, só quando há fonte
+ligada. Taxa mostra sempre as três estimativas com legenda: próximo bloco, 3
+blocos e 6 blocos.
+
+**O que quebrou a premissa.** A premissa de que preço e taxa mereciam o topo
+caiu na conversa de produto: eles são contexto, enquanto o selo de postura é a
+tese do Stealth Badger. O teste que antes exigia `data-market="header"` foi
+invertido para provar que não há mercado no cabeçalho e que ele aparece no
+`main`.
+
+**O que ficou de dívida.** Não entrou tendência de preço nem cor por taxa alta.
+Sem limiar medido, isso viraria diagnóstico visual sem base. A decisão foi uma
+caixa discreta e legível.
+
+**Validação.** `backend` passou em 52 arquivos e **620** testes; `frontend`
+passou em 25 arquivos e **243** testes. `npx tsc --noEmit` passou nos dois
+lados, e `git diff --check` passou.
+
+## Rodada de 28/08, ponto 10 - configuração cifrada do acesso externo
+
+**O que foi construído.** `Acessos` virou `Acesso Externo` no catálogo. Entrou
+`access_configs`, cifrada sob `MASTER_KEY_HEX`, e rotas admin-only para salvar
+e ler resumo de configuração por perfil. A tela de caminho externo ganhou
+wizard de configuração para Tailscale e Cloudflare, com segredo em campo de
+senha e sem devolvê-lo depois de salvo. Para o segredo sair do banco e chegar
+ao processo, entrou uma ponte interna fora de `/api` e wrappers Go estáticos
+nas imagens derivadas de Tailscale e Cloudflared. Se `.env` já trouxer
+`TS_AUTHKEY` ou `TUNNEL_TOKEN`, o wrapper usa o fallback antigo; se não trouxer,
+busca o JSON interno, injeta env e executa o binário original.
+
+**O que quebrou a premissa.** Banco cifrado é o lugar certo para o segredo do
+painel, mas Docker `start` não injeta env em container já criado. O compose
+define `TS_AUTHKEY` e `TUNNEL_TOKEN` no `create`; depois disso o engine só
+liga e desliga. A primeira tentativa de ponte, com `busybox` copiado de Alpine,
+falhou no Tailscale com `exec /bin/busybox: no such file or directory`; a base
+não tinha o loader dinâmico esperado. O wrapper Go com `CGO_ENABLED=0` removeu
+essa dependência.
+
+**O que ficou de dívida.** A ponte interna não tem sessão própria. A defesa é
+de topologia: rota fora de `/api`, nginx sem proxy para ela, backend sem porta
+publicada no host. Isso mantém `MASTER_KEY_HEX` fora dos containers de acesso e
+evita arquivo no host, mas presume a rede do compose como fronteira.
+
+**Validação.** Backend focado em acesso: **57** testes. Suíte completa:
+`backend` 52 arquivos e **626** testes; `frontend` 25 arquivos e **244**
+testes. `npx tsc --noEmit` passou nos dois lados, `docker compose --profile
+tailscale config` e `docker compose --profile cloudflared config` passaram,
+as duas imagens derivadas construíram, e `git diff --check` passou.
+
+## Rodada de 28/08, ponto 11 - alerta de coinjoin e payjoin
+
+**O que foi construído.** O backend passou a gerar alerta `privacy_tx_type`
+quando o scanner devolve `txType` contendo `coinjoin` ou `payjoin`. A regra
+usa severidade informativa, dedupe por carteira, txid e classe, e texto no
+catálogo PT/EN dizendo o lado de quem recebeu a transação.
+
+**O que quebrou a premissa.** Coinjoin não é automaticamente risco para quem o
+fez; muitas vezes é justamente a proteção. O fluxo observado aqui é de
+transação que criou UTXO na carteira, então o texto só afirma isso: para quem
+recebeu, é contexto sensível antes de misturar com outros UTXO. Antes da
+mudança, `tx_scans.tx_type` já guardava o dado, mas nenhuma regra consumia
+`coinjoin`, `payjoin` ou `whirlpool`.
+
+**O que ficou de dívida.** Não há tentativa de inferir participação ativa no
+coinjoin/payjoin. O scanner dá uma classificação da transação; o alerta não
+transforma isso em autoria nem em acusação.
+
+**Validação.** Recorte de backend com **95** testes. Suíte completa: `backend`
+52 arquivos e **630** testes; `frontend` 25 arquivos e **244** testes. `npx
+tsc --noEmit` passou nos dois lados, e `git diff --check` passou.
+
+## Rodada de 28/08, ponto 12 - erro de fonte e histórico sem saldo
+
+**O que foi construído.** A API de carteiras passou a entregar contadores de
+histórico (`spentUtxoCount` e `usedAddressCount`). O cartão deixa de mostrar
+`0 sats` em erro inicial sem sincronização completa, nomeia a fonte que falhou
+pelo host e mostra o motivo salvo em `sync_error`. Carteira sem UTXO ativo mas
+com histórico ganhou linha própria, para não parecer vazia.
+
+A rota `/api/wallets/:id/utxos` passou a devolver também UTXO gasto, marcado
+com `spent` e `spentAtTxid`. A tabela mostra essa saída como histórico e tira o
+botão de congelar, porque gasto passado não é ação de coin control.
+
+**O que quebrou a premissa.** A suspeita de que a projeção apagava UTXO gasto
+não se confirmou: `events/project.ts` mantém `spent = true`. O apagamento era
+de apresentação, no `WHERE NOT u.spent` da rota de UTXO e nos contadores da
+listagem que só olhavam UTXO ativo. A outra parte também já estava medida no
+banco: a carteira em erro tinha `sync_error = "fetch failed"`, mas a UI
+mostrava zero antes de dizer que a fonte falhou.
+
+**O que ficou de dívida.** A carteira real `HotMain` não foi usada como prova
+final porque `mempool.space` segue inalcançável desta rede. A prova ficou em
+teste de projeção e UI, com o caso que faltava: histórico sem saldo ativo.
+
+**Validação.** Recorte backend com **55** testes; recorte frontend com **78**
+testes. Suíte completa: `backend` 52 arquivos e **632** testes; `frontend` 25
+arquivos e **247** testes. `npx tsc --noEmit` passou nos dois lados, e `git
+diff --check` passou.
+
+## Rodada de 28/08, tarde - fontes medidas, criar container por clique, endereços
+
+**O que foi construído.** Seis peças, uma frase cada:
+
+- `backend_health` guarda o estado medido de cada fonte, e `chain/saude.ts` o
+  mede fora do `tick()`, no boot e a cada cinco minutos;
+- a listagem de fontes deixou de materializar o backend do `.env`: a instância
+  oferece as quatro públicas, e o nó de quem hospeda entra pela tela como o de
+  qualquer outro usuário;
+- o seletor `Vigiar por` esconde fonte que respondeu `down` e diz quantas
+  ficaram de fora; `unknown` continua sendo oferecida, porque não é fonte ruim;
+- `access/compose.ts` chama o CLI do compose para criar e subir um caminho
+  externo por clique, em segundo plano, com a tela relendo o estado sozinha;
+- `Carteiras` ganhou o botão de vigiar carteira, e `Endereços` virou rota
+  própria para os endereços avulsos;
+- o cartão do ntfy explica tópico, app e o que a mensagem carrega.
+
+**O que quebrou a premissa.** Cinco medições, e as cinco mudaram o código:
+
+1. **A fonte do `.env` não era "morta": era um adapter que estourava.** Testar
+   uma fonte `core` montava o adapter de Bitcoin Core, que exige saber de qual
+   carteira se trata - cada carteira vigiada tem a sua carteira de observação no
+   nó -, e uma sonda não tem carteira nenhuma. O erro subia antes de qualquer
+   byte chegar ao nó. Com `getblockchaininfo` direto pelo RPC, a mesma fonte
+   responde `chain signet, altura 319.759`. O `nem funciona` era isto;
+2. **`Promise.all` na varredura derrubava tudo por causa de uma.** O throw do
+   item 1 acontecia fora do `try` da sonda, então a rejeição de uma fonte
+   deixava as outras quatro sem medição. Medido no boot: `falha ao medir as
+   fontes` e nenhuma linha em `backend_health`;
+3. **`docker compose create <servico>` sobe a cadeia de `depends_on`.** O `tor`
+   depende do `nginx`, que depende do `backend`. Criar o `tor` **recriou** os
+   dois, e o painel se recriou no meio da própria requisição: `000` no health
+   até alguém subir a pilha na mão. `create` não aceita `--no-deps`; `up`
+   aceita, e é ele que isola o serviço pedido;
+4. **Caminho relativo em compose rodado de dentro de container é resolvido no
+   host.** O compose transforma `./services/tor/torrc` em caminho absoluto e
+   entrega ao daemon, que é outro processo, no sistema de arquivos de fora. Com
+   o projeto montado em `/projeto`, o daemon procurou `/projeto/services/tor/torrc`
+   no host, não achou e **criou um diretório vazio ali**. O Tor subiu sem
+   `torrc` e morreu com `Unable to open configuration file`. O arquivo de
+   controle passou a montar o projeto no mesmo caminho de fora, `${PWD}:${PWD}`,
+   e o Tor bootstrapou até 50% na verificação seguinte;
+5. **`mempool.space` voltou a responder.** Às 08h02 as duas redes davam
+   `fetch failed`; às 15h02, `964.467` e `319.759`, em menos de um segundo. O
+   bloqueio era da rede e era transitório - o que confirma o item pelo avesso:
+   uma lista de fontes que não mede não tem como saber disso, e por isso a
+   medição precisa ser periódica em vez de uma nota no roteiro.
+
+**O que ficou de dívida**, com a razão:
+
+- **O `create` por clique não foi exercitado pela rota**, e sim pelo mesmo
+  comando que ela monta, rodado a partir da imagem do backend. Falta a volta
+  completa com sessão de admin, e ela não cabia sem cadastrar usuário no banco
+  recém-zerado que é o do teste manual de hoje;
+- **`--profile` continua obrigatório no argv.** Sem ele o serviço nem existe
+  para o compose, e por isso ele é montado aqui e não aceito do cliente;
+- **A imagem do backend cresceu com `docker-cli` e `docker-cli-compose`.** São
+  peso morto em qualquer instalação que não some `docker-compose.controle.yml`,
+  e a alternativa - uma segunda imagem só para isso - custaria mais do que o
+  peso;
+- **O diretório vazio `/projeto` ficou no host** da máquina de desenvolvimento,
+  criado pelo daemon no item 4. O conteúdo foi apagado; remover a pasta exige
+  root.
+
+**Validação.** Suíte completa: `backend` 54 arquivos e **653** testes;
+`frontend` 25 arquivos e **254** testes. `npx tsc --noEmit` passou nos dois
+lados, `git diff --check` passou, e `docker compose -f docker-compose.yml -f
+docker-compose.controle.yml config` resolve o projeto para `/home/bilbo/coin-controll`
+dos dois lados da montagem.
+
+## Rodada de 28/08, fim de tarde - a fonte que servia outra cadeia
+
+**O que foi construído.** `chain/rede-medida.ts` traduz o hash do bloco 0 para
+rede, e a sonda de saude passa a perguntar `blockHashAt(0)` depois da ponta -
+para o Bitcoin Core, a propria resposta de `getblockchaininfo` ja diz a cadeia.
+Fonte cuja cadeia servida contradiz a cadeia declarada e recusada com as duas
+nomeadas, fica `down` e some do seletor de carteira.
+
+**O que quebrou a premissa.** A altura da ponta era a prova de que a fonte
+serve, e ela nao e. Medido em 28/08: o Fulcrum desta maquina foi cadastrado
+como `mainnet`, respondeu `bloco 319.762` e o `Testar` disse **responde**. A
+altura prova que alguem esta do outro lado; ela nao prova qual cadeia. O
+sintoma relatado foi "a fonte nao aparece ao adicionar carteira" - ela
+aparecia, no grupo de mainnet, que nao era onde se procurava.
+
+O estrago maior seria o silencioso, e e ele que justifica a recusa: uma
+carteira de mainnet vigiada por servidor de signet devolve saldo zero e nenhum
+UTXO, e isso se parece com carteira vazia.
+
+Medido depois da correcao, contra as cinco fontes reais:
+
+```
+  2 mainnet  mempool.space/api           OK altura 964471 cadeia mainnet
+  3 signet   mempool.space/signet/api    OK altura 319764 cadeia signet
+  4 mainnet  blockstream.info/api        OK altura 964471 cadeia mainnet
+  5 signet   blockstream.info/signet/api OK altura 319764 cadeia signet
+305 mainnet  electrum://…:50001          RECUSADA: serve signet, cadastrada como mainnet
+```
+
+**O que ficou de divida**, com a razao:
+
+- **Genesis desconhecido nao vira contradicao.** Signet e parametrizavel, e
+  quem roda um signet proprio tem outro genesis - uma instalacao legitima.
+  `null` continua sendo `null`, e a fonte passa;
+- **A verificacao acontece na sonda, e nao no cadastro.** Recusar no `POST`
+  exigiria sondar dentro da rota, e as suites de rota passariam a sair para a
+  rede. A varredura roda no boot e a cada cinco minutos, entao a linha errada
+  vive no maximo esse intervalo antes de ser marcada;
+- **Nao ha botao de corrigir a rede da fonte.** A frase diz para cadastrar de
+  novo. Um `PATCH` de rede seria melhor e nao coube.
+
+**Validacao.** Suite completa: `backend` 54 arquivos e **657** testes;
+`frontend` 25 arquivos e **254** testes. `npx tsc --noEmit` passou nos dois
+lados, e a sonda foi rodada contra as cinco fontes reais desta maquina.
+
 ## Pendências
 
 > **O backlog de 27/08 está em

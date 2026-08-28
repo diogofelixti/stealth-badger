@@ -22,7 +22,11 @@ vi.mock('../src/lib/api', async importOriginal => {
 const { PrivacyPanel } = await import('../src/components/PrivacyPanel')
 
 const CATALOGO: Catalog = {
+  'privacy.measuredHere': 'Medido aqui, sem sair para a rede',
+  'privacy.measuredHereNote': 'Vem do que este watchtower sincronizou.',
   'privacy.findings': 'O que o scanner viu',
+  'error.privacy.blindScan':
+    'A análise não conseguiu consultar a cadeia. O resultado foi descartado em vez de guardado.',
   'privacy.scanUsedAddresses': 'Analisar endereços usados',
   'privacy.addressScanQueued': '{n} endereços na fila',
   'privacy.chartScore': 'Score',
@@ -96,6 +100,8 @@ function utxo(overrides: Partial<Utxo> = {}): Utxo {
     addressId: 1,
     valueSats: 50_000,
     height: 100,
+    spent: false,
+    spentAtTxid: null,
     address: 'tb1qteste',
     derivationPath: 'm/0/0',
     addressPrivacyScore: null,
@@ -167,6 +173,18 @@ describe('PrivacyPanel', () => {
     expect(screen.getByText(/total no histograma/)).toBeDefined()
   })
 
+  it('desenha cada gráfico em caixa e não deixa o rótulo largo do histograma quebrar', async () => {
+    privacy.mockResolvedValue(RELATORIO)
+    render(<PrivacyPanel walletId={1} catalog={CATALOGO} lang="pt" />)
+    fireEvent.click(screen.getByRole('button', { name: /o que o scanner viu/i }))
+
+    const titulo = await screen.findByText('Faixas de UTXO')
+    const caixa = titulo.closest('section')!
+    expect(caixa.className).toContain('rounded-lg')
+    expect(caixa.querySelector('.grid-cols-5')).not.toBeNull()
+    expect(screen.getByText('10k-100k').className).toContain('whitespace-nowrap')
+  })
+
   it('dispara análise profunda dos endereços usados por clique explícito', async () => {
     privacy.mockResolvedValue(RELATORIO)
     render(<PrivacyPanel walletId={1} catalog={CATALOGO} lang="pt" />)
@@ -204,5 +222,146 @@ describe('PrivacyPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /o que o scanner viu/i }))
 
     await waitFor(() => expect(screen.getByText(/não instalado/)).toBeDefined())
+  })
+
+  /*
+   * "Nada encontrado" e "não consegui olhar" não são a mesma resposta.
+   *
+   * Em 28/08 a varredura de uma carteira com 32 UTXOs e 7.552.468 sats devolveu
+   * score 70 · C com todo o walletInfo zerado, porque o scanner apontava para um
+   * RPC que ele não sabe consultar. O número foi guardado e passou a parecer um
+   * diagnóstico.
+   *
+   * Agora o backend descarta e devolve o código; a tela traduz, porque a
+   * interface é bilíngue e ler português no meio do inglês é a mesma falha de
+   * outro tipo.
+   */
+  it('traduz a recusa de varredura cega em vez de mostrar o texto do servidor', async () => {
+    privacy.mockResolvedValue({
+      latest: null,
+      history: [],
+      running: false,
+      error: 'o scanner respondeu que esta carteira não tem endereço...',
+      errorCode: 'privacy.blindScan',
+    } as PrivacyReport)
+
+    render(<PrivacyPanel walletId={1} catalog={CATALOGO} lang="pt" />)
+    fireEvent.click(screen.getByRole('button', { name: /o que o scanner viu/i }))
+
+    await waitFor(() =>
+      expect(screen.getByText(/não conseguiu consultar a cadeia/)).toBeDefined(),
+    )
+    expect(screen.getByRole('alert').getAttribute('data-error-code')).toBe(
+      'privacy.blindScan',
+    )
+  })
+
+  // Recusa sem código continua caindo no texto do servidor: pior que traduzido,
+  // muito melhor que a chave crua.
+  it('erro sem código mostra o que o servidor disse', async () => {
+    privacy.mockResolvedValue({
+      latest: null,
+      history: [],
+      running: false,
+      error: 'a fonte não respondeu',
+    } as PrivacyReport)
+
+    render(<PrivacyPanel walletId={1} catalog={CATALOGO} lang="pt" />)
+    fireEvent.click(screen.getByRole('button', { name: /o que o scanner viu/i }))
+
+    await waitFor(() => expect(screen.getByText('a fonte não respondeu')).toBeDefined())
+  })
+
+  /*
+   * Primeira mão ganha de segunda.
+   *
+   * O reuso vinha de `walletInfo`, que é o que o scanner viu. Em 28/08 o
+   * scanner devolveu tudo zero e a barra mostrou "0 de 0" numa carteira que
+   * tinha reuso, e que tinha dois alertas de `address reuse` gerados pelo
+   * próprio watchtower a partir dos eventos que ele gravou ao sincronizar.
+   */
+  it('mostra o reuso que o watchtower mediu, e não o que o scanner disse', async () => {
+    privacy.mockResolvedValue({
+      ...RELATORIO,
+      latest: {
+        ...RELATORIO.latest!,
+        // o scanner cego: tudo zero
+        walletInfo: { activeAddresses: 0, reusedAddresses: 0 },
+      },
+      measured: { activeAddresses: 30, reusedAddresses: 2 },
+    } as PrivacyReport)
+
+    render(<PrivacyPanel walletId={1} catalog={CATALOGO} lang="pt" />)
+    fireEvent.click(screen.getByRole('button', { name: /o que o scanner viu/i }))
+
+    await waitFor(() => expect(screen.getByText(/2 de 30/)).toBeDefined())
+  })
+
+  // Instância antiga que ainda não manda `measured` não pode ficar sem barra.
+  it('sem o medido, cai no que o scanner informou', async () => {
+    privacy.mockResolvedValue({
+      ...RELATORIO,
+      latest: {
+        ...RELATORIO.latest!,
+        walletInfo: { activeAddresses: 10, reusedAddresses: 3 },
+      },
+    } as PrivacyReport)
+
+    render(<PrivacyPanel walletId={1} catalog={CATALOGO} lang="pt" />)
+    fireEvent.click(screen.getByRole('button', { name: /o que o scanner viu/i }))
+
+    await waitFor(() => expect(screen.getByText(/3 de 10/)).toBeDefined())
+  })
+})
+
+describe('sem varredura nenhuma', () => {
+  beforeEach(() => {
+    utxos.mockReset()
+    utxos.mockResolvedValue([
+      utxo({ valueSats: 500 }),
+      utxo({ valueSats: 50_000 }),
+      utxo({ valueSats: 2_000_000 }),
+    ])
+  })
+
+  it('mostra o que o watchtower mediu sozinho, sem pedir nada a terceiro', async () => {
+    // Medido em 28/08 numa carteira vigiada por Fulcrum: 32 UTXOs e dois
+    // alertas de address reuse no banco, e a tela dizendo apenas "privacidade
+    // ainda não analisada". Esconder o que a casa mediu até que um scanner de
+    // terceiro rode empurra quem vigia pelo próprio servidor para o explorador
+    // público, que é o oposto do que este produto defende.
+    privacy.mockResolvedValue({
+      latest: null,
+      history: [],
+      running: false,
+      error: null,
+      measured: { activeAddresses: 30, reusedAddresses: 2 },
+    })
+
+    render(<PrivacyPanel walletId={1} catalog={CATALOGO} lang="pt" />)
+    fireEvent.click(screen.getByRole('button', { name: /o que o scanner viu/i }))
+
+    await waitFor(() =>
+      expect(screen.getByText('Medido aqui, sem sair para a rede')).toBeTruthy(),
+    )
+    expect(screen.getByText('Faixas de UTXO')).toBeTruthy()
+    expect(screen.getByText('2 de 30 endereços usados de novo')).toBeTruthy()
+  })
+
+  it('sem UTXO nenhum, não inventa gráfico', async () => {
+    utxos.mockResolvedValue([])
+    privacy.mockResolvedValue({
+      latest: null,
+      history: [],
+      running: false,
+      error: null,
+      measured: { activeAddresses: 0, reusedAddresses: 0 },
+    })
+
+    render(<PrivacyPanel walletId={1} catalog={CATALOGO} lang="pt" />)
+    fireEvent.click(screen.getByRole('button', { name: /o que o scanner viu/i }))
+
+    await waitFor(() => expect(privacy).toHaveBeenCalled())
+    expect(screen.queryByText('Medido aqui, sem sair para a rede')).toBeNull()
   })
 })

@@ -14,6 +14,7 @@ import {
   validarBackend,
   type AuthDoBackend,
 } from './backends'
+import { guardarMedicao, sondarPelaPonta } from './saude'
 
 interface CriarBackendBody {
   kind?: string
@@ -139,6 +140,96 @@ export function registerBackendRoutes(
       adapter.close?.()
     }
   })
+  /**
+   * Esta fonte responde?
+   *
+   * Existe porque a lista de fontes mentia por omissão: as duas `mempool.space`
+   * que a instância semeia estão **inalcançáveis** da rede desta máquina, e
+   * apareciam exatamente iguais às que funcionam. Quem cadastrava uma carteira
+   * nelas descobria o problema como `fetch failed` num canto da tela, minutos
+   * depois.
+   *
+   * A altura da ponta é a prova mais barata de que a fonte serve: se ela
+   * responde isso, responde o resto.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/api/backends/:id/test',
+    async (req, reply) => {
+      if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
+
+      const { rows } = await pool.query<{
+        id: string
+        kind: string
+        url: string
+        is_public: boolean
+        network: Network
+        credentials_encrypted: Buffer | null
+      }>(
+        `SELECT id, kind, url, is_public, network, credentials_encrypted
+           FROM backends
+          WHERE id = $1 AND (user_id IS NULL OR user_id = $2)`,
+        [Number(req.params.id), req.userId],
+      )
+      const linha = rows[0]
+      if (!linha) {
+        return reply.code(404).send(erro('backend.notFound', 'fonte não encontrada'))
+      }
+
+      // O Bitcoin Core não passa pelo adapter aqui: ele exige saber de qual
+      // carteira se trata, e um teste de fonte não tem carteira nenhuma. Sem
+      // este desvio, `Testar` numa fonte Core estourava antes de falar com o
+      // nó — que era exatamente o "nem funciona" da fonte do `.env`.
+      if (linha.kind === 'core') {
+        const comecouCore = Date.now()
+        const medicao = await sondarPelaPonta({
+          id: Number(linha.id),
+          kind: 'core',
+          url: linha.url,
+          isPublic: linha.is_public,
+          network: linha.network,
+          credentialsEncrypted: linha.credentials_encrypted,
+        })
+        await guardarMedicao(Number(linha.id), medicao)
+        return reply.send(
+          medicao.ok
+            ? { ok: true, height: medicao.height ?? 0, ms: Date.now() - comecouCore }
+            : { ok: false, ms: Date.now() - comecouCore, reason: medicao.error ?? '' },
+        )
+      }
+
+      const adapter = adapterFactory({
+        kind: linha.kind,
+        url: linha.url,
+        isPublic: linha.is_public,
+        network: linha.network,
+        credentialsEncrypted: linha.credentials_encrypted,
+      })
+      const comecou = Date.now()
+      try {
+        const height = await adapter.tipHeight()
+        // O teste é a medição: guardá-la é o que faz o seletor de carteira
+        // parar de oferecer uma fonte que já respondeu que não.
+        await guardarMedicao(Number(linha.id), { ok: true, height })
+        return reply.send({ ok: true, height, ms: Date.now() - comecou })
+      } catch (err) {
+        // 200 com `ok: false`, e não 502: a fonte não ter respondido é o
+        // resultado do teste, e não uma falha da requisição. A tela precisa do
+        // motivo para poder mostrá-lo ao lado da fonte.
+        await guardarMedicao(Number(linha.id), {
+          ok: false,
+          error: (err as Error).message,
+        })
+        return reply.send({
+          ok: false,
+          ms: Date.now() - comecou,
+          reason: (err as Error).message,
+        })
+      } finally {
+        adapter.close?.()
+      }
+    },
+  )
+
   app.get<{ Querystring: ListarBackendsQuery }>('/api/backends', async (req, reply) => {
     if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
     const { network } = req.query

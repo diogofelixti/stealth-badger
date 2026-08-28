@@ -17,6 +17,11 @@ export interface BackendPosture {
  * soberano vira uma linha discreta; sem carteira cadastrada ainda não há
  * postura a declarar, e a linha é neutra.
  */
+/** Régua vertical entre grupos do cabeçalho. */
+function Divisor() {
+  return <span aria-hidden="true" className="hidden h-7 w-px shrink-0 bg-line sm:block" />
+}
+
 function PrivacyStripe({ backend }: { backend: BackendPosture | null }) {
   if (backend?.isPublic) {
     return <div aria-hidden="true" data-posture="public" className="h-[5px] shrink-0 bg-stripe-warning" />
@@ -60,12 +65,10 @@ export function PrivacyBadge({ isPublic, host, label }: BackendPosture) {
 export function Shell({
   children,
   backend = null,
-  market,
   actions,
 }: {
   children: ReactNode
   backend?: BackendPosture | null
-  market?: ReactNode
   actions?: ReactNode
 }) {
   return (
@@ -84,9 +87,11 @@ export function Shell({
             <span className="text-base font-semibold uppercase tracking-label">Stealth Badger</span>
           </div>
 
+          {/* Ações ficam separadas do aviso de postura: o selo é estado do
+              produto, os botões são comandos da sessão. */}
           <div className="flex flex-wrap items-center gap-4 sm:gap-5">
             {backend && <PrivacyBadge {...backend} />}
-            {market}
+            {backend && actions && <Divisor />}
             {actions}
           </div>
         </header>

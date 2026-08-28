@@ -80,7 +80,7 @@ export function loadConfig(): Config {
         ? process.env.CORE_URL ?? 'http://127.0.0.1:8332'
         : eletrum
           ? process.env.ELECTRUM_URL ?? 'electrum://127.0.0.1:50001'
-          : process.env.ESPLORA_URL ?? 'https://mempool.space/signet/api',
+          : process.env.ESPLORA_URL ?? 'https://blockstream.info/signet/api',
     network,
     publicBackend,
     workerIntervalMs,

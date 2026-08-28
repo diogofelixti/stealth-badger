@@ -66,11 +66,66 @@ export interface ScanOptions {
   canonicalXpub: string
   scriptType: ScriptType
   network: Network
-  /** o mesmo backend que vigia a carteira */
+  /** a fonte de análise: Esplora, e não necessariamente a fonte de cadeia */
   backendUrl: string
   gapLimit?: number
   runner?: ScanRunner
   timeoutMs?: number
+  /**
+   * O que o watchtower já mediu sozinho, de primeira mão.
+   *
+   * Serve para desmentir um scanner cego: ele sincronizou esta carteira,
+   * contou os UTXOs e guardou os eventos. Quando o scanner diz que ela está
+   * vazia e a projeção local diz que não está, quem está errado é o scanner.
+   */
+  jaMedido?: { utxos: number }
+}
+
+/**
+ * O código da recusa que separa "nada encontrado" de "não consegui olhar".
+ *
+ * Em 28/08 a varredura de uma carteira com 32 UTXOs e 7.552.468 sats devolveu
+ * **score 70 · C** com todo o `walletInfo` zerado, porque o scanner estava
+ * apontado para um RPC que ele não sabe consultar. Os dois campos obrigatórios
+ * vieram, então o resultado foi guardado — e um número que não mediu nada
+ * passou a parecer um diagnóstico.
+ *
+ * É o produto cometendo o que existe para denunciar. Daí a recusa ter código
+ * próprio: a tela precisa dizer *por que* não sabe, e não mostrar um erro
+ * genérico nem, muito pior, um score.
+ */
+export const CODIGO_VARREDURA_CEGA = 'privacy.blindScan'
+
+export class VarreduraCega extends Error {
+  readonly code = CODIGO_VARREDURA_CEGA
+  constructor(
+    /** o que a projeção local já contava */
+    readonly utxosConhecidos: number,
+  ) {
+    super(
+      `o scanner respondeu que esta carteira não tem endereço, transação nem ` +
+        `UTXO, mas o watchtower já sincronizou ${utxosConhecidos} UTXO(s) nela. ` +
+        `Isso não é uma carteira vazia: é uma varredura que não conseguiu ` +
+        `consultar a cadeia. O resultado foi descartado em vez de guardado.`,
+    )
+    this.name = 'VarreduraCega'
+  }
+}
+
+/**
+ * O scanner enxergou alguma coisa?
+ *
+ * A cegueira é o conjunto **inteiro** zerado. Um campo qualquer em zero é
+ * informação legítima — carteira que gastou tudo tem `totalUtxos: 0` e
+ * `totalTxs` alto —, e recusar por um campo faria a regra virar zelo cego.
+ */
+function naoViuNada(info: WalletInfo): boolean {
+  return (
+    Number(info.activeAddresses ?? 0) === 0 &&
+    Number(info.totalTxs ?? 0) === 0 &&
+    Number(info.totalUtxos ?? 0) === 0 &&
+    Number(info.totalBalance ?? 0) === 0
+  )
 }
 
 /**
@@ -316,6 +371,13 @@ export async function scanWallet(opts: ScanOptions): Promise<PrivacyScan> {
 
   if (typeof bruto.score !== 'number' || !bruto.walletInfo) {
     throw new Error('o scanner devolveu JSON sem score ou sem walletInfo')
+  }
+
+  // Sem saber o que o watchtower mediu não há como desmentir ninguém, e
+  // inventar a recusa seria o mesmo defeito ao contrário.
+  const conhecidos = opts.jaMedido?.utxos ?? 0
+  if (conhecidos > 0 && naoViuNada(bruto.walletInfo)) {
+    throw new VarreduraCega(conhecidos)
   }
 
   // `links.analysis` traz o xpub embutido numa URL de terceiro. Não entra no

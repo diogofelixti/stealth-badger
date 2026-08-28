@@ -296,7 +296,9 @@ describe('kyc_origin — origem dos fundos', () => {
     params: {},
   }
 
-  async function comFundos(txScanner: () => Promise<{ findings: unknown[]; scannerVersion: string }>) {
+  async function comFundos(
+    txScanner: () => Promise<{ findings: unknown[]; scannerVersion: string; txType?: string }>,
+  ) {
     const montado = await comCarteira(async () => RESULTADO, txScanner)
     const a = await pool.query<{ id: string }>(
       `INSERT INTO addresses (wallet_id, chain, idx, derivation_path, address, scripthash)
@@ -364,6 +366,36 @@ describe('kyc_origin — origem dos fundos', () => {
     expect(
       alertas.json().items.filter((a: { type: string }) => a.type === 'kyc_origin'),
     ).toHaveLength(0)
+  })
+
+  it('alerta quando o scanner classifica a transação recebida como coinjoin', async () => {
+    const { app, cookie, walletId } = await comFundos(async () => ({
+      findings: [],
+      txType: 'whirlpool-coinjoin',
+      scannerVersion: '0.34.2',
+    }))
+    await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${walletId}/scan`,
+      cookies: { sb_session: cookie },
+    })
+    await aguardarScan(walletId)
+    await aguardarOrigens(walletId)
+
+    const alertas = await app.inject({
+      method: 'GET',
+      url: '/api/alerts',
+      cookies: { sb_session: cookie },
+    })
+    const alerta = alertas
+      .json()
+      .items.find((a: { type: string }) => a.type === 'privacy_tx_type')
+    expect(alerta).toBeDefined()
+    expect(alerta.severity).toBe('info')
+    expect(alerta.params).toMatchObject({
+      txType: 'whirlpool-coinjoin',
+      meaning: '@tx_type.coinjoin.received',
+    })
   })
 
   // Cada `scan tx` custa segundos contra a cadeia. Reanalisar a mesma
@@ -636,6 +668,48 @@ describe('análise profunda por endereço usado', () => {
       addressPrivacyScore: 0,
       addressPrivacyGrade: 'F',
     })
+  })
+
+  it('lista endereços da carteira com saldo e último score salvo sem consultar fora', async () => {
+    const ctx = await comEnderecoUsado()
+    await ctx.app.inject({
+      method: 'POST',
+      url: `/api/wallets/${ctx.walletId}/addresses/${ctx.addressId}/privacy`,
+      cookies: { sb_session: ctx.cookie },
+    })
+    await aguardarAddressScan(ctx.addressId)
+
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/wallets/${ctx.walletId}/addresses`,
+      cookies: { sb_session: ctx.cookie },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()[0]).toMatchObject({
+      id: ctx.addressId,
+      address: 'bc1qreusado',
+      derivationPath: '0/0',
+      used: true,
+      utxoCount: 1,
+      balanceSats: '500000',
+      privacyScore: 0,
+      privacyGrade: 'F',
+    })
+    expect(ctx.pedidos).toEqual(['bc1qreusado'])
+  })
+
+  it('não lista endereço de carteira de outra pessoa', async () => {
+    const dono = await comEnderecoUsado()
+    const outro = await comCarteira()
+
+    const res = await outro.app.inject({
+      method: 'GET',
+      url: `/api/wallets/${dono.walletId}/addresses`,
+      cookies: { sb_session: outro.cookie },
+    })
+
+    expect(res.statusCode).toBe(404)
   })
 
   it('dispara análise para todos os endereços usados da carteira', async () => {

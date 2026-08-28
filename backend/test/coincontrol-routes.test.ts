@@ -75,10 +75,38 @@ describe('GET /api/wallets/:id/utxos', () => {
       txid: TXID,
       vout: 0,
       valueSats: 5000,
+      spent: false,
+      spentAtTxid: null,
       address: 'bc1qexemplo',
       derivationPath: '0/0',
       frozen: false,
       tags: [],
+    })
+  })
+
+  it('lista UTXO gasto como histórico da carteira', async () => {
+    const { app, cookie, walletId } = await comUtxo()
+    await appendEvent({
+      walletId,
+      type: 'utxo_spent',
+      height: 101,
+      blockHash: 'cc',
+      txid: TXID,
+      vout: 0,
+      payload: { spentAtTxid: 'bb'.repeat(32) },
+    })
+    await projectWallet(walletId)
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/wallets/${walletId}/utxos`,
+      cookies: { sb_session: cookie },
+    })
+
+    expect(res.json()[0]).toMatchObject({
+      txid: TXID,
+      spent: true,
+      spentAtTxid: 'bb'.repeat(32),
     })
   })
 })

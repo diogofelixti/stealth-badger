@@ -11,6 +11,15 @@
  */
 const emAndamento = new Map<number, Promise<void>>()
 const ultimoErro = new Map<number, string>()
+/**
+ * O código do último erro, quando ele tem um.
+ *
+ * A mensagem sozinha não dá para traduzir, e a tela é bilíngue. Erros com
+ * código — como a recusa de varredura cega — precisam chegar traduzíveis: a
+ * pessoa tem de entender **por que** o sistema não sabe, e não ler um texto em
+ * português no meio de uma interface em inglês.
+ */
+const ultimoCodigo = new Map<number, string>()
 const enderecosEmAndamento = new Map<number, Promise<void>>()
 const ultimoErroDeEndereco = new Map<number, string>()
 const transacoesEmAndamento = new Map<string, Promise<void>>()
@@ -24,6 +33,10 @@ export function erroDoUltimoScan(walletId: number): string | null {
   return ultimoErro.get(walletId) ?? null
 }
 
+export function codigoDoUltimoScan(walletId: number): string | null {
+  return ultimoCodigo.get(walletId) ?? null
+}
+
 /** Registra e dispara. Se já houver uma análise correndo, não faz nada. */
 export function registrarScan(walletId: number, tarefa: () => Promise<void>): boolean {
   if (emAndamento.has(walletId)) return false
@@ -32,10 +45,14 @@ export function registrarScan(walletId: number, tarefa: () => Promise<void>): bo
     try {
       await tarefa()
       ultimoErro.delete(walletId)
+      ultimoCodigo.delete(walletId)
     } catch (err) {
       // Uma análise que falha não pode derrubar o processo: o watchtower
       // continua vigiando mesmo sem saber o score.
       ultimoErro.set(walletId, (err as Error).message)
+      const codigo = (err as { code?: string }).code
+      if (codigo) ultimoCodigo.set(walletId, codigo)
+      else ultimoCodigo.delete(walletId)
       console.error(
         'falha ao analisar privacidade da carteira ' + walletId + ': ' + (err as Error).message,
       )

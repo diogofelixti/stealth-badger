@@ -129,7 +129,7 @@ describe('loadConfig', () => {
 
     expect(config.port).toBe(3000)
     expect(config.network).toBe('signet')
-    expect(config.backendUrl).toBe('https://mempool.space/signet/api')
+    expect(config.backendUrl).toBe('https://blockstream.info/signet/api')
     expect(config.publicBackend).toBe(true)
   })
 

@@ -12,6 +12,8 @@ export interface UtxoNaTela extends Marca {
   addressId: number
   valueSats: number
   height: number | null
+  spent: boolean
+  spentAtTxid: string | null
   address: string
   derivationPath: string
   addressPrivacyScore: number | null
@@ -75,13 +77,15 @@ export async function marcasDaCarteira(walletId: number): Promise<Marca[]> {
   return rows
 }
 
-/** UTXOs não gastos, já com a marca do usuário costurada. */
+/** UTXOs atuais e histórico gasto, já com a marca do usuário costurada. */
 export async function utxosDaCarteira(walletId: number): Promise<UtxoNaTela[]> {
   const { rows } = await pool.query<{
     txid: string
     vout: number
     value_sats: string
     height: number | null
+    spent: boolean
+    spent_at_txid: string | null
     address_id: string
     address: string
     derivation_path: string
@@ -92,7 +96,7 @@ export async function utxosDaCarteira(walletId: number): Promise<UtxoNaTela[]> {
     tags: string[] | null
     frozen: boolean | null
   }>(
-    `SELECT u.txid, u.vout, u.value_sats, u.height,
+    `SELECT u.txid, u.vout, u.value_sats, u.height, u.spent, u.spent_at_txid,
             a.id AS address_id, a.address, a.derivation_path,
             aps.score AS address_privacy_score,
             aps.grade AS address_privacy_grade,
@@ -108,8 +112,8 @@ export async function utxosDaCarteira(walletId: number): Promise<UtxoNaTela[]> {
           WHERE s.wallet_id = u.wallet_id AND s.address_id = a.id
           ORDER BY s.scanned_at DESC, s.id DESC LIMIT 1
        ) aps ON true
-      WHERE u.wallet_id = $1 AND NOT u.spent
-      ORDER BY u.value_sats DESC, u.txid, u.vout`,
+      WHERE u.wallet_id = $1
+      ORDER BY u.spent, u.value_sats DESC, u.txid, u.vout`,
     [walletId],
   )
   return rows.map(r => ({
@@ -118,6 +122,8 @@ export async function utxosDaCarteira(walletId: number): Promise<UtxoNaTela[]> {
     addressId: Number(r.address_id),
     valueSats: Number(r.value_sats),
     height: r.height,
+    spent: r.spent,
+    spentAtTxid: r.spent_at_txid,
     address: r.address,
     derivationPath: r.derivation_path,
     addressPrivacyScore: r.address_privacy_score,

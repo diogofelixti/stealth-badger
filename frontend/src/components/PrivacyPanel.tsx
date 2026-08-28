@@ -13,6 +13,7 @@ import { render } from '../lib/i18n'
 import { Button } from './ui/Button'
 
 const rotulo = 'text-xs uppercase tracking-label text-faint'
+const caixaDoGrafico = 'rounded-lg border border-line bg-surface p-4'
 type PrivacyLatest = NonNullable<PrivacyReport['latest']>
 
 /**
@@ -124,33 +125,133 @@ export function RecommendationView({ recommendation }: { recommendation: Privacy
   )
 }
 
+/**
+ * O que o watchtower mediu sozinho, sem scanner e sem sair para a rede.
+ *
+ * ── Por que isto é um componente separado ─────────────────────────────────
+ * Estes dois gráficos saem de dados que a aplicação já tem: o histograma vem
+ * dos UTXOs que ela sincronizou pela fonte de cadeia da carteira, e o reuso vem
+ * do log de eventos dela mesma. Nenhum dos dois precisa do `am-i-exposed`.
+ *
+ * Estavam, porém, dentro do bloco que só aparece **depois** de uma varredura.
+ * O efeito, medido em 28/08 numa carteira vigiada por Fulcrum: 32 UTXOs e dois
+ * alertas de address reuse no banco, e a tela dizendo "privacidade ainda não
+ * analisada" e mais nada. Quem vigia pelo próprio servidor via a tela afirmar
+ * que não sabia o que ela já tinha medido, e a única saída oferecida era
+ * entregar os endereços a um explorador público.
+ *
+ * O scanner continua sendo o que acrescenta o que só ele tem: base de
+ * entidades, heurísticas de transação e Boltzmann. O que a casa mediu aparece
+ * antes disso, e sem pedir nada a ninguém.
+ */
+function GraficosMedidosAqui({
+  utxos,
+  medido,
+  reserva,
+  catalog,
+  lang,
+}: {
+  utxos: Utxo[]
+  medido: PrivacyReport['measured']
+  /**
+   * O que o scanner informou, usado só quando `measured` não veio.
+   *
+   * Instância antiga que ainda não manda `measured` não fica sem barra. Sem
+   * varredura nenhuma não há reserva, e aí o número é o do próprio watchtower
+   * ou não há número.
+   */
+  reserva?: { ativos: number; reusados: number }
+  catalog: Catalog
+  lang: Lang
+}) {
+  const bins = histogramaUtxos(utxos)
+  const maiorBin = Math.max(1, ...bins.map(b => b.count))
+  /*
+   * Primeira mão ganha de segunda.
+   *
+   * O reuso vinha de `walletInfo`, que é o que o **scanner** viu. Em 28/08 o
+   * scanner devolveu tudo zero, nem chegava a consultar a cadeia, e a barra
+   * mostrou "0 de 0" numa carteira que tinha reuso e dois alertas de address
+   * reuse gerados pelo próprio watchtower.
+   *
+   * `measured` é o que a aplicação contou na cadeia que ela mesma sincronizou.
+   */
+  const ativos = medido?.activeAddresses ?? reserva?.ativos ?? 0
+  const reusados = medido?.reusedAddresses ?? reserva?.reusados ?? 0
+  const percentualReuso = ativos > 0 ? (reusados / ativos) * 100 : 0
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+        <section className={caixaDoGrafico}>
+          <span className={rotulo}>{render(catalog, 'privacy.chartUtxos', {}, lang)}</span>
+          <div className="mt-2 grid h-24 grid-cols-5 items-end gap-1">
+            {bins.map(bin => (
+              <div key={bin.label} className="flex min-w-0 flex-col items-center gap-1">
+                <div className="flex h-16 w-full items-end bg-raised">
+                  <div
+                    className="w-full"
+                    style={{
+                      height: largura((bin.count / maiorBin) * 100),
+                      background: bin.dust ? 'var(--sb-critical)' : 'var(--sb-warning)',
+                    }}
+                  />
+                </div>
+                <span className="whitespace-nowrap text-[10px] leading-none text-faint">{bin.label}</span>
+                <span className="text-xs">{bin.count}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={caixaDoGrafico}>
+          <span className={rotulo}>{render(catalog, 'privacy.chartReuse', {}, lang)}</span>
+          <div className="mt-2 h-3 overflow-hidden rounded-sm bg-raised">
+            <div className="h-full bg-critical" style={{ width: largura(percentualReuso) }} />
+          </div>
+          <p className="mt-1 text-sm">
+            {render(catalog, 'privacy.reusedAddresses', { reused: reusados, total: ativos }, lang)}
+          </p>
+        </section>
+
+    </div>
+  )
+}
+
 function PrivacyCharts({
   relatorio,
   history,
   utxos,
+  medido,
   catalog,
   lang,
 }: {
   relatorio: PrivacyLatest
   history: PrivacyReport['history']
   utxos: Utxo[]
+  /** o que o watchtower contou na cadeia que ele mesmo sincronizou */
+  medido: PrivacyReport['measured']
   catalog: Catalog
   lang: Lang
 }) {
   const severidades = contagemPorSeveridade(relatorio.findings)
   const maiorSeveridade = Math.max(1, ...Object.values(severidades))
-  const bins = histogramaUtxos(utxos)
-  const maiorBin = Math.max(1, ...bins.map(b => b.count))
-  const ativos = numero(relatorio.walletInfo.activeAddresses) ?? 0
-  const reusados = numero(relatorio.walletInfo.reusedAddresses) ?? 0
-  const percentualReuso = ativos > 0 ? (reusados / ativos) * 100 : 0
   const recorrentes = contrapartes(relatorio.findings)
   const maiorRecorrencia = Math.max(1, ...recorrentes.map(c => c.count))
 
   return (
     <div className="mt-3 border-t border-line pt-3">
-      <div className="grid gap-4 md:grid-cols-2">
-        <section>
+      <GraficosMedidosAqui
+        utxos={utxos}
+        medido={medido}
+        reserva={{
+          ativos: numero(relatorio.walletInfo.activeAddresses) ?? 0,
+          reusados: numero(relatorio.walletInfo.reusedAddresses) ?? 0,
+        }}
+        catalog={catalog}
+        lang={lang}
+      />
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <section className={caixaDoGrafico}>
           <span className={rotulo}>{render(catalog, 'privacy.chartScore', {}, lang)}</span>
           <div
             className="mt-2 h-3 overflow-hidden rounded-sm bg-raised"
@@ -161,7 +262,7 @@ function PrivacyCharts({
           <p className="mt-1 text-sm">{relatorio.score}/100 · {relatorio.grade}</p>
         </section>
 
-        <section>
+        <section className={caixaDoGrafico}>
           <span className={rotulo}>{render(catalog, 'privacy.chartSeverity', {}, lang)}</span>
           <div className="mt-2 flex flex-col gap-1">
             {Object.entries(severidades).map(([severity, count]) => (
@@ -182,38 +283,7 @@ function PrivacyCharts({
           </div>
         </section>
 
-        <section>
-          <span className={rotulo}>{render(catalog, 'privacy.chartUtxos', {}, lang)}</span>
-          <div className="mt-2 flex h-24 items-end gap-2">
-            {bins.map(bin => (
-              <div key={bin.label} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-                <div className="flex h-16 w-full items-end bg-raised">
-                  <div
-                    className="w-full"
-                    style={{
-                      height: largura((bin.count / maiorBin) * 100),
-                      background: bin.dust ? 'var(--sb-critical)' : 'var(--sb-warning)',
-                    }}
-                  />
-                </div>
-                <span className="text-xs text-faint">{bin.label}</span>
-                <span className="text-xs">{bin.count}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <span className={rotulo}>{render(catalog, 'privacy.chartReuse', {}, lang)}</span>
-          <div className="mt-2 h-3 overflow-hidden rounded-sm bg-raised">
-            <div className="h-full bg-critical" style={{ width: largura(percentualReuso) }} />
-          </div>
-          <p className="mt-1 text-sm">
-            {render(catalog, 'privacy.reusedAddresses', { reused: reusados, total: ativos }, lang)}
-          </p>
-        </section>
-
-        <section className="md:col-span-2">
+        <section className={`${caixaDoGrafico} md:col-span-2`}>
           <span className={rotulo}>{render(catalog, 'privacy.chartHistory', {}, lang)}</span>
           <div className="mt-2 flex h-24 items-end gap-1">
             {history.map((ponto, i) => (
@@ -228,7 +298,7 @@ function PrivacyCharts({
         </section>
 
         {recorrentes.length > 0 && (
-          <section className="md:col-span-2">
+          <section className={`${caixaDoGrafico} md:col-span-2`}>
             <span className={rotulo}>{render(catalog, 'privacy.chartCounterparties', {}, lang)}</span>
             <div className="mt-2 flex flex-col gap-1">
               {recorrentes.map(c => (
@@ -321,10 +391,41 @@ export function PrivacyPanel({
         {render(catalog, 'privacy.findings', {}, lang)}
       </Button>
 
+      {/* A recusa com código é traduzida; a sem código cai no texto do
+          servidor, que é pior que traduzido e muito melhor que a chave crua.
+          `blindScan` é o caso que motivou isto: dizer "não consegui olhar" em
+          vez de mostrar um score que não mediu nada. */}
       {aberto && relatorio?.error && (
-        <p role="alert" className="mt-2 text-xs" style={{ color: 'var(--sb-critical)' }}>
-          {relatorio.error}
+        <p
+          role="alert"
+          data-error-code={relatorio.errorCode ?? undefined}
+          className="mt-2 font-prose text-sm leading-relaxed"
+          style={{ color: 'var(--sb-warning)' }}
+        >
+          {relatorio.errorCode && catalog['error.' + relatorio.errorCode]
+            ? render(catalog, 'error.' + relatorio.errorCode, {}, lang)
+            : relatorio.error}
         </p>
+      )}
+
+      {/* Sem varredura, a tela mostrava só "privacidade ainda não analisada".
+          Mas o watchtower já mediu o tamanho dos UTXOs e o reuso de endereço
+          pela fonte de cadeia da própria carteira, e esconder isso até que um
+          scanner de terceiro rode empurra quem vigia pelo próprio servidor para
+          o explorador público. O que a casa mediu aparece primeiro. */}
+      {aberto && !relatorio?.latest && utxos.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <p className={rotulo}>{render(catalog, 'privacy.measuredHere', {}, lang)}</p>
+          <p className="mb-3 mt-1 font-prose text-sm leading-relaxed text-muted">
+            {render(catalog, 'privacy.measuredHereNote', {}, lang)}
+          </p>
+          <GraficosMedidosAqui
+            utxos={utxos}
+            medido={relatorio?.measured}
+            catalog={catalog}
+            lang={lang}
+          />
+        </div>
       )}
 
       {aberto && relatorio?.latest && (
@@ -361,6 +462,7 @@ export function PrivacyPanel({
             relatorio={relatorio.latest}
             history={relatorio.history}
             utxos={utxos}
+            medido={relatorio.measured}
             catalog={catalog}
             lang={lang}
           />

@@ -20,9 +20,12 @@ export async function saveAlert(c: AlertCandidate): Promise<number | null> {
 
 export async function recentAlerts(userId: number, limit = 50) {
   const { rows } = await pool.query(
-    `SELECT id, wallet_id AS "walletId", type, severity, params,
-            created_at AS "createdAt", read_at AS "readAt"
-       FROM alerts WHERE user_id = $1
+    `SELECT a.id, a.wallet_id::int AS "walletId", a.type, a.severity, a.params,
+            a.created_at AS "createdAt", a.read_at AS "readAt",
+            jsonb_build_object('id', w.id::int, 'label', w.label) AS wallet
+       FROM alerts a
+       JOIN wallets w ON w.id = a.wallet_id
+      WHERE a.user_id = $1
       ORDER BY created_at DESC LIMIT $2`,
     [userId, limit],
   )
@@ -85,33 +88,33 @@ export async function listarAlertas(
 ): Promise<PaginaDeAlertas> {
   const limite = Math.min(Math.max(Number(filtro.limit) || PADRAO, 1), TETO)
 
-  const condicoes = ['user_id = $1']
+  const condicoes = ['a.user_id = $1']
   const valores: unknown[] = [userId]
 
   const posicao = filtro.cursor ? lerCursor(filtro.cursor) : null
   if (posicao) {
     valores.push(posicao.createdAt, posicao.id)
-    condicoes.push(`(created_at, id) < ($${valores.length - 1}::timestamptz, $${valores.length}::bigint)`)
+    condicoes.push(`(a.created_at, a.id) < ($${valores.length - 1}::timestamptz, $${valores.length}::bigint)`)
   }
   if (filtro.type) {
     valores.push(filtro.type)
-    condicoes.push(`type = $${valores.length}`)
+    condicoes.push(`a.type = $${valores.length}`)
   }
   if (filtro.severity) {
     valores.push(filtro.severity)
-    condicoes.push(`severity = $${valores.length}`)
+    condicoes.push(`a.severity = $${valores.length}`)
   }
   if (filtro.walletId) {
     valores.push(filtro.walletId)
-    condicoes.push(`wallet_id = $${valores.length}`)
+    condicoes.push(`a.wallet_id = $${valores.length}`)
   }
   if (filtro.since) {
     valores.push(filtro.since)
-    condicoes.push(`created_at >= $${valores.length}::timestamptz`)
+    condicoes.push(`a.created_at >= $${valores.length}::timestamptz`)
   }
   if (filtro.until) {
     valores.push(filtro.until)
-    condicoes.push(`created_at <= $${valores.length}::timestamptz`)
+    condicoes.push(`a.created_at <= $${valores.length}::timestamptz`)
   }
 
   // Pede um a mais do que o limite: é o que diz se existe página seguinte sem
@@ -119,11 +122,13 @@ export async function listarAlertas(
   valores.push(limite + 1)
 
   const { rows } = await pool.query(
-    `SELECT id, wallet_id AS "walletId", type, severity, params,
-            created_at AS "createdAt", read_at AS "readAt"
-       FROM alerts
+    `SELECT a.id, a.wallet_id::int AS "walletId", a.type, a.severity, a.params,
+            a.created_at AS "createdAt", a.read_at AS "readAt",
+            jsonb_build_object('id', w.id::int, 'label', w.label) AS wallet
+       FROM alerts a
+       JOIN wallets w ON w.id = a.wallet_id
       WHERE ${condicoes.join(' AND ')}
-      ORDER BY created_at DESC, id DESC
+      ORDER BY a.created_at DESC, a.id DESC
       LIMIT $${valores.length}`,
     valores,
   )

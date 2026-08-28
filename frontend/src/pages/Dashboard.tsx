@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { AlertDetail } from '../components/AlertDetail'
 import { Channels } from '../components/Channels'
 import { Search } from '../components/Search'
+import { Mercado } from '../components/Mercado'
 import { render } from '../lib/i18n'
 import { Button } from '../components/ui/Button'
 
@@ -224,6 +225,10 @@ export function Dashboard({
           )}
 
           {!semCarteira && (
+            <Mercado catalog={catalog} lang={lang} />
+          )}
+
+          {!semCarteira && (
             <>
               <div className="h-px bg-line" />
 
@@ -265,7 +270,7 @@ export function Dashboard({
                 wallet={w}
                 catalog={catalog}
                 lang={lang}
-                onScan={() => void api.scanPrivacy(w.id).then(recarregar)}
+                onScan={() => api.scanPrivacy(w.id).then(recarregar)}
                 onArchive={() =>
                   void api
                     .archiveWallet(w.id)
@@ -353,6 +358,7 @@ export function Dashboard({
             alerts={alerts}
             catalog={catalog}
             lang={lang}
+            walletLabels={Object.fromEntries(wallets.map(w => [w.id, w.label]))}
             temMais={cursor !== null}
             onLoadMore={() => void carregarMais()}
             onSelect={setAlertaAberto}

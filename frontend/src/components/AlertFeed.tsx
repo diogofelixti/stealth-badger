@@ -22,6 +22,7 @@ export function AlertFeed({
   alerts,
   catalog,
   lang,
+  walletLabels = {},
   temMais = false,
   onLoadMore,
   onSelect,
@@ -29,6 +30,7 @@ export function AlertFeed({
   alerts: Alert[]
   catalog: Catalog
   lang: Lang
+  walletLabels?: Record<number, string>
   /** há página seguinte no cursor do servidor */
   temMais?: boolean
   onLoadMore?: () => void
@@ -47,6 +49,7 @@ export function AlertFeed({
     <div className="flex flex-col gap-3">
       {recentes.map(a => {
         const { title, body } = renderAlert(catalog, a.type, a.params, lang)
+        const walletLabel = a.wallet?.label ?? walletLabels[a.walletId]
         return (
           <article
             key={a.id}
@@ -70,7 +73,14 @@ export function AlertFeed({
             <div className="w-1 shrink-0" style={{ background: regua(a.severity) }} />
             <div className="flex-grow px-[18px] py-4">
               <div className="mb-2 flex items-baseline justify-between gap-4">
-                <h3 className="text-base font-semibold">{title}</h3>
+                <div className="min-w-0">
+                  {walletLabel && (
+                    <p className="mb-1 truncate text-xs font-semibold uppercase tracking-label text-faint">
+                      {walletLabel}
+                    </p>
+                  )}
+                  <h3 className="text-base font-semibold">{title}</h3>
+                </div>
                 <span
                   className="whitespace-nowrap text-xs font-semibold uppercase tracking-label"
                   style={{ color: COR[a.severity] }}

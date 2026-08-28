@@ -559,3 +559,102 @@ describe('POST /api/backends/detect', () => {
     expect(lista.json().every((b: { kind: string }) => b.kind !== 'core')).toBe(true)
   })
 })
+
+describe('POST /api/backends/:id/test', () => {
+  /*
+   * Por que este teste existe.
+   *
+   * As duas fontes `mempool.space` que a instância semeia estavam
+   * **inalcançáveis** da rede da máquina de desenvolvimento, medido em 28/08:
+   * o host não completa a conexão, enquanto `blockstream.info` responde em
+   * 0,65 s. Na lista de fontes as duas apareciam idênticas às que funcionam, e
+   * quem cadastrava carteira numa delas só descobria pelo `fetch failed`.
+   *
+   * A altura da ponta é a prova mais barata de que a fonte serve.
+   */
+  async function comFonte(tip: () => Promise<number>) {
+    const app = buildApp({
+      adapterFactory: () =>
+        ({
+          tipHeight: tip,
+          capabilities: () => ({ host: 'exemplo', supportsAddressHistory: true }),
+        }) as never,
+    })
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'dono@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'dono@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO backends (user_id, kind, url, is_public, network, preset)
+       VALUES (NULL, 'esplora', 'https://exemplo/api', true, 'mainnet', 'mempool')
+       RETURNING id`,
+    )
+    return { app, cookie, id: Number(rows[0]!.id) }
+  }
+
+  it('fonte que responde devolve a altura da ponta', async () => {
+    const { app, cookie, id } = await comFonte(async () => 964420)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/backends/${id}/test`,
+      cookies: { sb_session: cookie },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({ ok: true, height: 964420 })
+  })
+
+  // 200 com `ok: false`, e não 502: não ter respondido é o **resultado** do
+  // teste, e não uma falha da requisição. A tela precisa do motivo para
+  // mostrá-lo ao lado da fonte.
+  it('fonte que não responde é resultado, e não erro de requisição', async () => {
+    const { app, cookie, id } = await comFonte(async () => {
+      throw new Error('fetch failed')
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/backends/${id}/test`,
+      cookies: { sb_session: cookie },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({ ok: false, reason: 'fetch failed' })
+  })
+
+  it('não testa fonte de outra pessoa', async () => {
+    const { app, cookie } = await comFonte(async () => 1)
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO users (email, password_hash, is_admin, language)
+       VALUES ('outro@exemplo.com', 'x', false, 'pt') RETURNING id`,
+    )
+    const { rows: alheia } = await pool.query<{ id: string }>(
+      `INSERT INTO backends (user_id, kind, url, is_public, network, preset)
+       VALUES ($1, 'esplora', 'https://alheia/api', true, 'mainnet', 'mempool')
+       RETURNING id`,
+      [Number(rows[0]!.id)],
+    )
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/backends/${Number(alheia[0]!.id)}/test`,
+      cookies: { sb_session: cookie },
+    })
+
+    expect(res.statusCode).toBe(404)
+  })
+
+  it('recusa sem autenticação', async () => {
+    const app = buildApp()
+    const res = await app.inject({ method: 'POST', url: '/api/backends/1/test' })
+    expect(res.statusCode).toBe(401)
+  })
+})

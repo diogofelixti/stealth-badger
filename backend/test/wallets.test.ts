@@ -577,6 +577,40 @@ describe('POST /api/wallets com endereço avulso', () => {
       syncError: 'Too many unspent',
     })
   })
+
+  it('resume histórico mesmo quando não há UTXO ativo', async () => {
+    const { app, cookie } = await logado()
+    const criada = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Doações', address: ENDERECO },
+    })
+    const walletId = Number(criada.json().id)
+    const endereco = await pool.query<{ id: string }>(
+      `INSERT INTO addresses (wallet_id, chain, idx, derivation_path, address, scripthash, is_used)
+       VALUES ($1,0,1,'0/1','bc1qhistorico','aa',true) RETURNING id`,
+      [walletId],
+    )
+    await pool.query(
+      `INSERT INTO utxos (wallet_id, txid, vout, address_id, value_sats, height, spent)
+       VALUES ($1,$2,0,$3,5000,100,true)`,
+      [walletId, '55'.repeat(32), Number(endereco.rows[0]!.id)],
+    )
+
+    const lista = await app.inject({
+      method: 'GET',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+    })
+
+    expect(lista.json()[0]).toMatchObject({
+      balanceSats: '0',
+      utxoCount: 0,
+      spentUtxoCount: 1,
+      usedAddressCount: 1,
+    })
+  })
 })
 
 // Um backend que exige registro de descriptor não responde por endereço:

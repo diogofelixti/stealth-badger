@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { buildApp } from '../src/app'
 import { confirmationState, dedupeKey } from '../src/alerts/dedupe'
-import { alertsForEvent, alertsForOrigin, alertsForScan } from '../src/alerts/rules'
+import {
+  alertsForEvent,
+  alertsForOrigin,
+  alertsForScan,
+  alertsForTxType,
+} from '../src/alerts/rules'
 import { listarAlertas, saveAlert } from '../src/alerts/store'
 import { pool } from '../src/db/pool'
 import type { StoredEvent } from '../src/events/log'
@@ -258,6 +263,44 @@ describe('alertsForOrigin — origem dos fundos', () => {
   })
 })
 
+describe('alertsForTxType — coinjoin e payjoin', () => {
+  const ctx = { userId: 7, walletId: 3, eventId: 99, txid: 'ab'.repeat(32) }
+
+  it('não alerta transação simples', () => {
+    expect(alertsForTxType({ ...ctx, txType: 'simple-payment' })).toEqual([])
+  })
+
+  it('alerta coinjoin como informação, dizendo o lado de quem recebeu', () => {
+    const [a] = alertsForTxType({ ...ctx, txType: 'whirlpool-coinjoin' })
+
+    expect(a).toMatchObject({
+      type: 'privacy_tx_type',
+      severity: 'info',
+      walletId: 3,
+      eventId: 99,
+    })
+    expect(a!.params).toMatchObject({
+      txType: 'whirlpool-coinjoin',
+      meaning: '@tx_type.coinjoin.received',
+    })
+    expect(a!.dedupeKey).toContain(':coinjoin')
+
+    const pt = renderAlert(a!.type, a!.params, 'pt')
+    const en = renderAlert(a!.type, a!.params, 'en')
+    expect(pt.body).toContain('Para você, que recebeu')
+    expect(en.body).toContain('For you as the receiver')
+    expect(pt.body).not.toContain('{')
+    expect(en.body).not.toContain('{')
+  })
+
+  it('alerta payjoin com a própria explicação', () => {
+    const [a] = alertsForTxType({ ...ctx, txType: 'payjoin' })
+
+    expect(a!.params.meaning).toBe('@tx_type.payjoin.received')
+    expect(a!.dedupeKey).toContain(':payjoin')
+  })
+})
+
 describe('paginação do feed por cursor', () => {
   let userId: number
   let walletId: number
@@ -361,6 +404,18 @@ describe('paginação do feed por cursor', () => {
 
     expect(p.items).toHaveLength(2)
     expect(p.items.every(a => a['type'] === 'address_reused')).toBe(true)
+  })
+
+  it('leva o rótulo da carteira junto com o alerta do feed', async () => {
+    await pool.query('UPDATE wallets SET label = $1 WHERE id = $2', ['Cofre frio', walletId])
+    await alerta('2026-08-27T10:00:00Z')
+
+    const p = await listarAlertas(userId, { limit: 10 })
+
+    expect(p.items[0]).toMatchObject({
+      walletId,
+      wallet: { id: walletId, label: 'Cofre frio' },
+    })
   })
 })
 

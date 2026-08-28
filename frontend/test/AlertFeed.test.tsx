@@ -55,6 +55,31 @@ describe('AlertFeed', () => {
     expect(critico.textContent).toContain('tb1q...306fyu')
   })
 
+  it('mostra de qual carteira veio o alerta', () => {
+    renderDom(
+      <AlertFeed
+        alerts={[{ ...alertas[0]!, wallet: { id: 1, label: 'Cofre frio' } }]}
+        catalog={catalogo}
+        lang="pt"
+      />,
+    )
+
+    expect(screen.getByText('Cofre frio')).toBeDefined()
+  })
+
+  it('usa o rótulo do contexto quando o SSE ainda trouxe só o id', () => {
+    renderDom(
+      <AlertFeed
+        alerts={[alertas[0]!]}
+        catalog={catalogo}
+        lang="pt"
+        walletLabels={{ 1: 'Carteira quente' }}
+      />,
+    )
+
+    expect(screen.getByText('Carteira quente')).toBeDefined()
+  })
+
   it('mostra estado vazio quando não há alerta', () => {
     renderDom(<AlertFeed alerts={[]} catalog={catalogo} lang="pt" />)
     expect(screen.getByText(/nenhum alerta/i)).toBeDefined()

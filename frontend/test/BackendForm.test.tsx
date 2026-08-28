@@ -37,6 +37,14 @@ const CATALOGO: Catalog = {
     'Este watchtower roda em container: localhost aqui é o próprio container, não a sua máquina. Use host.docker.internal.',
   'backends.save': 'Adicionar backend',
   'backends.isPublic': 'É um serviço público de terceiro',
+  'backends.whatYouHave': 'O que você tem?',
+  'backends.group.no': 'Um nó Bitcoin Core meu',
+  'backends.group.servidor': 'Um servidor Electrum ou Esplora meu',
+  'backends.group.publico': 'Nenhum dos dois: usar um explorador público',
+  'backends.publicNote': 'Ele vê todos os endereços que você consultar.',
+  'backends.network': 'Rede',
+  'privacy.public': 'exposta',
+  'privacy.sovereign': 'soberana',
   'backend.networkRequired': 'Rede',
   'network.mainnet': 'mainnet',
   'network.signet': 'signet',
@@ -49,8 +57,27 @@ function montar(rede: 'mainnet' | 'signet' | 'testnet' = 'signet') {
   )
 }
 
+/**
+ * O formulário passou a perguntar **o que você tem** antes de qual programa é.
+ * O grupo abre a lista certa; escolher o preset direto só funciona depois dele.
+ */
+const GRUPO_DE: Record<string, RegExp> = {
+  'core-datadir': /nó bitcoin core meu/i,
+  core: /nó bitcoin core meu/i,
+  fulcrum: /servidor electrum ou esplora meu/i,
+  electrs: /servidor electrum ou esplora meu/i,
+  floresta: /servidor electrum ou esplora meu/i,
+  electrum: /servidor electrum ou esplora meu/i,
+  esplora: /servidor electrum ou esplora meu/i,
+  mempool: /explorador público/i,
+  blockstream: /explorador público/i,
+}
+
 function escolher(fonte: string) {
-  fireEvent.change(screen.getByLabelText(/fonte/i), { target: { value: fonte } })
+  fireEvent.click(screen.getByLabelText(GRUPO_DE[fonte]!))
+  const lista = screen.queryByLabelText(/^fonte$/i)
+  // Grupo com um preset só não desenha lista: o único já está escolhido.
+  if (lista) fireEvent.change(lista, { target: { value: fonte } })
 }
 
 beforeEach(() => {
@@ -158,8 +185,12 @@ describe('BackendForm — Bitcoin Core pelo diretório', () => {
     fireEvent.click(screen.getByRole('button', { name: /procurar/i }))
 
     await waitFor(() => expect(detectNode).toHaveBeenCalledWith('/mnt/dados2'))
-    await waitFor(() => expect(screen.getByText(/319\.631|319631/)).toBeDefined())
-    expect(screen.getByText(/signet/)).toBeDefined()
+    // A frase da detecção, e não qualquer "signet" na tela: o seletor de rede
+    // também tem essa palavra, e casar com ele provaria outra coisa.
+    await waitFor(() =>
+      expect(screen.getByText(/achei um nó de signet na altura/)).toBeDefined(),
+    )
+    expect(screen.getByText(/319\.631|319631/)).toBeDefined()
   })
 
   // O container não enxerga o disco de quem hospeda: dizer "não achei" sem

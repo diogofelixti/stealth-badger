@@ -4,7 +4,6 @@ import { api, type Backend, type Catalog, type Lang, type Me, type Wallet } from
 import { Shell } from '../components/Shell'
 import { LangToggle } from '../components/LangToggle'
 import { Button } from '../components/ui/Button'
-import { Mercado } from '../components/Mercado'
 import { render } from '../lib/i18n'
 
 function host(url: string): string {
@@ -53,6 +52,16 @@ export interface ContextoDoPainel {
   carregado: boolean
   /** rebusca carteiras e fontes: a postura do topo depende delas */
   recarregar: () => Promise<void>
+  /**
+   * Manda a prévia de preço e taxa reler as preferências.
+   *
+   * O `Mercado` pergunta as preferências uma vez, ao montar. Sem este aviso,
+   * ligar uma fonte de preço em Configurações não aparecia na prévia até
+   * recarregar a página inteira, e a pessoa ficava sem saber se salvou.
+   */
+  mercadoMudou: () => void
+  /** o contador por trás do aviso: quem desenha um `Mercado` o usa como `key` */
+  versaoDoMercado: number
 }
 
 export function useDadosDoPainel(): ContextoDoPainel {
@@ -62,7 +71,9 @@ export function useDadosDoPainel(): ContextoDoPainel {
 const ROTAS = [
   { para: '/', chave: 'nav.panel' },
   { para: '/carteiras', chave: 'nav.wallets' },
+  { para: '/enderecos', chave: 'nav.addresses' },
   { para: '/alertas', chave: 'nav.alerts' },
+  { para: '/privacidade', chave: 'nav.privacy' },
   { para: '/configuracoes', chave: 'nav.settings' },
   { para: '/acessos', chave: 'nav.access' },
 ] as const
@@ -91,6 +102,10 @@ export function Layout({
   const [wallets, setWallets] = useState<Wallet[]>([])
   const [fontes, setFontes] = useState<Backend[]>([])
   const [carregado, setCarregado] = useState(false)
+  // Remontar o `Mercado` é o jeito mais curto de fazê-lo reler tudo: ele já
+  // sabe buscar sozinho ao montar, e duplicar essa busca aqui seria manter duas
+  // cópias da mesma regra de "só consulta se o usuário ligou".
+  const [versaoDoMercado, setVersaoDoMercado] = useState(0)
   const { pathname } = useLocation()
 
   const recarregar = useCallback(async () => {
@@ -117,12 +132,13 @@ export function Layout({
     fontes,
     carregado,
     recarregar,
+    mercadoMudou: () => setVersaoDoMercado(v => v + 1),
+    versaoDoMercado,
   }
 
   return (
     <Shell
       backend={postura(wallets, catalog, lang)}
-      market={<Mercado catalog={catalog} lang={lang} compact />}
       actions={
         <>
           <LangToggle lang={lang} onChange={onLang} />

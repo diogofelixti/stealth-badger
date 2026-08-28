@@ -115,6 +115,7 @@ export async function controlarPerfil(
   perfil: Perfil,
   acao: Acao,
   chamar: ChamadaDoEngine,
+  opts: { criar?: (perfil: Perfil) => 'started' | 'running' | 'unavailable' } = {},
 ): Promise<Resultado> {
   const base = { profile: perfil, action: acao }
 
@@ -133,12 +134,21 @@ export async function controlarPerfil(
     }
   }
 
-  // O engine sabe iniciar e parar o que existe; ele não sabe o que o
-  // `docker-compose.yml` diz. Criar o container daqui exigiria reescrever a
-  // definição do serviço dentro deste arquivo, e aí tela e compose passariam a
-  // discordar em silêncio na primeira vez que um dos dois mudasse. O painel não
-  // inventa: devolve o comando exato, uma vez só, e daí em diante controla.
+  // O engine sabe iniciar e parar o que existe, e não sabe o que o
+  // `docker-compose.yml` diz. Quem sabe é o CLI do compose, e é ele que
+  // `compose.ts` chama — lendo o mesmo arquivo, sem definição duplicada e sem
+  // nada que possa divergir dele. A volta é imediata de propósito: criar puxa
+  // imagem, e a rota não pode ficar pendurada esperando por isso.
   if (encontrados.length === 0) {
+    if (acao === 'up' && opts.criar) {
+      const pedido = opts.criar(perfil)
+      if (pedido === 'started' || pedido === 'running') {
+        return { ...base, ok: true, state: 'creating' }
+      }
+    }
+
+    // Sem o diretório do projeto montado, o painel não inventa: devolve o
+    // comando exato, uma vez só, e daí em diante controla pelo engine.
     return {
       ...base,
       ok: false,

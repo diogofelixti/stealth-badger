@@ -110,6 +110,7 @@ export function AlertsPage() {
         alerts={alerts}
         catalog={catalog}
         lang={lang}
+        walletLabels={Object.fromEntries(wallets.map(w => [w.id, w.label]))}
         temMais={cursor !== null}
         onSelect={setAberto}
         onLoadMore={() => {

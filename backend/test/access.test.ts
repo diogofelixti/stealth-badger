@@ -3,6 +3,8 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildApp, type AppOptions } from '../src/app'
+import { open } from '../src/crypto/secretbox'
+import { pool } from '../src/db/pool'
 import { resetDb } from './helpers/db'
 
 async function logado(opts: AppOptions = {}) {
@@ -121,6 +123,28 @@ describe('GET /api/access', () => {
     expect(res.json().tailscale).toMatchObject({
       enabled: true,
       hostname: 'badger.tail1234.ts.net',
+    })
+  })
+
+  it('o Tailscale usa o hostname salvo pelo wizard antes do fallback do .env', async () => {
+    process.env.TAILSCALE_HOSTNAME = 'antigo.tail.ts.net'
+    const { app, cookie } = await logado()
+    await app.inject({
+      method: 'PUT',
+      url: '/api/access/config/tailscale',
+      cookies: { sb_session: cookie },
+      payload: { hostname: 'novo.tail.ts.net', authKey: 'tskey-auth-abc' },
+    })
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/access',
+      cookies: { sb_session: cookie },
+    })
+
+    expect(res.json().tailscale).toMatchObject({
+      enabled: true,
+      hostname: 'novo.tail.ts.net',
     })
   })
 
@@ -243,7 +267,13 @@ describe('GET /api/access', () => {
     })
 
     // O primeiro usuário cadastrado é o admin da instância.
-    expect(res.json().control).toEqual({ available: true, isAdmin: true })
+    // `canCreate` é falso porque este teste não monta o diretório do projeto:
+    // o painel liga e desliga, e ainda não sabe criar.
+    expect(res.json().control).toEqual({
+      available: true,
+      isAdmin: true,
+      canCreate: false,
+    })
   })
 
   it('recusa sem autenticação: por onde o painel é alcançável não é dado público', async () => {
@@ -438,6 +468,116 @@ describe('POST /api/access/control', () => {
       reason: 'notCreated',
       command: 'docker compose --profile cloudflared create',
     })
+  })
+})
+
+describe('configuração do wizard de acesso externo', () => {
+  it('salva credencial cifrada e só devolve resumo', async () => {
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/access/config/cloudflared',
+      cookies: { sb_session: cookie },
+      payload: { hostname: 'painel.exemplo.com', token: 'token-secreto' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({
+      profile: 'cloudflared',
+      configured: true,
+      hostname: 'painel.exemplo.com',
+      hasSecret: true,
+    })
+    expect(JSON.stringify(res.json())).not.toContain('token-secreto')
+
+    const banco = await pool.query<{ config_encrypted: Buffer }>(
+      'SELECT config_encrypted FROM access_configs WHERE profile = $1',
+      ['cloudflared'],
+    )
+    expect(banco.rows[0]!.config_encrypted.toString('utf8')).not.toContain('token-secreto')
+    expect(open(banco.rows[0]!.config_encrypted, process.env.MASTER_KEY_HEX!)).toContain(
+      'token-secreto',
+    )
+  })
+
+  it('recusa configuração incompleta antes de gravar', async () => {
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/access/config/tailscale',
+      cookies: { sb_session: cookie },
+      payload: { hostname: 'badger.tail.ts.net' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('access.badConfig')
+    const banco = await pool.query('SELECT 1 FROM access_configs')
+    expect(banco.rowCount).toBe(0)
+  })
+
+  it('entrega env shell somente pela ponte interna do perfil configurado', async () => {
+    const { app, cookie } = await logado()
+    await app.inject({
+      method: 'PUT',
+      url: '/api/access/config/tailscale',
+      cookies: { sb_session: cookie },
+      payload: { hostname: 'badger.tail.ts.net', authKey: "tskey-auth-a'b" },
+    })
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/internal/access/config/tailscale/env',
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['cache-control']).toBe('no-store')
+    expect(res.body).toContain("export TS_AUTHKEY='tskey-auth-a'\"'\"'b'")
+    expect(res.body).toContain("export TAILSCALE_HOSTNAME='badger.tail.ts.net'")
+  })
+
+  it('entrega env JSON para o wrapper estático do container', async () => {
+    const { app, cookie } = await logado()
+    await app.inject({
+      method: 'PUT',
+      url: '/api/access/config/cloudflared',
+      cookies: { sb_session: cookie },
+      payload: { hostname: 'painel.exemplo.com', token: 'token-secreto' },
+    })
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/internal/access/config/cloudflared/runtime-env',
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['cache-control']).toBe('no-store')
+    expect(res.json()).toEqual({
+      TUNNEL_TOKEN: 'token-secreto',
+      CLOUDFLARE_HOSTNAME: 'painel.exemplo.com',
+    })
+  })
+
+  it('não entrega env interno para perfil inexistente ou não configurado', async () => {
+    const { app } = await logado()
+
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/internal/access/config/cloudflared/env',
+        })
+      ).statusCode,
+    ).toBe(404)
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/internal/access/config/tor/env',
+        })
+      ).statusCode,
+    ).toBe(404)
   })
 })
 

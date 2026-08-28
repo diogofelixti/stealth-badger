@@ -4,6 +4,8 @@ import type { Acessos, Catalog } from '../src/lib/api'
 
 const access = vi.fn()
 const accessControl = vi.fn()
+const accessConfig = vi.fn()
+const saveAccessConfig = vi.fn()
 
 vi.mock('../src/lib/api', async importOriginal => {
   const real = await importOriginal<typeof import('../src/lib/api')>()
@@ -13,6 +15,8 @@ vi.mock('../src/lib/api', async importOriginal => {
       ...real.api,
       access: () => access(),
       accessControl: (...a: unknown[]) => accessControl(...a),
+      accessConfig: (...a: unknown[]) => accessConfig(...a),
+      saveAccessConfig: (...a: unknown[]) => saveAccessConfig(...a),
     },
   }
 })
@@ -39,11 +43,21 @@ const CATALOGO: Catalog = {
   'access.docs': 'documentação completa deste caminho',
   'access.activate': 'Ativar',
   'access.deactivate': 'Desativar',
+  'access.configure': 'Configurar',
+  'access.configTitle': 'Configurar acesso',
+  'access.hostname': 'Hostname',
+  'access.authKey': 'TS_AUTHKEY',
+  'access.tunnelToken': 'TUNNEL_TOKEN',
+  'access.saveConfig': 'Salvar configuração',
+  'access.configSaved': 'configuração salva cifrada',
+  'access.configured': 'configurado',
+  'access.notConfigured': 'não configurado',
   'access.controlTitle': 'Ligar e desligar por aqui',
   'access.socketNote': 'uma sessão do painel vale execução de código na máquina que hospeda',
   'access.socketOff': 'Esta instância lê os acessos e não os controla',
   'access.adminOnlyNote': 'Ligar e desligar acesso externo é do admin da instância',
   'access.runOnce': 'Este perfil nunca subiu nesta máquina',
+  'access.script': 'Ou o caminho curto, que não exige decorar as flags do compose.',
   'access.off': 'não configurado',
   'access.tor.sees': 'Ninguém no meio vê o tráfego nem o destino.',
   'access.tor.step1': 'Suba o perfil na máquina que hospeda.',
@@ -74,7 +88,21 @@ const ESTADO = (mudanca: Partial<Acessos> = {}): Acessos => ({
 beforeEach(() => {
   access.mockReset()
   accessControl.mockReset()
+  accessConfig.mockReset()
+  saveAccessConfig.mockReset()
   access.mockResolvedValue(ESTADO())
+  accessConfig.mockResolvedValue({
+    profile: 'tailscale',
+    configured: false,
+    hostname: null,
+    hasSecret: false,
+  })
+  saveAccessConfig.mockResolvedValue({
+    profile: 'tailscale',
+    configured: true,
+    hostname: 'badger.tail.ts.net',
+    hasSecret: true,
+  })
 })
 
 function montar(caminho: 'tor' | 'tailscale' | 'cloudflare' = 'tor') {
@@ -168,6 +196,29 @@ describe('CaminhoExterno', () => {
     expect(screen.getByText(/vale execução de código na máquina que hospeda/)).toBeDefined()
   })
 
+  it('admin configura Tailscale pelo wizard, sem a credencial voltar para a tela', async () => {
+    access.mockResolvedValue(ESTADO({ control: { available: true, isAdmin: true } }))
+    montar('tailscale')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Configurar' })).toBeDefined())
+    fireEvent.click(screen.getByRole('button', { name: 'Configurar' }))
+    fireEvent.change(screen.getByLabelText('Hostname'), {
+      target: { value: 'badger.tail.ts.net' },
+    })
+    fireEvent.change(screen.getByLabelText('TS_AUTHKEY'), {
+      target: { value: 'tskey-auth-secreta' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar configuração' }))
+
+    await waitFor(() =>
+      expect(saveAccessConfig).toHaveBeenCalledWith('tailscale', {
+        authKey: 'tskey-auth-secreta',
+        hostname: 'badger.tail.ts.net',
+      }),
+    )
+    expect(screen.queryByDisplayValue('tskey-auth-secreta')).toBeNull()
+  })
+
   it('ligar manda o perfil do compose, e não o nome do caminho', async () => {
     access.mockResolvedValue(
       ESTADO({
@@ -223,6 +274,8 @@ describe('CaminhoExterno', () => {
     await waitFor(() =>
       expect(screen.getByText('docker compose --profile tor create')).toBeDefined(),
     )
+    // O caminho automatizado vem primeiro: um comando resolve os três perfis.
+    expect(screen.getByText('./scripts/acessos.sh preparar')).toBeDefined()
   })
 
   // A linha da Cloudflare não é nota de rodapé, e não depende de configuração:
@@ -246,6 +299,31 @@ describe('CaminhoExterno', () => {
     )
     const aviso = screen.getByTestId('o-que-ve')
     expect(aviso.getAttribute('style')).toContain('var(--sb-warning)')
+  })
+
+  /*
+   * A queixa de 28/08: "automatiza o processo de subir, está muito manual".
+   *
+   * O `docker compose --profile X up -d` continua na tela porque é o que está
+   * acontecendo por baixo, mas quem não quer decorar flag tem uma linha só. E
+   * quando o engine responde `notCreated`, a tela oferece primeiro o
+   * `preparar`, que resolve os três perfis de uma vez.
+   */
+  it('oferece o script ao lado do comando cru do compose', async () => {
+    montar()
+
+    await waitFor(() =>
+      expect(screen.getByText('./scripts/acessos.sh tor up')).toBeDefined(),
+    )
+    expect(screen.getByText('docker compose --profile tor up -d')).toBeDefined()
+  })
+
+  it('sem o socket, a tela mostra como ligar o controle num comando só', async () => {
+    montar()
+
+    await waitFor(() =>
+      expect(screen.getByText('./scripts/acessos.sh controle')).toBeDefined(),
+    )
   })
 
   it('caminho não configurado ainda mostra o passo a passo', async () => {

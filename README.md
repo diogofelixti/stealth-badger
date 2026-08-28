@@ -124,6 +124,53 @@ Para experimentar, use a **signet** e um faucet como o
 > ⚠️ **Perder o `MASTER_KEY_HEX` torna os xpubs cadastrados irrecuperáveis.** Ele nunca é
 > versionado.
 
+### A análise de privacidade precisa de um Esplora
+
+Isto é **dependência**, não preferência, e vale a pena saber antes de instalar.
+
+O watchtower usa duas fontes com responsabilidades diferentes:
+
+| | **fonte de cadeia** | **fonte de análise** |
+|---|---|---|
+| para quê | saldo, UTXO, eventos e alertas | rodar o `am-i-exposed` |
+| escopo | **por carteira** | **por rede** |
+| aceita | Esplora, Electrum, **Bitcoin Core** | **só Esplora** |
+| sem ela | a carteira não sincroniza | saldo e alertas seguem; a análise profunda não existe, e a tela diz por quê |
+
+O scanner só fala REST no formato Esplora — `/address/:a/txs`, `/address/:a/utxo`,
+`/tx/:id/hex`, `/tx/:id/outspends`. Ele **não** fala o RPC do Bitcoin Core e **não**
+fala Electrum, e não há adaptador que mude isso.
+
+O efeito prático é contraintuitivo e precisa ser dito: **quem vigia pelo próprio nó,
+que é a postura mais soberana, é justamente quem precisa apontar a análise para outro
+lugar.**
+
+**Não há nada para editar em arquivo.** A instância já traz Esploras públicos no
+catálogo, e a escolha acontece na tela:
+
+- se a fonte de cadeia da carteira **já é um Esplora**, ela serve para a análise e
+  ninguém é perguntado;
+- se é **Bitcoin Core ou Electrum**, a primeira análise pergunta qual Esplora usar,
+  **uma vez por rede**, e guarda a escolha;
+- quem tem **Esplora próprio** (`electrs`, `esplora`) o cadastra como qualquer outra
+  fonte, e a análise passa a rodar sem contar nada a ninguém.
+
+A escolha é por usuário, e não por instância: escolher a fonte de análise é escolher
+**quem vê os endereços que você consulta**, e num painel multi-usuário ninguém deve
+herdar a exposição que outra pessoa aceitou para si. A tela nomeia o host antes de
+rodar, e o selo de postura continua valendo.
+
+### Convenções do repositório
+
+As decisões que não são dedutíveis do código — autoria dos commits, o jargão de
+Bitcoin que não se traduz, o registro obrigatório de cada rodada no diário de bordo e a
+regra de nunca afirmar o que não foi medido — estão em **[`AGENTS.md`](AGENTS.md)**, com
+as regras completas em [`CLAUDE.md`](CLAUDE.md).
+
+Vale para qualquer pessoa ou ferramenta que abra um editor neste repositório: são
+convenções de produto já tomadas, e o custo de renegociá-las sem saber que existiam já
+foi pago uma vez.
+
 ### Configuração
 
 Tudo em `.env`, documentado em [`.env.example`](.env.example):

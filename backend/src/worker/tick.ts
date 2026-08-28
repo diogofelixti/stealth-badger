@@ -8,6 +8,8 @@ import { saveAlert } from '../alerts/store'
 import { deliver } from '../alerts/channels'
 import { syncWallet } from '../sync/engine'
 import { analisarOrigens, type TxScanner } from '../privacy/origem-service'
+import { resolverFonteDeAnalise } from '../privacy/fonte-de-analise'
+import type { BackendKind } from '../config'
 
 export interface TickReport {
   walletsSynced: number
@@ -81,13 +83,25 @@ export async function tick(opts: TickOptions = {}): Promise<TickReport> {
     // senão a origem de um depósito só seria conhecida se alguém estivesse
     // olhando a tela. Em segundo plano: cada transação custa segundos, e o
     // ciclo ainda tem outras carteiras para sincronizar.
-    analisarOrigens({
-      walletId,
-      userId,
-      network: w.network,
+    //
+    // A fonte de análise não é a de cadeia: o scanner só fala REST no formato
+    // Esplora. Sem uma, o worker não tenta — dez de dez análises falharam em
+    // 28/08 justamente por mandarem o RPC do Core para o scanner, e um erro
+    // guardado a cada ciclo é ruído que esconde o erro de verdade.
+    const analise = resolverFonteDeAnalise({
+      backendKind: w.kind as BackendKind,
       backendUrl: w.url,
-      ...(opts.txScanner ? { txScanner: opts.txScanner } : {}),
+      network: w.network,
     })
+    if (analise.disponivel) {
+      analisarOrigens({
+        walletId,
+        userId,
+        network: w.network,
+        backendUrl: analise.url,
+        ...(opts.txScanner ? { txScanner: opts.txScanner } : {}),
+      })
+    }
 
     const events = await activeEvents(walletId)
     const novos = events.filter(e => result.newEvents.includes(e.id))

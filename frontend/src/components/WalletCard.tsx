@@ -1,7 +1,16 @@
 import { useState } from 'react'
-import type { Backend, Catalog, Lang, Wallet } from '../lib/api'
+import {
+  mensagemDoErro,
+  type Backend,
+  type CandidataDeAnalise,
+  type Catalog,
+  type ErroDaApi,
+  type Lang,
+  type Wallet,
+} from '../lib/api'
 import { formatSats, shorten } from '../lib/format'
 import { render } from '../lib/i18n'
+import { EscolherFonteDeAnalise } from './EscolherFonteDeAnalise'
 import { PrivacyPanel } from './PrivacyPanel'
 import { UtxoTable } from './UtxoTable'
 import { Button } from './ui/Button'
@@ -35,7 +44,12 @@ export function WalletCard({
   wallet: Wallet
   catalog: Catalog
   lang: Lang
-  onScan?: () => void
+  /**
+   * Dispara a análise. Devolve promessa porque a recusa importa: quando a
+   * fonte de cadeia não serve para analisar, o cartão precisa pegar o 409 e
+   * perguntar qual Esplora usar, em vez de o clique não fazer nada.
+   */
+  onScan?: () => Promise<void>
   onArchive?: () => void
   onUnarchive?: () => void
   onDelete?: () => void
@@ -45,6 +59,37 @@ export function WalletCard({
 }) {
   const [moedasAbertas, setMoedasAbertas] = useState(false)
   const [trocandoFonte, setTrocandoFonte] = useState(false)
+  const [pedirFonte, setPedirFonte] = useState<{
+    chainKind: string
+    candidates: CandidataDeAnalise[]
+  } | null>(null)
+  const [erroDaAnalise, setErroDaAnalise] = useState<string | null>(null)
+
+  /**
+   * Analisar, e tratar a única recusa que não é erro.
+   *
+   * `privacy.needsAnalysisSource` quer dizer que a fonte de cadeia desta
+   * carteira não fala REST — Core ou Electrum — e que ninguém escolheu um
+   * Esplora para esta rede ainda. A recusa já vem com as candidatas dentro,
+   * então a pergunta não custa uma segunda chamada.
+   */
+  async function analisar(): Promise<void> {
+    if (!onScan) return
+    setErroDaAnalise(null)
+    try {
+      await onScan()
+    } catch (err) {
+      const e = err as ErroDaApi
+      if (e?.code === 'privacy.needsAnalysisSource' && e.params) {
+        setPedirFonte({
+          chainKind: String(e.params.chainKind ?? ''),
+          candidates: (e.params.candidates ?? []) as CandidataDeAnalise[],
+        })
+        return
+      }
+      setErroDaAnalise(mensagemDoErro(catalog, err, lang))
+    }
+  }
 
   // Só a primeira importação esconde o saldo. O backend deixou de remarcar
   // como `importing` quem já sincronizou, mas a condição continua checando
@@ -55,12 +100,32 @@ export function WalletCard({
     wallet.syncHeight === null &&
     (wallet.syncState === 'importing' || wallet.syncState === 'pending')
 
+  /*
+   * Duas esperas diferentes, e a nota que descreve uma mente sobre a outra.
+   *
+   * Esplora e Electrum varrem a cadeia de change por gap limit, e o andamento
+   * é real: a barra anda. O Bitcoin Core não tem histórico de endereço
+   * arbitrário, então a carteira vigiada vira uma carteira de observação no nó,
+   * e o `importdescriptors` **rescaneia desde o gênesis**. Isso leva minutos, e
+   * o Core não reporta andamento nenhum durante o rescan: ele responde quando
+   * termina.
+   *
+   * O resultado, medido em 28/08 na signet desta máquina: sete minutos com a
+   * barra parada em 0% e a nota falando de uma varredura de change que não é a
+   * que está acontecendo. Parece defeito, e não é.
+   */
+  const rescanDoNo = importando && wallet.backendKind === 'core'
+
   // Zero que não foi lido não é zero, é "não sei". Uma carteira degradada sem
   // nenhum UTXO legível não tem saldo conhecido — e mostrar 0 ao lado do aviso
   // de "vigiando em parte" convida a ler o número como fato. Com saldo
   // parcial, o número é verdade: é o que existe no que deu para ler.
   const saldoDesconhecido =
-    wallet.syncState === 'degraded' && wallet.utxoCount === 0
+    (wallet.syncState === 'degraded' && wallet.utxoCount === 0) ||
+    (wallet.syncState === 'error' && wallet.syncHeight === null)
+  const historicoSemSaldo =
+    wallet.utxoCount === 0 &&
+    (wallet.spentUtxoCount > 0 || wallet.usedAddressCount > 0)
 
   return (
     <article
@@ -85,20 +150,32 @@ export function WalletCard({
           <div className="mb-[10px] flex items-baseline gap-[10px]">
             <span className="text-xl font-medium text-faint">———</span>
             <span className="text-xs uppercase tracking-label" style={{ color: 'var(--sb-warning)' }}>
-              {render(catalog, 'wallet.importing', { progress: wallet.syncProgress }, lang)}
+              {rescanDoNo
+                ? render(catalog, 'wallet.importingNode', {}, lang)
+                : render(catalog, 'wallet.importing', { progress: wallet.syncProgress }, lang)}
             </span>
           </div>
-          <div
-            data-progress={wallet.syncProgress}
-            className="mb-[9px] h-[3px] overflow-hidden rounded-sm bg-raised"
-          >
+          {/* Barra parada em 0% por sete minutos não informa: parece defeito.
+              O Core não devolve andamento enquanto rescaneia — ele responde
+              quando termina —, então aqui a barra some e a prosa assume. */}
+          {!rescanDoNo && (
             <div
-              className="h-full"
-              style={{ width: `${wallet.syncProgress}%`, background: 'var(--sb-warning)' }}
-            />
-          </div>
+              data-progress={wallet.syncProgress}
+              className="mb-[9px] h-[3px] overflow-hidden rounded-sm bg-raised"
+            >
+              <div
+                className="h-full"
+                style={{ width: `${wallet.syncProgress}%`, background: 'var(--sb-warning)' }}
+              />
+            </div>
+          )}
           <p className="font-prose text-sm leading-relaxed text-muted">
-            {render(catalog, 'wallet.importingNote', {}, lang)}
+            {render(
+              catalog,
+              rescanDoNo ? 'wallet.importingCoreNote' : 'wallet.importingNote',
+              {},
+              lang,
+            )}
           </p>
         </>
       ) : saldoDesconhecido ? (
@@ -129,6 +206,25 @@ export function WalletCard({
         </>
       )}
 
+      {historicoSemSaldo && (
+        <div className="mt-3 rounded border border-line bg-raised px-3 py-2">
+          <p className="text-xs uppercase tracking-label text-faint">
+            {render(catalog, 'wallet.historyOnly', {}, lang)}
+          </p>
+          <p className="font-prose text-sm leading-relaxed text-muted">
+            {render(
+              catalog,
+              'wallet.historyOnlyNote',
+              {
+                addresses: wallet.usedAddressCount,
+                spent: wallet.spentUtxoCount,
+              },
+              lang,
+            )}
+          </p>
+        </div>
+      )}
+
       {/* O score de privacidade é a leitura do scanner sobre esta carteira.
           Enquanto não houver análise, a linha diz que não houve — inventar um
           número, ou mostrar zero, seria pior que admitir a ausência. */}
@@ -157,9 +253,33 @@ export function WalletCard({
               {render(catalog, 'privacy.scanning', {}, lang)}
             </span>
           ) : (
-            <Button onClick={onScan}>{render(catalog, 'privacy.scan', {}, lang)}</Button>
+            <Button onClick={() => void analisar()}>
+              {render(catalog, 'privacy.scan', {}, lang)}
+            </Button>
           ))}
       </div>
+
+      {/* A única pergunta que o sistema faz sobre análise, e só quando a fonte
+          de cadeia não fala REST. Depois de respondida, não volta. */}
+      {pedirFonte && (
+        <EscolherFonteDeAnalise
+          network={wallet.network}
+          chainKind={pedirFonte.chainKind}
+          candidatas={pedirFonte.candidates}
+          catalog={catalog}
+          lang={lang}
+          onEscolheu={async () => {
+            setPedirFonte(null)
+            await analisar()
+          }}
+        />
+      )}
+
+      {erroDaAnalise && (
+        <p role="alert" className="mt-2 text-sm" style={{ color: 'var(--sb-critical)' }}>
+          {erroDaAnalise}
+        </p>
+      )}
 
       {wallet.privacyScore !== null && (
         <PrivacyPanel walletId={wallet.id} catalog={catalog} lang={lang} />
@@ -284,11 +404,23 @@ export function WalletCard({
       {wallet.syncState === 'error' && (
         <div className="mt-3">
           <p className="text-xs uppercase tracking-label" style={{ color: 'var(--sb-critical)' }}>
-            {render(catalog, 'wallet.syncError', {}, lang)}
+            {render(
+              catalog,
+              wallet.syncHeight === null ? 'wallet.syncSourceFailed' : 'wallet.syncError',
+              { host: host(wallet.backendUrl) },
+              lang,
+            )}
           </p>
           {wallet.syncError && (
             <p className="font-prose text-sm leading-relaxed text-muted">
-              {wallet.syncError}
+              {wallet.syncHeight === null
+                ? render(
+                    catalog,
+                    'wallet.syncSourceFailedNote',
+                    { host: host(wallet.backendUrl), reason: wallet.syncError },
+                    lang,
+                  )
+                : wallet.syncError}
             </p>
           )}
         </div>

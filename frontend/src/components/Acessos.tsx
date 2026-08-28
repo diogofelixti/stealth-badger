@@ -2,10 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type Acessos as Estado, type Catalog, type Lang } from '../lib/api'
 import { render } from '../lib/i18n'
-import { CAMINHOS, enderecoDoCaminho, type Caminho } from '../lib/caminhos'
+import { enderecoDoCaminho, type Caminho } from '../lib/caminhos'
 import { EstadoDoCaminho } from './EstadoDoCaminho'
-
-const rotulo = 'text-xs uppercase tracking-label text-faint'
 
 /** A frase que apresenta cada caminho, na lista. */
 const NOTA: Record<Caminho, string> = {
@@ -40,18 +38,23 @@ export function Acessos({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
   if (!estado) return null
 
   const t = (chave: string) => render(catalog, chave, {}, lang)
-  const comando = (perfil: string) => `docker compose --profile ${perfil} up -d`
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-3">
       {ORDEM.map(caminho => {
         const info = estado[caminho]
         const endereco = enderecoDoCaminho(estado, caminho)
+        const exposto = caminho === 'cloudflare'
 
         return (
-          <section key={caminho}>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h3 className={rotulo}>{t('access.' + caminho)}</h3>
+          <Link
+            key={caminho}
+            to={`/acessos/${caminho}`}
+            className="block rounded-lg border border-line bg-surface p-5 transition-colors hover:bg-raised"
+            style={exposto ? { borderColor: 'var(--sb-warning)' } : undefined}
+          >
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-base">{t('access.' + caminho)}</h3>
               <EstadoDoCaminho
                 status={info.status}
                 statusSource={info.statusSource}
@@ -67,36 +70,21 @@ export function Acessos({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
             <p
               className="font-prose text-sm leading-relaxed"
               style={{
-                color:
-                  caminho === 'cloudflare'
-                    ? 'var(--sb-warning)'
-                    : 'var(--sb-text-muted)',
+                color: exposto ? 'var(--sb-warning)' : 'var(--sb-text-muted)',
               }}
             >
               {t(NOTA[caminho])}
             </p>
 
-            {info.enabled && endereco ? (
-              <p className="mt-1 break-all font-mono text-sm">{endereco}</p>
-            ) : (
-              <p className="mt-1 text-sm text-faint">
-                {t('access.off')} ·{' '}
-                {render(
-                  catalog,
-                  'access.howTo',
-                  { comando: comando(CAMINHOS[caminho].perfil) },
-                  lang,
-                )}
-              </p>
-            )}
-
-            <Link
-              to={`/acessos/${caminho}`}
-              className="mt-1 inline-block text-sm text-muted underline"
-            >
-              {t('access.details')}
-            </Link>
-          </section>
+            <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
+              {info.enabled && endereco ? (
+                <span className="min-w-0 break-all font-mono text-sm">{endereco}</span>
+              ) : (
+                <span className="text-sm text-faint">{t('access.off')}</span>
+              )}
+              <span className="text-sm text-muted underline">{t('access.details')}</span>
+            </div>
+          </Link>
         )
       })}
     </div>

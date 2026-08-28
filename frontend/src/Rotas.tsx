@@ -3,8 +3,10 @@ import type { Catalog, Lang, Me } from './lib/api'
 import { Layout, useDadosDoPainel } from './pages/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { WalletsPage } from './pages/WalletsPage'
+import { AddressesPage } from './pages/AddressesPage'
 import { WalletPage } from './pages/WalletPage'
 import { AlertsPage } from './pages/AlertsPage'
+import { PrivacyPage } from './pages/PrivacyPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { AccessPage } from './pages/AccessPage'
 import { AcessoPage } from './pages/AcessoPage'
@@ -38,7 +40,9 @@ export function Rotas({
         <Route path="/" element={<Painel />} />
         <Route path="/carteiras" element={<WalletsPage />} />
         <Route path="/carteiras/:id" element={<WalletPage />} />
+        <Route path="/enderecos" element={<AddressesPage />} />
         <Route path="/alertas" element={<AlertsPage />} />
+        <Route path="/privacidade" element={<PrivacyPage />} />
         <Route path="/configuracoes" element={<SettingsPage />} />
         <Route path="/acessos" element={<AccessPage />} />
         <Route path="/acessos/:caminho" element={<AcessoPage />} />

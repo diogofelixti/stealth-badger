@@ -94,7 +94,7 @@ describe('marcas de coin control', () => {
     expect(lista[0]!.address).toBe('tb1qexemplo')
   })
 
-  it('não devolve UTXO já gasto na tela de coin control', async () => {
+  it('devolve UTXO já gasto como histórico da tela de coin control', async () => {
     await utxo('aa', 0, 5000)
     await appendEvent({
       walletId,
@@ -107,7 +107,9 @@ describe('marcas de coin control', () => {
     })
     await projectWallet(walletId)
 
-    expect(await utxosDaCarteira(walletId)).toHaveLength(0)
+    expect(await utxosDaCarteira(walletId)).toMatchObject([
+      { txid: 'aa', vout: 0, spent: true, spentAtTxid: 'zz' },
+    ])
   })
 
   // Marca de UTXO já gasto continua guardada: o histórico do BIP-329 vale para

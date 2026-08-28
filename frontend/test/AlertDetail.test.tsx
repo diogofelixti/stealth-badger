@@ -45,6 +45,9 @@ const CATALOGO: Catalog = {
   'alert.boltzmann': 'Matriz de Boltzmann',
   'alert.close': 'Fechar',
   'alert.copy': 'Copiar',
+  'access.copy': 'copiar',
+  'access.copied': 'copiado',
+  'access.copyFailed': 'não deu para copiar',
   'feed.funds_received.title': 'Fundos recebidos',
   'feed.funds_received.body': '{value} sats',
 }
@@ -186,5 +189,29 @@ describe('AlertDetail', () => {
       expect(screen.getByText(/não veio de uma transação/)).toBeDefined(),
     )
     expect(screen.queryByText('Buscar na cadeia')).toBeNull()
+  })
+
+  /*
+   * Identificador de cadeia é feito para ser colado, nunca digitado.
+   *
+   * Txid, hash de bloco e altura estavam como texto puro: copiar exigia
+   * selecionar 64 caracteres monoespaçados à mão, com o risco silencioso de
+   * levar um a menos e ir procurar defeito no explorador.
+   *
+   * O que se mostra e o que se copia são coisas diferentes: a tela pode
+   * encurtar, o botão copia inteiro.
+   */
+  it('oferece copiar o txid, e copia os 64 caracteres', async () => {
+    const escrito: string[] = []
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText: async (t: string) => void escrito.push(t) },
+      configurable: true,
+    })
+    montar()
+
+    await waitFor(() => expect(screen.getByText('Transação')).toBeDefined())
+    fireEvent.click(screen.getAllByRole('button', { name: 'copiar' })[0]!)
+
+    await waitFor(() => expect(escrito[0]).toHaveLength(64))
   })
 })

@@ -65,7 +65,7 @@ export function WalletPage() {
         wallet={carteira}
         catalog={catalog}
         lang={lang}
-        onScan={() => void api.scanPrivacy(carteira.id).then(recarregar)}
+        onScan={() => api.scanPrivacy(carteira.id).then(recarregar)}
         onArchive={() => void api.archiveWallet(carteira.id).then(recarregar)}
         onUnarchive={() => void api.unarchiveWallet(carteira.id).then(recarregar)}
         onDelete={() => setParaApagar(true)}

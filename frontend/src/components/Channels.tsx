@@ -62,6 +62,28 @@ export function Channels({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
         {render(catalog, 'channels.title', {}, lang)}
       </h2>
 
+      {/* O cartão de como funciona.
+          Quem nunca usou ntfy chegava a um campo de texto pedindo "tópico" sem
+          nada dizendo o que é um tópico, onde se assina, nem o que a mensagem
+          carrega. O último parágrafo é o que mais importa: o alerta de dust e o
+          de address reuse levam o endereço, e quem souber o tópico lê. */}
+      <div className="mb-3 rounded border border-line bg-surface px-4 py-3">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-label text-faint">
+          {render(catalog, 'channels.howTitle', {}, lang)}
+        </h3>
+        <ol className="flex list-decimal flex-col gap-[6px] pl-4 font-prose text-sm leading-relaxed text-muted">
+          <li>{render(catalog, 'channels.how1', {}, lang)}</li>
+          <li>{render(catalog, 'channels.how2', {}, lang)}</li>
+          <li>{render(catalog, 'channels.how3', {}, lang)}</li>
+        </ol>
+        <p
+          className="mt-2 font-prose text-sm leading-relaxed"
+          style={{ color: 'var(--sb-warning)' }}
+        >
+          {render(catalog, 'channels.how4', {}, lang)}
+        </p>
+      </div>
+
       {canais.length === 0 && (
         <p className="mb-2 font-prose text-sm leading-relaxed text-muted">
           {render(catalog, 'channels.empty', {}, lang)}

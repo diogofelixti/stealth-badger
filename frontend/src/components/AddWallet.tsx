@@ -47,12 +47,21 @@ export function AddWallet({
   const [escolhido, setEscolhido] = useState<number | null>(null)
   const [abrindoBackend, setAbrindoBackend] = useState(false)
 
+  const [escondidas, setEscondidas] = useState(0)
+
   useEffect(() => {
     void api
       .backends()
       .then(lista => {
-        setBackends(lista)
-        setEscolhido(atual => atual ?? lista[0]?.id ?? null)
+        // Fonte que já respondeu que **não** sai do seletor. Oferecer uma
+        // fonte morta ao lado das que funcionam foi o que fez a carteira de
+        // mainnet ficar em `fetch failed` sem ninguém entender por quê — e a
+        // pessoa não tem como saber, olhando a lista, qual delas está de pé.
+        // `unknown` fica: é fonte não medida, e não fonte ruim.
+        const vivas = lista.filter(b => b.status !== 'down')
+        setEscondidas(lista.length - vivas.length)
+        setBackends(vivas)
+        setEscolhido(atual => atual ?? vivas[0]?.id ?? null)
       })
       .catch(() => setBackends([]))
   }, [])
@@ -194,6 +203,12 @@ export function AddWallet({
           </Button>
         )}
       </div>
+
+      {escondidas > 0 && (
+        <p className="mb-2 font-prose text-sm leading-relaxed text-faint">
+          {render(catalog, 'backends.hiddenDown', { n: escondidas }, lang)}
+        </p>
+      )}
 
       {atual?.isPublic && (
         <p className="mb-2 font-prose text-sm leading-relaxed" style={{ color: 'var(--sb-public)' }}>

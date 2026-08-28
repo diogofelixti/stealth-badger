@@ -4,6 +4,8 @@ import { pool } from '../db/pool'
 import { erro, type ErroDaApi } from '../http/erro'
 import type { Network } from '../wallet/descriptor'
 import { PRESETS, presetConhecido, type PresetId } from './presets'
+import { saudeDasFontes, type EstadoDaFonte } from './saude'
+import type { BackendRow } from './adapter'
 
 export interface BackendResumo {
   id: number
@@ -22,6 +24,15 @@ export interface BackendResumo {
    * vazamento que ninguém vê revisando a tela.
    */
   hasCredentials: boolean
+  /**
+   * O que a última sonda mediu. `unknown` é fonte que ainda não foi medida —
+   * nunca "fonte ruim". A tela usa isto para não oferecer, no seletor de
+   * carteira, uma fonte que já respondeu que não.
+   */
+  status: EstadoDaFonte
+  height?: number
+  statusError?: string
+  checkedAt?: string
 }
 
 export interface AuthDoBackend {
@@ -217,19 +228,73 @@ export async function ensureBackendGlobal(network: Network): Promise<number> {
  * São públicas, e a listra dirá isso na hora em que uma carteira usar uma
  * delas. Oferecer não é escolher: quem tem nó cadastra o dele e troca.
  */
-const PUBLICAS_PRONTAS: { url: string; network: Network }[] = [
-  { url: 'https://mempool.space/api', network: 'mainnet' },
-  { url: 'https://mempool.space/signet/api', network: 'signet' },
+const PUBLICAS_PRONTAS: { url: string; network: Network; preset: PresetId }[] = [
+  { url: 'https://mempool.space/api', network: 'mainnet', preset: 'mempool' },
+  { url: 'https://mempool.space/signet/api', network: 'signet', preset: 'mempool' },
+  // Mais de uma por rede, e não por variedade: a análise de privacidade
+  // precisa de um Esplora, e quem vigia pelo próprio nó precisa **escolher**
+  // um. Uma opção só não é escolha, e obrigar a cadastrar à mão o que já é
+  // catálogo é o atrito que o item B existiu para tirar.
+  { url: 'https://blockstream.info/api', network: 'mainnet', preset: 'blockstream' },
+  { url: 'https://blockstream.info/signet/api', network: 'signet', preset: 'blockstream' },
 ]
 
 export async function ensureBackendsPublicos(): Promise<void> {
   for (const fonte of PUBLICAS_PRONTAS) {
     await pool.query(
       `INSERT INTO backends (user_id, kind, url, is_public, network, preset)
-       VALUES (NULL, 'esplora', $1, true, $2, 'mempool')
+       VALUES (NULL, 'esplora', $1, true, $2, $3)
        ON CONFLICT (user_id, url, network) DO NOTHING`,
-      [fonte.url, fonte.network],
+      [fonte.url, fonte.network, fonte.preset],
     )
+  }
+}
+
+/**
+ * A lista de fontes que o usuário pode escolher.
+ *
+ * **Não** materializa mais o backend de `CHAIN_BACKEND`/`CORE_URL`. Aquilo é
+ * configuração da máquina de quem hospeda, e aparecia para todo mundo como
+ * "configurado no servidor" — um `host.docker.internal:38332` que só existe
+ * aqui e que, em qualquer outra instalação, é uma fonte morta na primeira
+ * tela que a pessoa vê. O que a instância oferece de fábrica são as públicas;
+ * o nó de quem hospeda entra pela tela, como o de qualquer outro usuário.
+ */
+/**
+ * A fonte que serve quando quem cadastra a carteira não escolheu nenhuma.
+ *
+ * Antes era o backend do `.env`. Com ele fora da lista, o padrão passa a ser
+ * uma pública da mesma rede — e, entre elas, **a que respondeu por último**:
+ * numa rede onde a mempool.space não passa, escolher a primeira da lista era
+ * entregar a carteira a uma fonte morta e chamar isso de padrão.
+ */
+export async function fontePublicaPadrao(
+  network: Network,
+): Promise<(BackendRow & { id: number }) | null> {
+  await ensureBackendsPublicos()
+  const { rows } = await pool.query<{
+    id: string
+    kind: BackendKind
+    url: string
+    is_public: boolean
+    network: Network
+  }>(
+    `SELECT b.id, b.kind, b.url, b.is_public, b.network
+       FROM backends b
+       LEFT JOIN backend_health h ON h.backend_id = b.id
+      WHERE b.user_id IS NULL AND b.network = $1
+      ORDER BY (h.ok IS TRUE) DESC, (h.ok IS NULL) DESC, b.id
+      LIMIT 1`,
+    [network],
+  )
+  const r = rows[0]
+  if (!r) return null
+  return {
+    id: Number(r.id),
+    kind: r.kind,
+    url: r.url,
+    isPublic: r.is_public,
+    network: r.network,
   }
 }
 
@@ -237,7 +302,6 @@ export async function listarBackends(
   userId: number,
   network?: Network,
 ): Promise<BackendResumo[]> {
-  await ensureBackendGlobal(loadConfig().network)
   await ensureBackendsPublicos()
   const { rows } = await pool.query<{
     id: string
@@ -259,17 +323,25 @@ export async function listarBackends(
                user_id NULLS FIRST, id`,
     [userId, network ?? null],
   )
-  return rows.map(r => ({
-    id: Number(r.id),
-    kind: r.kind,
-    url: r.url,
-    isPublic: r.is_public,
-    network: r.network,
-    scope: r.user_id === null ? 'global' : 'own',
-    preset: r.preset,
-    label: r.label,
-    hasCredentials: r.tem_credencial,
-  }))
+  const saude = await saudeDasFontes()
+  return rows.map(r => {
+    const medido = saude.get(Number(r.id))
+    return {
+      id: Number(r.id),
+      kind: r.kind,
+      url: r.url,
+      isPublic: r.is_public,
+      network: r.network,
+      scope: r.user_id === null ? ('global' as const) : ('own' as const),
+      preset: r.preset,
+      label: r.label,
+      hasCredentials: r.tem_credencial,
+      status: medido?.status ?? 'unknown',
+      ...(medido?.height !== undefined ? { height: medido.height } : {}),
+      ...(medido?.error !== undefined ? { statusError: medido.error } : {}),
+      ...(medido?.checkedAt !== undefined ? { checkedAt: medido.checkedAt } : {}),
+    }
+  })
 }
 
 export async function criarBackend(
@@ -306,6 +378,10 @@ export async function criarBackend(
     scope: 'own',
     preset: extras.preset ?? null,
     label: extras.label ?? null,
+    // Fonte recém-cadastrada nunca foi medida, e dizer 'up' aqui seria a tela
+    // afirmando o que ninguém perguntou. A medição vem do `Testar`, que a
+    // própria tela dispara em seguida, ou da varredura periódica.
+    status: 'unknown' as const,
     hasCredentials: cifrada !== null,
   }
 }

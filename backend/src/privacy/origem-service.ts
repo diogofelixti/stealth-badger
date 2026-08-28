@@ -1,5 +1,5 @@
 import { deliver } from '../alerts/channels'
-import { alertsForOrigin } from '../alerts/rules'
+import { alertsForOrigin, alertsForTxType } from '../alerts/rules'
 import { saveAlert } from '../alerts/store'
 import type { Network } from '../wallet/descriptor'
 import { origensEm } from './origem'
@@ -72,12 +72,18 @@ export function analisarOrigens(ctx: OrigemContext): boolean {
         })
         await salvarTxScanCompleto(ctx.walletId, pendente.txid, resultado)
 
-        for (const candidato of alertsForOrigin(origensEm(resultado.findings), {
+        const contextoDeAlerta = {
           userId: ctx.userId,
           walletId: ctx.walletId,
           eventId: pendente.eventId,
           txid: pendente.txid,
-        })) {
+        }
+        const candidatos = [
+          ...alertsForOrigin(origensEm(resultado.findings), contextoDeAlerta),
+          ...alertsForTxType({ ...contextoDeAlerta, txType: resultado.txType }),
+        ]
+
+        for (const candidato of candidatos) {
           const id = await saveAlert(candidato)
           if (id === null) continue
           await deliver(

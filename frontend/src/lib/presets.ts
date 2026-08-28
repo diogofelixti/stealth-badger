@@ -19,10 +19,28 @@ export type PresetId =
   | 'esplora'
   | 'electrum'
 
+/**
+ * A pergunta que o formulário faz primeiro: **o que você tem?**
+ *
+ * Nove presets numa lista plana obrigavam a pessoa a saber que Fulcrum é
+ * `electrum` e que mempool.space é `esplora` — vocabulário de quem construiu, e
+ * não de quem usa. Agrupados, a primeira escolha passa a ser sobre o mundo dela:
+ * um nó, um servidor, ou nenhum dos dois.
+ *
+ * O grupo também decide a **postura de privacidade**, e é por isso que a caixa
+ * "é pública" saiu do formulário: quem cadastra o próprio nó é soberano, quem
+ * escolhe explorador público é exposto, e deixar isso como caixa marcável
+ * permitia que o selo do cabeçalho mentisse.
+ */
+export type GrupoDeFonte = 'no' | 'servidor' | 'publico'
+
+export const GRUPOS: GrupoDeFonte[] = ['no', 'servidor', 'publico']
+
 export interface PresetDaTela {
   id: PresetId
   /** nome próprio: não se traduz, e é como a pessoa conhece a fonte */
   nome: string
+  grupo: GrupoDeFonte
   pede: 'host-porta' | 'url' | 'nada' | 'datadir'
   portaPadrao?: Record<Network, number>
   precisaAutenticar?: boolean
@@ -37,6 +55,7 @@ export const PRESETS: PresetDaTela[] = [
     // e cookie. Vem primeiro porque é o que quem tem nó deveria usar.
     id: 'core-datadir',
     nome: 'Bitcoin Core (procurar o meu nó)',
+    grupo: 'no',
     pede: 'datadir',
     precisaAutenticar: false,
     isPublic: false,
@@ -44,22 +63,39 @@ export const PRESETS: PresetDaTela[] = [
   {
     id: 'core',
     nome: 'Bitcoin Core (host e porta)',
+    grupo: 'no',
     pede: 'host-porta',
     portaPadrao: { mainnet: 8332, signet: 38332, testnet: 18332 },
     precisaAutenticar: true,
     isPublic: false,
   },
-  { id: 'fulcrum', nome: 'Fulcrum', pede: 'host-porta', portaPadrao: ELECTRUM, isPublic: false },
-  { id: 'electrs', nome: 'Electrs', pede: 'host-porta', portaPadrao: ELECTRUM, isPublic: false },
-  { id: 'floresta', nome: 'Floresta', pede: 'host-porta', portaPadrao: ELECTRUM, isPublic: false },
-  { id: 'mempool', nome: 'mempool.space', pede: 'nada', isPublic: true },
-  { id: 'blockstream', nome: 'Blockstream.info', pede: 'nada', isPublic: true },
-  { id: 'esplora', nome: 'Esplora próprio', pede: 'url', isPublic: false },
-  { id: 'electrum', nome: 'Outro Electrum', pede: 'host-porta', portaPadrao: ELECTRUM, isPublic: false },
+  { id: 'fulcrum', grupo: 'servidor', nome: 'Fulcrum', pede: 'host-porta', portaPadrao: ELECTRUM, isPublic: false },
+  { id: 'electrs', grupo: 'servidor', nome: 'Electrs', pede: 'host-porta', portaPadrao: ELECTRUM, isPublic: false },
+  { id: 'floresta', grupo: 'servidor', nome: 'Floresta', pede: 'host-porta', portaPadrao: ELECTRUM, isPublic: false },
+  { id: 'mempool', grupo: 'publico', nome: 'mempool.space', pede: 'nada', isPublic: true },
+  { id: 'blockstream', grupo: 'publico', nome: 'Blockstream.info', pede: 'nada', isPublic: true },
+  { id: 'esplora', grupo: 'servidor', nome: 'Esplora próprio', pede: 'url', isPublic: false },
+  { id: 'electrum', grupo: 'servidor', nome: 'Outro Electrum', pede: 'host-porta', portaPadrao: ELECTRUM, isPublic: false },
 ]
 
 export function presetPor(id: string): PresetDaTela {
   return PRESETS.find(p => p.id === id) ?? PRESETS[0]!
+}
+
+export function presetsDoGrupo(grupo: GrupoDeFonte): PresetDaTela[] {
+  return PRESETS.filter(p => p.grupo === grupo)
+}
+
+/**
+ * O que o grupo oferece primeiro.
+ *
+ * Para quem tem nó, é o preset de **um campo só** — o diretório de dados, do
+ * item C. O de host e porta continua existindo para quem tem o nó em outra
+ * máquina, mas deixa de ser o padrão: ele pede quatro campos e três conceitos,
+ * e era o que abria o formulário.
+ */
+export function presetPadraoDoGrupo(grupo: GrupoDeFonte): PresetId {
+  return presetsDoGrupo(grupo)[0]!.id
 }
 
 /**

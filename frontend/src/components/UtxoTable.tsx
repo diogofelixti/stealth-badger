@@ -3,6 +3,7 @@ import { api, mensagemDoErro, type Catalog, type Lang, type Utxo } from '../lib/
 import { formatSats } from '../lib/format'
 import { render } from '../lib/i18n'
 import { Button } from './ui/Button'
+import { Identificador } from './ui/Identificador'
 
 /**
  * Limiar de poeira, o mesmo do motor de alertas. Abaixo dele o UTXO custa mais
@@ -110,10 +111,11 @@ export function UtxoTable({
                 key={`${u.txid}:${u.vout}`}
                 data-dust={poeira}
                 data-frozen={u.frozen}
+                data-spent={u.spent}
                 className="rounded border px-3 py-2"
                 style={{
                   borderColor: poeira ? 'var(--sb-critical)' : 'var(--sb-border)',
-                  opacity: u.frozen ? 0.65 : 1,
+                  opacity: u.frozen || u.spent ? 0.65 : 1,
                 }}
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -131,6 +133,22 @@ export function UtxoTable({
                       </span>
                     )}
                   </span>
+                </div>
+
+                {/* O endereço em que esta moeda está. Ele sempre veio da API e
+                    a tabela nunca o desenhou: sem ele, decidir o que congelar
+                    ou o que gastar junto exige sair da tela e cruzar o
+                    `derivationPath` à mão em outro lugar. */}
+                <div className="mt-[6px] flex flex-wrap items-baseline gap-2">
+                  <span className="text-xs uppercase tracking-label text-faint">
+                    {render(catalog, 'utxos.address', {}, lang)}
+                  </span>
+                  <Identificador
+                    valor={u.address}
+                    encurtar
+                    catalog={catalog}
+                    lang={lang}
+                  />
                 </div>
 
                 <div className="mt-[6px] flex flex-wrap items-center gap-2">
@@ -151,19 +169,27 @@ export function UtxoTable({
                     }}
                     className="min-w-0 flex-1 rounded border border-line bg-bg px-2 py-1 text-xs placeholder:text-faint"
                   />
-                  <Button
-                    variant={u.frozen ? 'secondary' : 'ghost'}
-                    onClick={() => void marcar(u, { frozen: !u.frozen })}
-                  >
-                    {render(catalog, u.frozen ? 'utxos.unfreeze' : 'utxos.freeze', {}, lang)}
-                  </Button>
+                  {!u.spent && (
+                    <Button
+                      variant={u.frozen ? 'secondary' : 'ghost'}
+                      onClick={() => void marcar(u, { frozen: !u.frozen })}
+                    >
+                      {render(catalog, u.frozen ? 'utxos.unfreeze' : 'utxos.freeze', {}, lang)}
+                    </Button>
+                  )}
                 </div>
 
-                {(poeira || u.frozen || u.tags.length > 0) && (
+                {(poeira || u.frozen || u.spent || u.tags.length > 0) && (
                   <p className="mt-[6px] flex flex-wrap gap-2 text-xs uppercase tracking-label">
-                    {poeira && (
+                    {poeira && !u.spent && (
                       <span style={{ color: 'var(--sb-critical)' }}>
                         {render(catalog, 'utxos.dust', {}, lang)}
+                      </span>
+                    )}
+                    {u.spent && (
+                      <span className="text-faint">
+                        {render(catalog, 'utxos.spent', {}, lang)}
+                        {u.spentAtTxid ? ` · ${encurtar(u.spentAtTxid)}` : ''}
                       </span>
                     )}
                     {u.frozen && (

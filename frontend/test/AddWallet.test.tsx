@@ -61,6 +61,7 @@ const CATALOGO: Catalog = {
   'backends.dockerHint': 'Use host.docker.internal.',
   'backends.isPublic': 'É um serviço público de terceiro',
   'backends.publicNote': 'Um backend público enxerga quais endereços você consulta.',
+  'backends.hiddenDown': '{n} fonte(s) fora desta lista porque não responderam.',
   'backends.save': 'Adicionar backend',
   'backend.networkRequired': 'Rede',
   'network.mainnet': 'mainnet',
@@ -158,7 +159,10 @@ describe('AddWallet — escolha de backend', () => {
 
     await waitFor(() => expect(screen.getByText(/mempool\.space/)).toBeDefined())
     fireEvent.click(screen.getByRole('button', { name: /nova fonte/i }))
-    fireEvent.change(screen.getByLabelText(/fonte/i), { target: { value: 'fulcrum' } })
+    // O formulário pergunta primeiro **o que você tem**: o grupo abre a lista
+    // certa, e só então o programa é escolhido.
+    fireEvent.click(screen.getByLabelText(/backends\.group\.servidor|servidor/i))
+    fireEvent.change(screen.getByLabelText(/^fonte$/i), { target: { value: 'fulcrum' } })
     fireEvent.change(screen.getByLabelText(/host/i), { target: { value: '127.0.0.1' } })
     fireEvent.click(screen.getByRole('button', { name: /adicionar backend/i }))
 
@@ -320,5 +324,51 @@ describe('AddWallet — ações que não são enviar', () => {
 
     expect(addWallet).not.toHaveBeenCalled()
     expect(screen.getByLabelText(/fonte/i)).toBeDefined()
+  })
+})
+
+describe('fonte que não responde', () => {
+  it('não é oferecida no seletor, e a tela diz quantas ficaram de fora', async () => {
+    // Oferecer uma fonte morta ao lado das que funcionam foi o que deixou a
+    // carteira de mainnet em `fetch failed` sem ninguém entender por quê.
+    const MORTA: Backend = {
+      id: 9,
+      kind: 'esplora',
+      url: 'https://mempool.space/api',
+      isPublic: true,
+      network: 'mainnet',
+      scope: 'global',
+      status: 'down',
+      statusError: 'fetch failed',
+    }
+    const VIVA: Backend = {
+      ...GLOBAL,
+      id: 10,
+      url: 'https://blockstream.info/signet/api',
+      status: 'up',
+      height: 319741,
+    }
+    backends.mockResolvedValue([MORTA, VIVA])
+
+    render(<AddWallet catalog={CATALOGO} lang="pt" onAdded={() => {}} />)
+
+    await waitFor(() => expect(screen.getByText(/1 fonte/)).toBeTruthy())
+    const seletor = screen.getByLabelText('Vigiar por') as HTMLSelectElement
+    const textos = [...seletor.querySelectorAll('option')].map(o => o.textContent ?? '')
+    expect(textos.some(t => t.includes('mempool.space'))).toBe(false)
+  })
+
+  it('fonte ainda não medida continua sendo oferecida', async () => {
+    // `unknown` é fonte que ninguém mediu, e não fonte ruim. Escondê-la
+    // deixaria o seletor vazio numa instância recém-subida.
+    backends.mockResolvedValue([{ ...GLOBAL, status: 'unknown' }])
+
+    render(<AddWallet catalog={CATALOGO} lang="pt" onAdded={() => {}} />)
+
+    await waitFor(() => {
+      const seletor = screen.getByLabelText('Vigiar por') as HTMLSelectElement
+      expect(seletor.querySelectorAll('option').length).toBe(1)
+    })
+    expect(screen.queryByText(/fora desta lista/)).toBeNull()
   })
 })

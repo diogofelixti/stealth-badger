@@ -85,10 +85,13 @@ services:
 
   # Rede privada entre os seus aparelhos; a Tailscale vê metadado, não conteúdo.
   tailscale:
-    image: tailscale/tailscale:latest
+    build:
+      context: .
+      dockerfile: services/tailscale/Dockerfile
     profiles: ["tailscale"]
     hostname: stealth-badger
     environment:
+      ACCESS_PROFILE: tailscale
       TS_AUTHKEY: ${TS_AUTHKEY:-}
       TS_STATE_DIR: /var/lib/tailscale
       TS_EXTRA_ARGS: --advertise-tags=tag:stealth-badger
@@ -97,19 +100,24 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
+    depends_on:
+      - backend
 
   # A Cloudflare termina o TLS e enxerga o tráfego em claro. É escolha
   # legítima, e a tela diz isso sempre que o caminho está ligado.
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    build:
+      context: .
+      dockerfile: services/cloudflared/Dockerfile
     profiles: ["cloudflared"]
     # `--metrics` abre a porta de prontidão na rede interna do compose, e é
     # dela que a página de acessos lê se o túnel tem conexão com a borda. Sem
     # ela o estado do caminho fica "não medido", que é honesto e menos útil.
-    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 run
     environment:
+      ACCESS_PROFILE: cloudflared
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
     depends_on:
+      - backend
       - nginx
 
 volumes:

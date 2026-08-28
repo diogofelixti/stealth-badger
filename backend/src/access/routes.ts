@@ -11,6 +11,15 @@ import {
   estadoDoPerfil,
   type Perfil,
 } from './controle'
+import { andamentoDaCriacao, criarPerfil, diretorioDoProjeto } from './compose'
+import {
+  configDeAcesso,
+  envDeConfigDeAcesso,
+  resumoDeConfigDeAcesso,
+  salvarConfigDeAcesso,
+  validarConfigDeAcesso,
+  variaveisDeConfigDeAcesso,
+} from './config-store'
 import {
   sondarCloudflare,
   sondarTailscale,
@@ -119,12 +128,53 @@ export function registerAccessRoutes(
     return socket ? engineNoSocket(socket) : null
   }
 
+  /**
+   * Ponte interna para os containers opcionais consumirem a configuração
+   * cifrada no banco quando nascem. Ela fica fora de `/api`, que é a única
+   * área proxyada pelo nginx; o backend também só usa `expose`, sem porta no
+   * host. O segredo continua cifrado em repouso e não exige arquivo no host.
+   */
+  app.get<{ Params: { profile: string } }>(
+    '/internal/access/config/:profile/env',
+    async (req, reply) => {
+      if (!ehPerfil(req.params.profile) || req.params.profile === 'tor') {
+        return reply.code(404).send('not found')
+      }
+      const config = await configDeAcesso(req.params.profile)
+      if (!config) return reply.code(404).send('not configured')
+
+      return reply
+        .header('cache-control', 'no-store')
+        .type('text/plain; charset=utf-8')
+        .send(`${envDeConfigDeAcesso(req.params.profile, config)}\n`)
+    },
+  )
+
+  app.get<{ Params: { profile: string } }>(
+    '/internal/access/config/:profile/runtime-env',
+    async (req, reply) => {
+      if (!ehPerfil(req.params.profile) || req.params.profile === 'tor') {
+        return reply.code(404).send({ error: 'not found' })
+      }
+      const config = await configDeAcesso(req.params.profile)
+      if (!config) return reply.code(404).send({ error: 'not configured' })
+
+      return reply
+        .header('cache-control', 'no-store')
+        .send(variaveisDeConfigDeAcesso(req.params.profile, config))
+    },
+  )
+
   app.get('/api/access', async (req, reply) => {
     if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
 
+    const [configTailscale, configCloudflare] = await Promise.all([
+      configDeAcesso('tailscale'),
+      configDeAcesso('cloudflared'),
+    ])
     const onion = await lerHostname(process.env.TOR_HOSTNAME_PATH)
-    const tailscale = process.env.TAILSCALE_HOSTNAME?.trim() || null
-    const cloudflare = process.env.CLOUDFLARE_HOSTNAME?.trim() || null
+    const tailscale = configTailscale?.hostname ?? process.env.TAILSCALE_HOSTNAME?.trim() ?? null
+    const cloudflare = configCloudflare?.hostname ?? process.env.CLOUDFLARE_HOSTNAME?.trim() ?? null
     const motor = engine()
 
     const peloDocker = (perfil: Perfil, configurado: boolean) =>
@@ -151,11 +201,13 @@ export function registerAccessRoutes(
         enabled: onion !== null,
         ...(onion ? { onion } : {}),
         ...(onion ? combinar(dockerTor, TOR_SEM_SONDA) : DESLIGADO),
+        ...andamentoDaCriacao('tor'),
       },
       tailscale: {
         enabled: tailscale !== null,
         ...(tailscale ? { hostname: tailscale } : {}),
         ...combinar(dockerTailscale, redeTailscale),
+        ...andamentoDaCriacao('tailscale'),
       },
       // `warning` é constante de propósito: quem termina o TLS enxerga o
       // tráfego em claro, e essa frase não pode depender de configuração.
@@ -164,6 +216,7 @@ export function registerAccessRoutes(
         ...(cloudflare ? { hostname: cloudflare } : {}),
         warning: true,
         ...combinar(dockerCloudflare, redeCloudflare),
+        ...andamentoDaCriacao('cloudflared'),
       },
       // Quem pode ligar e desligar pela tela, e se a instância sequer oferece
       // isso. `available: false` é o padrão: sem o socket montado, o painel
@@ -171,6 +224,10 @@ export function registerAccessRoutes(
       control: {
         available: motor !== null,
         isAdmin: admin,
+        // Se o painel sabe **criar** o container, e não só ligar o que existe.
+        // Depende do diretório do projeto estar montado, que é o que dá ao
+        // backend o `docker-compose.yml` para o CLI do compose ler.
+        canCreate: diretorioDoProjeto() !== null,
       },
     })
   })
@@ -219,7 +276,59 @@ export function registerAccessRoutes(
           )
       }
 
-      return reply.send(await controlarPerfil(profile, action, motor))
+      return reply.send(
+        await controlarPerfil(profile, action, motor, { criar: criarPerfil }),
+      )
     },
   )
+
+  app.get<{ Params: { profile: string } }>(
+    '/api/access/config/:profile',
+    async (req, reply) => {
+      if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
+      if (!(await ehAdmin(req.userId))) {
+        return reply
+          .code(403)
+          .send(erro('access.adminOnly', 'configurar acesso externo é do admin da instância'))
+      }
+      if (!ehPerfil(req.params.profile)) {
+        return reply
+          .code(400)
+          .send(erro('access.badRequest', 'perfil fora da lista branca'))
+      }
+      return reply.send(await resumoDeConfigDeAcesso(req.params.profile))
+    },
+  )
+
+  app.put<{
+    Params: { profile: string }
+    Body: { hostname?: unknown; token?: unknown; authKey?: unknown }
+  }>('/api/access/config/:profile', async (req, reply) => {
+    if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
+    if (!(await ehAdmin(req.userId))) {
+      return reply
+        .code(403)
+        .send(erro('access.adminOnly', 'configurar acesso externo é do admin da instância'))
+    }
+    if (!ehPerfil(req.params.profile)) {
+      return reply
+        .code(400)
+        .send(erro('access.badRequest', 'perfil fora da lista branca'))
+    }
+
+    const config = {
+      ...(typeof req.body?.hostname === 'string' ? { hostname: req.body.hostname } : {}),
+      ...(typeof req.body?.token === 'string' ? { token: req.body.token } : {}),
+      ...(typeof req.body?.authKey === 'string' ? { authKey: req.body.authKey } : {}),
+    }
+    const motivo = validarConfigDeAcesso(req.params.profile, config)
+    if (motivo) {
+      return reply
+        .code(400)
+        .send(erro('access.badConfig', 'configuração incompleta: ' + motivo, { motivo }))
+    }
+
+    await salvarConfigDeAcesso(req.params.profile, req.userId, config)
+    return reply.send(await resumoDeConfigDeAcesso(req.params.profile))
+  })
 }

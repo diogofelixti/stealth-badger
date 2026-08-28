@@ -63,6 +63,10 @@ export interface CaminhoDeAcesso {
   enabled: boolean
   status: EstadoDoAcesso
   statusSource: FonteDoEstado
+  /** o painel está criando o container deste caminho agora */
+  creating?: boolean
+  /** o que a última criação deixou como erro, quando falhou */
+  error?: string
 }
 
 export interface Acessos {
@@ -74,7 +78,12 @@ export interface Acessos {
    * pode. `available: false` é o padrão: sem `DOCKER_SOCKET` montado por quem
    * hospeda, o painel lê os acessos e não os controla.
    */
-  control: { available: boolean; isAdmin: boolean }
+  control: {
+    available: boolean
+    isAdmin: boolean
+    /** se o painel sabe **criar** o container, e não só ligar o que existe */
+    canCreate?: boolean
+  }
 }
 
 export type PerfilDeAcesso = 'tor' | 'tailscale' | 'cloudflared'
@@ -83,11 +92,19 @@ export interface ResultadoDoControle {
   ok: boolean
   profile: PerfilDeAcesso
   action: 'up' | 'down'
+  /** `creating` é o container sendo criado agora, e não um estado do Docker */
   state?: string
   reason?: 'notCreated' | 'ambiguous' | 'unreachable' | 'engineError'
   hint?: string
   /** o comando de uma linha, quando o painel não pode resolver sozinho */
   command?: string
+}
+
+export interface AccessConfigSummary {
+  profile: PerfilDeAcesso
+  configured: boolean
+  hostname: string | null
+  hasSecret: boolean
 }
 
 export interface PontaDaCadeia {
@@ -133,6 +150,7 @@ export interface PaginaDeAlertas {
 export interface Alert {
   id: number
   walletId: number
+  wallet?: { id: number; label: string }
   type: string
   severity: Severity
   params: Record<string, unknown>
@@ -162,8 +180,12 @@ export interface Wallet {
   balanceSats: string
   utxoCount: number
   frozenCount: number
+  spentUtxoCount: number
+  usedAddressCount: number
   backendIsPublic: boolean
   backendUrl: string
+  /** `core`, `electrum` ou `esplora`: a espera do import depende disto */
+  backendKind: BackendKind
   privacyScore: number | null
   privacyGrade: string | null
   privacyScannedAt: string | null
@@ -215,6 +237,24 @@ export interface PrivacyReport {
   history: { score: number; grade: string; scannedAt: string }[]
   running: boolean
   error: string | null
+  /**
+   * O código da recusa, quando ela tem um.
+   *
+   * A mensagem do servidor não se traduz, e a tela é bilíngue. Recusas com
+   * significado — como a varredura que não conseguiu consultar a cadeia —
+   * precisam chegar traduzíveis: a pessoa tem de entender **por que** o sistema
+   * não sabe, e não ler português no meio de uma interface em inglês.
+   */
+  errorCode?: string | null
+  /**
+   * O que o watchtower mediu sozinho, na cadeia que ele mesmo sincronizou.
+   *
+   * O painel prefere isto ao `walletInfo` do scanner: é de primeira mão, e
+   * continua valendo quando o scanner não conseguiu consultar nada. Foi assim
+   * que a barra de reuso mostrou "0 de 0" numa carteira com dois alertas de
+   * `address reuse` que o próprio watchtower tinha gerado.
+   */
+  measured?: { activeAddresses: number; reusedAddresses: number }
 }
 
 export interface AddressPrivacyReport {
@@ -230,6 +270,18 @@ export interface AddressPrivacyReport {
   } | null
   running: boolean
   error: string | null
+}
+
+export interface WalletAddress {
+  id: number
+  address: string
+  derivationPath: string
+  used: boolean
+  utxoCount: number
+  balanceSats: string
+  privacyScore: number | null
+  privacyGrade: string | null
+  privacyScannedAt: string | null
 }
 
 export interface TxPrivacyReport {
@@ -263,6 +315,14 @@ export interface Backend {
   network: Network
   /** `global` é o backend da instância; `own`, o que o usuário cadastrou */
   scope: 'global' | 'own'
+  /**
+   * O que a última sonda mediu. `unknown` é fonte ainda não medida, e não
+   * fonte ruim — o seletor de carteira esconde só o que respondeu que não.
+   */
+  status?: 'up' | 'down' | 'unknown'
+  height?: number
+  statusError?: string
+  checkedAt?: string
 }
 
 export interface Utxo {
@@ -271,6 +331,8 @@ export interface Utxo {
   addressId: number
   valueSats: number
   height: number | null
+  spent: boolean
+  spentAtTxid: string | null
   address: string
   derivationPath: string
   addressPrivacyScore: number | null
@@ -279,6 +341,24 @@ export interface Utxo {
   label: string | null
   tags: string[]
   frozen: boolean
+}
+
+/**
+ * Uma fonte que pode analisar: só `esplora`, porque é o único formato que o
+ * `am-i-exposed` fala. As da própria pessoa vêm antes das públicas.
+ */
+export interface CandidataDeAnalise {
+  id: number
+  url: string
+  isPublic: boolean
+  preset: string | null
+  label: string | null
+  escolhida: boolean
+}
+
+export interface FonteDeAnaliseDaRede {
+  network: Network
+  candidates: CandidataDeAnalise[]
 }
 
 export type ChannelKind = 'ntfy' | 'webhook'
@@ -384,6 +464,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ profile, action }),
     }),
+  accessConfig: (profile: PerfilDeAcesso) =>
+    request<AccessConfigSummary>(`/api/access/config/${profile}`),
+  saveAccessConfig: (
+    profile: PerfilDeAcesso,
+    config: { hostname?: string; token?: string; authKey?: string },
+  ) =>
+    request<AccessConfigSummary>(`/api/access/config/${profile}`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    }),
   alertDetail: (id: number) => request<AlertDetail>(`/api/alerts/${id}`),
   /**
    * A transação inteira, na fonte da carteira. **Só sai por clique**: num
@@ -463,6 +553,18 @@ export const api = {
   scanPrivacy: (walletId: number) =>
     request<{ status: string }>(`/api/wallets/${walletId}/scan`, { method: 'POST' }),
   privacy: (walletId: number) => request<PrivacyReport>(`/api/wallets/${walletId}/privacy`),
+  testBackend: (id: number) =>
+    request<{ ok: boolean; height?: number; ms: number; reason?: string }>(
+      `/api/backends/${id}/test`,
+      { method: 'POST' },
+    ),
+  analysisSource: (network: Network) =>
+    request<FonteDeAnaliseDaRede>(`/api/analysis-source?network=${network}`),
+  chooseAnalysisSource: (network: Network, backendId: number) =>
+    request<FonteDeAnaliseDaRede>('/api/analysis-source', {
+      method: 'PUT',
+      body: JSON.stringify({ network, backendId }),
+    }),
   scanAddressPrivacy: (walletId: number, addressId: number) =>
     request<{ status: string }>(`/api/wallets/${walletId}/addresses/${addressId}/privacy`, {
       method: 'POST',
@@ -473,6 +575,8 @@ export const api = {
     }),
   addressPrivacy: (walletId: number, addressId: number) =>
     request<AddressPrivacyReport>(`/api/wallets/${walletId}/addresses/${addressId}/privacy`),
+  addresses: (walletId: number) =>
+    request<WalletAddress[]>(`/api/wallets/${walletId}/addresses`),
   scanTxPrivacy: (walletId: number, txid: string) =>
     request<{ status: string }>(`/api/wallets/${walletId}/tx/${txid}/privacy`, {
       method: 'POST',
