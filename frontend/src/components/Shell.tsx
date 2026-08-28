@@ -60,10 +60,12 @@ export function PrivacyBadge({ isPublic, host, label }: BackendPosture) {
 export function Shell({
   children,
   backend = null,
+  market,
   actions,
 }: {
   children: ReactNode
   backend?: BackendPosture | null
+  market?: ReactNode
   actions?: ReactNode
 }) {
   return (
@@ -84,6 +86,7 @@ export function Shell({
 
           <div className="flex flex-wrap items-center gap-4 sm:gap-5">
             {backend && <PrivacyBadge {...backend} />}
+            {market}
             {actions}
           </div>
         </header>

@@ -40,6 +40,8 @@ const CATALOGO: Catalog = {
   'backends.global': 'configurado no servidor',
   'backends.own': 'seu',
   'backends.addToggle': '+ outro backend',
+  'backends.newSource': 'Nova fonte',
+  'backends.addSource': 'Adicionar fonte',
   'backends.urlPlaceholder': 'https://... ou electrum://host:50001',
   'backends.preset': 'Fonte',
   'backends.host': 'Host',
@@ -52,6 +54,10 @@ const CATALOGO: Catalog = {
   'backends.user': 'Usuário do RPC',
   'backends.password': 'Senha do RPC',
   'backends.credentialNote': 'A credencial é cifrada e nunca volta.',
+  'backends.datadir': 'Diretório de dados do nó',
+  'backends.datadirHint': 'onde o bitcoind guarda os dados',
+  'backends.detect': 'Procurar o nó',
+  'backends.detectFound': 'achei um nó de {network} na altura {blocks}',
   'backends.dockerHint': 'Use host.docker.internal.',
   'backends.isPublic': 'É um serviço público de terceiro',
   'backends.publicNote': 'Um backend público enxerga quais endereços você consulta.',
@@ -124,6 +130,16 @@ describe('AddWallet — escolha de backend', () => {
     )
   })
 
+  it('oferece nova fonte ao lado do seletor, antes de abrir o cadastro', async () => {
+    montar()
+
+    await waitFor(() => expect(screen.getByLabelText(/vigiar por/i)).toBeDefined())
+
+    const novaFonte = screen.getByRole('button', { name: /nova fonte/i })
+    expect(novaFonte).toBeDefined()
+    expect(screen.queryByLabelText(/^host$/i)).toBeNull()
+  })
+
   it('não repete o aviso quando o backend escolhido é soberano', async () => {
     backends.mockResolvedValue([MEU])
     montar()
@@ -141,7 +157,7 @@ describe('AddWallet — escolha de backend', () => {
     montar()
 
     await waitFor(() => expect(screen.getByText(/mempool\.space/)).toBeDefined())
-    fireEvent.click(screen.getByRole('button', { name: /outro backend/i }))
+    fireEvent.click(screen.getByRole('button', { name: /nova fonte/i }))
     fireEvent.change(screen.getByLabelText(/fonte/i), { target: { value: 'fulcrum' } })
     fireEvent.change(screen.getByLabelText(/host/i), { target: { value: '127.0.0.1' } })
     fireEvent.click(screen.getByRole('button', { name: /adicionar backend/i }))
@@ -161,7 +177,7 @@ describe('AddWallet — escolha de backend', () => {
     montar()
 
     await waitFor(() => expect(screen.getByText(/mempool\.space/)).toBeDefined())
-    fireEvent.click(screen.getByRole('button', { name: /outro backend/i }))
+    fireEvent.click(screen.getByRole('button', { name: /nova fonte/i }))
     fireEvent.change(screen.getByLabelText(/fonte/i), { target: { value: 'core' } })
     fireEvent.change(screen.getByLabelText(/host/i), { target: { value: '127.0.0.1' } })
     fireEvent.change(screen.getByLabelText(/caminho do \.cookie/i), {
@@ -300,7 +316,7 @@ describe('AddWallet — ações que não são enviar', () => {
     fireEvent.change(screen.getByPlaceholderText('Rótulo'), {
       target: { value: 'Cofre' },
     })
-    fireEvent.click(screen.getByText('+ outro backend'))
+    fireEvent.click(screen.getByText('Nova fonte'))
 
     expect(addWallet).not.toHaveBeenCalled()
     expect(screen.getByLabelText(/fonte/i)).toBeDefined()

@@ -141,6 +141,8 @@ Tudo em `.env`, documentado em [`.env.example`](.env.example):
 | `TOR_HOSTNAME_PATH` | onde o backend lê o `hostname` do hidden service |
 | `TS_AUTHKEY` / `TAILSCALE_HOSTNAME` | chave e nome na Tailscale, quando o perfil sobe |
 | `TUNNEL_TOKEN` / `CLOUDFLARE_HOSTNAME` | túnel e domínio da Cloudflare, quando o perfil sobe |
+| `CLOUDFLARE_METRICS_URL` | onde perguntar se o túnel tem conexão com a borda; o padrão é o `--metrics` do compose |
+| `DOCKER_SOCKET` / `COMPOSE_PROJECT` | **opt-in.** Ligam o controle dos acessos pela tela; vêm de `docker-compose.controle.yml`, e não do `.env` |
 
 ### Avisos no celular
 
@@ -162,9 +164,11 @@ o servidor local na sua rede.
 ### Alcançar o painel de fora
 
 Três caminhos, três posturas de privacidade, e **nenhum ligado por padrão**. A página
-**Acessos** mostra por onde o painel está acessível e o que cada caminho enxerga; ligar
-e desligar é na máquina que hospeda, de propósito — um painel que abre túnel sozinho é
-um painel que se publica sem ninguém mandar.
+**Acessos** mostra por onde o painel está acessível e o que cada caminho enxerga. Por
+padrão, ligar e desligar é na máquina que hospeda: um painel que abre túnel sozinho é um
+painel que se publica sem ninguém mandar. Quem quiser fazer isso pela tela precisa
+montar o socket do Docker de propósito, e a seção **opt-in**, mais abaixo, diz o que
+isso custa.
 
 ```bash
 docker compose --profile tor up -d          # endereço .onion, com QR na tela
@@ -182,9 +186,50 @@ A linha da Cloudflare fica na tela, e não numa nota de rodapé. Publicar um wat
 privacidade atrás de um terminador de TLS de terceiro é escolha legítima — e este produto
 existe para que escolhas assim sejam feitas sabendo.
 
+Cada caminho tem uma página própria — **Acessos › Tor**, **Tailscale**, **Cloudflare** —
+com o passo a passo numerado, os comandos com botão de copiar, o endereço com QR, o
+estado medido e o que fazer quando não funciona. O mesmo conteúdo está em
+[`docs/acessos/`](docs/acessos/), para quem prefere ler no repositório.
+
+A página distingue **configurado** de **respondendo**, e a diferença entre os dois é o
+caso em que a pessoa acha que está publicada e não está: o `.onion` no arquivo, com o Tor
+parado. Um terceiro estado, **não medido**, existe para a tela não afirmar o que não
+mediu — e ele nunca aparece como vermelho.
+
 O perfil `tor` guarda a chave do endereço `.onion` num volume do Docker; o backend monta
-apenas o `hostname`, em modo leitura. **O socket do Docker não é montado em lugar nenhum**:
-o painel lê por onde está acessível, e não liga nem desliga container nenhum.
+apenas o `hostname`, em modo leitura.
+
+#### Ligar e desligar pela tela é opt-in
+
+**Por padrão, o socket do Docker não é montado em lugar nenhum**, e o painel lê por onde
+está acessível sem ligar nem desligar container nenhum. É o comportamento de fábrica, e
+ele não muda sozinho.
+
+Quem quiser os botões de **Ativar** e **Desativar** na página de cada caminho soma um
+segundo arquivo ao compose, de propósito:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.controle.yml up -d
+docker compose --profile tor create   # uma vez por perfil que você vá controlar
+```
+
+> **Quem alcança o socket do Docker é root na máquina que hospeda.** Não há montagem em
+> modo leitura que mude isso: um socket não é um arquivo que se lê, é um canal, e o
+> engine do outro lado obedece a quem fala nele. Com o socket montado, **uma sessão do
+> painel vale execução de código nessa máquina** — e, se o painel estiver publicado num
+> túnel, isso vale para quem obtiver uma sessão de fora.
+
+O que estreita a superfície, e está no código, não na documentação:
+
+1. **o backend não recebe comando.** Ele recebe `{ profile, action }`, confere contra
+   três perfis e dois verbos, e monta ele mesmo as duas únicas chamadas que sabe fazer:
+   `/start` e `/stop`, sobre um id que veio do próprio engine. Não há shell em lugar
+   nenhum desse caminho, e nenhum `exec`, `logs` ou `create` é alcançável;
+2. **`users.is_admin`**, conferido antes de qualquer chamada: quem não é admin da
+   instância recebe 403, e o engine não chega a ser tocado;
+3. **o arquivo separado.** Sem somá-lo, nada disto existe.
+
+A tela repete esse aviso, em cor de atenção, para quem tem o botão à frente.
 
 ## Onde o Bitcoin participa do fluxo
 

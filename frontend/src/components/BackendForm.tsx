@@ -1,5 +1,12 @@
 import { useState } from 'react'
-import { api, mensagemDoErro, type Catalog, type Lang, type Network } from '../lib/api'
+import {
+  api,
+  mensagemDoErro,
+  type Catalog,
+  type Deteccao,
+  type Lang,
+  type Network,
+} from '../lib/api'
 import { render } from '../lib/i18n'
 import { PRESETS, pareceLocalhost, presetPor, type PresetId } from '../lib/presets'
 import { Button } from './ui/Button'
@@ -37,26 +44,58 @@ export function BackendForm({
   const [usuario, setUsuario] = useState('')
   const [senha, setSenha] = useState('')
   const [publico, setPublico] = useState(false)
+  const [datadir, setDatadir] = useState('')
+  const [deteccao, setDeteccao] = useState<Deteccao | null>(null)
+  const [procurando, setProcurando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
 
   const preset = presetPor(presetId)
   const portaEfetiva = porta || String(preset.portaPadrao?.[network] ?? '')
+  const deteccaoValida =
+    preset.pede !== 'datadir' || (deteccao?.found === true && deteccao.reachable !== false)
 
   function trocarPreset(id: PresetId): void {
     setPresetId(id)
     setPorta('')
     setErro(null)
+    setDeteccao(null)
     setPublico(presetPor(id).isPublic)
+  }
+
+  /**
+   * Procura o nó a partir do diretório de dados.
+   *
+   * Olhar não é cadastrar: a detecção devolve o que achou, e o cadastro só
+   * acontece quando a pessoa confirma.
+   */
+  async function procurar(): Promise<void> {
+    setErro(null)
+    setProcurando(true)
+    try {
+      setDeteccao(await api.detectNode(datadir.trim()))
+    } catch (err) {
+      setErro(mensagemDoErro(catalog, err, lang))
+    } finally {
+      setProcurando(false)
+    }
   }
 
   async function salvar(): Promise<void> {
     setErro(null)
     setSalvando(true)
     try {
+      // O preset de diretório cadastra como `core`: ele é atalho de formulário,
+      // e não um quarto adapter. O que ele acrescenta é a detecção.
+      const achado = preset.pede === 'datadir' ? deteccao : null
       const criado = await api.addBackend({
-        preset: presetId,
-        network,
+        preset: achado ? 'core' : presetId,
+        ...(achado?.host ? { host: achado.host } : {}),
+        ...(achado?.rpcPort ? { port: achado.rpcPort } : {}),
+        ...(achado?.cookiePath
+          ? { auth: { mode: 'cookie' as const, cookiePath: achado.cookiePath } }
+          : {}),
+        network: achado?.network ?? network,
         isPublic: publico,
         ...(preset.pede === 'host-porta'
           ? { host: host.trim(), port: Number(portaEfetiva) }
@@ -126,6 +165,64 @@ export function BackendForm({
             onChange={e => setPorta(e.target.value)}
             className={`mb-2 ${campo}`}
           />
+        </>
+      )}
+
+      {preset.pede === 'datadir' && (
+        <>
+          <label htmlFor="fonte-datadir" className={rotulo}>
+            {render(catalog, 'backends.datadir', {}, lang)}
+          </label>
+          <input
+            id="fonte-datadir"
+            value={datadir}
+            onChange={e => setDatadir(e.target.value)}
+            placeholder="/mnt/dados2"
+            className={`mb-1 ${campo}`}
+          />
+          <p className="mb-2 font-prose text-sm leading-relaxed text-faint">
+            {render(catalog, 'backends.datadirHint', {}, lang)}
+          </p>
+          <Button
+            disabled={procurando || !datadir.trim()}
+            onClick={() => void procurar()}
+            className="mb-2"
+          >
+            {render(catalog, 'backends.detect', {}, lang)}
+          </Button>
+
+          {deteccao?.found && (
+            <p
+              className="mb-2 font-prose text-sm leading-relaxed"
+              style={{
+                color:
+                  deteccao.reachable === false
+                    ? 'var(--sb-warning)'
+                    : 'var(--sb-sovereign)',
+              }}
+            >
+              {render(
+                catalog,
+                'backends.detectFound',
+                { network: deteccao.network ?? '', blocks: deteccao.blocks ?? '' },
+                lang,
+              )}
+              {deteccao.reachable === false && deteccao.hint ? ' · ' + deteccao.hint : ''}
+            </p>
+          )}
+
+          {deteccao && !deteccao.found && (
+            <div className="mb-2">
+              <p className="font-prose text-sm leading-relaxed" style={{ color: 'var(--sb-warning)' }}>
+                {deteccao.hint}
+              </p>
+              {deteccao.compose && (
+                <pre className="mt-1 overflow-x-auto rounded border border-line bg-bg p-2 text-xs">
+                  {deteccao.compose}
+                </pre>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -230,7 +327,7 @@ export function BackendForm({
         </p>
       )}
 
-      <Button variant="primary" disabled={salvando} onClick={() => void salvar()}>
+      <Button variant="primary" disabled={salvando || !deteccaoValida} onClick={() => void salvar()}>
         {render(catalog, 'backends.save', {}, lang)}
       </Button>
     </div>

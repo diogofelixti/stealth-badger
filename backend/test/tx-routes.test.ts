@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { ChainAdapter } from '../src/chain/types'
 import { buildApp } from '../src/app'
 import { pool } from '../src/db/pool'
+import { aguardarTxScan } from '../src/privacy/andamento'
+import type { AppOptions } from '../src/app'
 import { resetDb } from './helpers/db'
 
 const TXID = 'ab'.repeat(32)
@@ -53,9 +55,9 @@ function adapterQueFalha(): ChainAdapter {
   }
 }
 
-async function cenario(fabrica: () => ChainAdapter) {
+async function cenario(fabrica: () => ChainAdapter, opts: AppOptions = {}) {
   process.env.NETWORK = 'signet'
-  const app = buildApp({ adapterFactory: fabrica })
+  const app = buildApp({ ...opts, adapterFactory: fabrica })
   await app.inject({
     method: 'POST',
     url: '/api/auth/register',
@@ -83,6 +85,67 @@ async function cenario(fabrica: () => ChainAdapter) {
 
 beforeEach(async () => {
   await resetDb()
+})
+
+describe('privacidade da transação', () => {
+  it('analisa score, achados e Boltzmann da transação sob demanda', async () => {
+    const { app, cookie, walletId } = await cenario(adapterQueSabe, {
+      txScanner: async ctx => ({
+        score: 0,
+        grade: 'F',
+        txType: 'simple-payment',
+        txInfo: { inputs: 2, outputs: 2, changeRevealed: true, txid: ctx.txid },
+        chainAnalysis: { entityCluster: 'exchange', reusedCounterparties: 12 },
+        findings: [
+          {
+            id: 'tx-change-revealed',
+            severity: 'critical',
+            confidence: 'deterministic',
+            title: 'Troco revelado',
+            description: 'Mesmo endereço aparece na entrada e na saída.',
+            recommendation: {
+              urgency: 'alta',
+              headline: 'Separe este troco',
+              text: 'Não junte esta saída com fundos limpos.',
+              tools: [{ name: 'Whirlpool', url: 'https://sparrowwallet.com/docs/mixing-whirlpool.html' }],
+            },
+            scoreImpact: -90,
+            params: {},
+          },
+        ],
+        scannerVersion: '0.34.2',
+      }),
+      boltzmannScanner: async () => ({
+        entropy: 0,
+        matrix: [[1, 1], [1, 1]],
+      }),
+    })
+
+    const post = await app.inject({
+      method: 'POST',
+      url: `/api/wallets/${walletId}/tx/${TXID}/privacy`,
+      cookies: { sb_session: cookie },
+    })
+    expect(post.statusCode).toBe(202)
+    await aguardarTxScan(walletId, TXID)
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/wallets/${walletId}/tx/${TXID}/privacy`,
+      cookies: { sb_session: cookie },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().latest).toMatchObject({
+      txid: TXID,
+      score: 0,
+      grade: 'F',
+      txType: 'simple-payment',
+      txInfo: { changeRevealed: true },
+      chainAnalysis: { reusedCounterparties: 12 },
+      boltzmann: { entropy: 0, matrix: [[1, 1], [1, 1]] },
+    })
+    expect(res.json().latest.findings[0].recommendation.headline).toBe('Separe este troco')
+  })
 })
 
 describe('GET /api/tx/:txid', () => {

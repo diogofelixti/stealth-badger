@@ -11,6 +11,10 @@
  */
 const emAndamento = new Map<number, Promise<void>>()
 const ultimoErro = new Map<number, string>()
+const enderecosEmAndamento = new Map<number, Promise<void>>()
+const ultimoErroDeEndereco = new Map<number, string>()
+const transacoesEmAndamento = new Map<string, Promise<void>>()
+const ultimoErroDeTransacao = new Map<string, string>()
 
 export function scanEmAndamento(walletId: number): boolean {
   return emAndamento.has(walletId)
@@ -46,4 +50,79 @@ export function registrarScan(walletId: number, tarefa: () => Promise<void>): bo
 
 export async function aguardarScan(walletId: number): Promise<void> {
   await emAndamento.get(walletId)
+}
+
+export function addressScanEmAndamento(addressId: number): boolean {
+  return enderecosEmAndamento.has(addressId)
+}
+
+export function erroDoUltimoAddressScan(addressId: number): string | null {
+  return ultimoErroDeEndereco.get(addressId) ?? null
+}
+
+export function registrarAddressScan(addressId: number, tarefa: () => Promise<void>): boolean {
+  if (enderecosEmAndamento.has(addressId)) return false
+
+  const promessa = (async () => {
+    try {
+      await tarefa()
+      ultimoErroDeEndereco.delete(addressId)
+    } catch (err) {
+      ultimoErroDeEndereco.set(addressId, (err as Error).message)
+      console.error(
+        'falha ao analisar privacidade do endereço ' + addressId + ': ' + (err as Error).message,
+      )
+    } finally {
+      enderecosEmAndamento.delete(addressId)
+    }
+  })()
+
+  enderecosEmAndamento.set(addressId, promessa)
+  return true
+}
+
+export async function aguardarAddressScan(addressId: number): Promise<void> {
+  await enderecosEmAndamento.get(addressId)
+}
+
+function chaveTx(walletId: number, txid: string): string {
+  return walletId + ':' + txid
+}
+
+export function txScanEmAndamento(walletId: number, txid: string): boolean {
+  return transacoesEmAndamento.has(chaveTx(walletId, txid))
+}
+
+export function erroDoUltimoTxScan(walletId: number, txid: string): string | null {
+  return ultimoErroDeTransacao.get(chaveTx(walletId, txid)) ?? null
+}
+
+export function registrarTxScan(
+  walletId: number,
+  txid: string,
+  tarefa: () => Promise<void>,
+): boolean {
+  const chave = chaveTx(walletId, txid)
+  if (transacoesEmAndamento.has(chave)) return false
+
+  const promessa = (async () => {
+    try {
+      await tarefa()
+      ultimoErroDeTransacao.delete(chave)
+    } catch (err) {
+      ultimoErroDeTransacao.set(chave, (err as Error).message)
+      console.error(
+        'falha ao analisar privacidade da transação ' + txid + ': ' + (err as Error).message,
+      )
+    } finally {
+      transacoesEmAndamento.delete(chave)
+    }
+  })()
+
+  transacoesEmAndamento.set(chave, promessa)
+  return true
+}
+
+export async function aguardarTxScan(walletId: number, txid: string): Promise<void> {
+  await transacoesEmAndamento.get(chaveTx(walletId, txid))
 }

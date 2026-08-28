@@ -60,9 +60,12 @@ services:
 
   # ── ACESSOS EXTERNOS ────────────────────────────────────────────────────
   # Três caminhos, três posturas, e nenhum sobe por padrão. Ligar é escolha de
-  # quem hospeda: `docker compose --profile tor up -d`. Nenhum deles monta o
-  # socket do Docker — o painel lê por onde está acessível, e não liga nem
-  # desliga nada.
+  # quem hospeda: `docker compose --profile tor up -d`.
+  #
+  # Este arquivo não monta o socket do Docker, e por padrão o painel lê por
+  # onde está acessível sem ligar nem desligar nada. Ligar e desligar pela tela
+  # é um segundo arquivo, `docker-compose.controle.yml`, que precisa ser
+  # somado a este de propósito — a razão está escrita lá dentro.
 
   # O mais soberano: ninguém no meio vê o tráfego nem o destino.
   tor:
@@ -100,7 +103,10 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     profiles: ["cloudflared"]
-    command: tunnel --no-autoupdate run
+    # `--metrics` abre a porta de prontidão na rede interna do compose, e é
+    # dela que a página de acessos lê se o túnel tem conexão com a borda. Sem
+    # ela o estado do caminho fica "não medido", que é honesto e menos útil.
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 run
     environment:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
     depends_on:

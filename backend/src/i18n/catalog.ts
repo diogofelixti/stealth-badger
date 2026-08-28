@@ -59,6 +59,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'theme.bone': 'bone · claro',
     'theme.carvao': 'carvão · escuro neutro',
     'theme.contraste': 'contraste · alto contraste',
+    'theme.cypherpunk': 'cypherpunk · fósforo sobre preto',
     'prefs.price': 'Preço do BTC',
     'prefs.priceNote':
       'Nenhuma fonte ligada de fábrica. Ligar uma faz este servidor perguntar o preço a ' +
@@ -96,7 +97,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'settings.sessionNote':
       'A sessão vive num cookie de sessão, e sair a encerra neste navegador.',
     'access.roadmap':
-      'Por onde o painel pode ser alcançado de fora, e o que cada caminho enxerga. Esta página lê a configuração; ligar e desligar é na máquina que hospeda, de propósito: um painel que liga túnel sozinho é um painel que se publica sem ninguém mandar.',
+      'Por onde o painel pode ser alcançado de fora, e o que cada caminho enxerga. Abra um caminho para ver o passo a passo, o endereço com QR e o que fazer quando ele não responde. Por padrão, ligar e desligar é na máquina que hospeda: um painel que liga túnel sozinho é um painel que se publica sem ninguém mandar.',
     'access.tor': 'Tor',
     'access.torNote':
       'O mais soberano: ninguém no meio vê o tráfego nem o destino. O endereço onion abre no Tor Browser, e o QR evita digitar 56 caracteres no celular.',
@@ -108,6 +109,83 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
       'A Cloudflare termina o TLS e enxerga o seu tráfego em claro. É uma escolha legítima, e este produto existe para que ela seja feita sabendo.',
     'access.off': 'não configurado',
     'access.howTo': 'ligar é {comando}, na máquina que hospeda',
+    'access.steps': 'Passo a passo',
+    'access.sees': 'O que este caminho enxerga',
+    'access.trouble': 'Quando não funciona',
+    'access.address': 'Endereço',
+    'access.up': 'de pé',
+    'access.down': 'desligado',
+    'access.unknown': 'não medido',
+    'access.by.docker': 'medido pelo estado do container',
+    'access.by.dns': 'medido pelo nome na MagicDNS',
+    'access.by.http': 'medido pela prontidão do cloudflared',
+    'access.by.none': 'esta instância não tem como olhar daqui, e por isso não afirma nada',
+    'access.copy': 'copiar',
+    'access.copied': 'copiado',
+    'access.copyFailed': 'o navegador não deixou copiar; selecione e copie na mão',
+    'access.open': 'abrir',
+    'access.all': 'todos os acessos',
+    'access.docs': 'documentação completa deste caminho',
+    'access.details': 'passo a passo, estado e QR deste caminho',
+    'access.activate': 'Ativar',
+    'access.deactivate': 'Desativar',
+    'access.working': 'falando com o Docker…',
+    'access.controlTitle': 'Ligar e desligar por aqui',
+    'access.socketNote':
+      'Esta instância subiu com o socket do Docker montado. Enquanto ele estiver aí, uma sessão do painel vale execução de código na máquina que hospeda; se o painel estiver publicado num túnel, isso vale para quem obtiver uma sessão de fora. O que estreita isso: só o admin da instância chega aqui, e só três perfis e dois verbos atravessam, montados pelo backend e nunca recebidos prontos.',
+    'access.socketOff':
+      'Esta instância lê os acessos e não os controla: ela subiu sem DOCKER_SOCKET. Ligar e desligar é na máquina que hospeda, com os comandos acima.',
+    'access.adminOnlyNote':
+      'Ligar e desligar acesso externo é do admin da instância. Você continua vendo o estado de cada caminho.',
+    'access.runOnce':
+      'Este perfil nunca subiu nesta máquina, então não há container para ligar. Rode o comando abaixo uma vez; depois dele, o painel liga e desliga sozinho.',
+    'access.tor.sees':
+      'Ninguém no meio vê o tráfego nem o destino, e não há terceiro envolvido. O endereço é a credencial de alcance: quem o tem chega à tela de login, e a sua senha continua sendo a única barreira depois disso.',
+    'access.tor.step1':
+      'Suba o perfil na máquina que hospeda. Na primeira vez, o Tor gera a chave e o endereço.',
+    'access.tor.step2':
+      'O endereço aparece aqui em alguns segundos. Ele vem do arquivo hostname, montado em modo leitura: o backend nunca enxerga a chave privada do endereço.',
+    'access.tor.step3':
+      'Abra o endereço no Tor Browser, ou leia o QR no celular com o Tor Browser instalado.',
+    'access.tor.trouble1':
+      'Endereço vazio depois de subir: o volume tor-data não chegou ao backend. Confira o volume em modo leitura no serviço backend, e TOR_HOSTNAME_PATH no .env.',
+    'access.tor.trouble2':
+      'Endereço aparece e não abre: o serviço parou depois de gerar a chave. O endereço sobrevive ao container, então ele continua na tela mesmo com o Tor fora do ar.',
+    'access.tor.trouble3':
+      'Sem o socket do Docker, esta página não tem como ver se o processo do Tor está de pé, e por isso ela diz "não medido" em vez de pintar um verde que não mediu.',
+    'access.tailscale.sees':
+      'Uma rede privada entre os seus aparelhos. A Tailscale vê metadado de conexão, e não o conteúdo. Só quem está na sua tailnet alcança o endereço, o que faz deste o caminho mais fechado dos três que não exige Tor.',
+    'access.tailscale.step1':
+      'Gere uma auth key no admin da Tailscale e ponha em TS_AUTHKEY, no .env.',
+    'access.tailscale.step2': 'Suba o perfil na máquina que hospeda.',
+    'access.tailscale.step3':
+      'Aprove a máquina no admin da Tailscale, se a sua tailnet exigir aprovação.',
+    'access.tailscale.step4':
+      'Copie o nome da MagicDNS que apareceu no admin para TAILSCALE_HOSTNAME, no .env. É ele que esta página resolve para dizer se a máquina entrou na tailnet.',
+    'access.tailscale.trouble1':
+      'Nome não resolve: a máquina não entrou na tailnet. Auth key vencida e aprovação pendente são as duas causas comuns.',
+    'access.tailscale.trouble2':
+      'Nome resolve e a página não abre: o aparelho de onde você está não está na tailnet. O nome é público, o endereço 100.x não é alcançável de fora dela.',
+    'access.tailscale.trouble3':
+      'O endereço da Tailscale é http, e não https: o navegador não o considera contexto seguro, e o botão de copiar cai no caminho de reserva. Ele continua copiando.',
+    'access.cloudflare.sees':
+      'A Cloudflare termina o TLS e enxerga o seu tráfego em claro, inclusive os endereços que você vigia. É uma escolha legítima, e este produto existe para que ela seja feita sabendo. Em compensação, é o único caminho que abre em qualquer navegador, sem instalar nada.',
+    'access.cloudflare.step1':
+      'Crie o túnel no painel da Cloudflare e copie o token para TUNNEL_TOKEN, no .env.',
+    'access.cloudflare.step2': 'Suba o perfil na máquina que hospeda.',
+    'access.cloudflare.step3':
+      'No painel da Cloudflare, aponte o hostname público para o serviço nginx na porta 80, e ponha o domínio em CLOUDFLARE_HOSTNAME.',
+    'access.cloudflare.trouble1':
+      'Túnel sem conexão nenhuma: token errado, ou a saída da máquina bloqueia a porta 7844. O estado aqui vem da prontidão do próprio cloudflared.',
+    'access.cloudflare.trouble2':
+      'O domínio abre e o painel não responde: a rota do túnel está apontando para outro serviço. Ela precisa apontar para nginx na 80, que é quem serve a interface.',
+    'access.cloudflare.trouble3':
+      'Sem a porta de métricas no compose não há a quem perguntar, e o estado fica "não medido". O túnel pode estar perfeitamente de pé.',
+    'error.access.adminOnly':
+      'Ligar e desligar acesso externo é do admin da instância.',
+    'error.access.noSocket':
+      'Esta instância subiu sem DOCKER_SOCKET: o painel lê os acessos, e não os controla.',
+    'error.access.badRequest': 'Perfil ou ação fora da lista branca.',
     'alert.txid': 'Transação',
     'alert.height': 'Altura',
     'alert.blockHash': 'Hash do bloco',
@@ -122,6 +200,10 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'alert.inputs': 'Entradas',
     'alert.outputs': 'Saídas',
     'alert.fee': 'fee de {value} sats',
+    'alert.txPrivacy': 'Privacidade da transação',
+    'alert.txPrivacyRunning': 'análise da transação em andamento...',
+    'alert.txType': 'tipo',
+    'alert.boltzmann': 'Matriz de Boltzmann',
     'alert.close': 'Fechar',
     'error.alert.notFound': 'Este alerta não existe, ou não é seu.',
     'error.tx.unsupportedByBackend':
@@ -144,6 +226,8 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
       'Cole a chave pública estendida da carteira que você quer vigiar. ' +
       'O Stealth Badger passa a avisar sobre movimentação e, principalmente, ' +
       'sobre vazamento de privacidade.',
+    'onboarding.stepSource': 'Escolha por onde vigiar',
+    'onboarding.stepWallet': 'Cole a chave',
     'wallets.add': '+ Vigiar carteira',
     'wallets.formTitle': 'Vigiar uma carteira',
     'wallets.labelPlaceholder': 'Rótulo, por exemplo Cold wallet',
@@ -199,6 +283,16 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'privacy.scanning': 'analisando...',
     'privacy.never': 'privacidade ainda não analisada',
     'privacy.findings': 'O que o scanner viu',
+    'privacy.scanUsedAddresses': 'Analisar endereços usados',
+    'privacy.addressScanQueued': '{n} endereços na fila',
+    'privacy.chartScore': 'Score',
+    'privacy.chartHistory': 'Histórico',
+    'privacy.chartSeverity': 'Severidade',
+    'privacy.chartUtxos': 'Faixas de UTXO',
+    'privacy.chartReuse': 'Reuso de endereço',
+    'privacy.chartCounterparties': 'Contrapartes recorrentes',
+    'privacy.reusedAddresses': '{reused} de {total} endereços usados de novo',
+    'privacy.utxoTotal': 'total no histograma: {value}',
     'error.auth.invalidInput': 'E-mail inválido, ou senha com menos de 12 caracteres.',
     'error.auth.emailTaken': 'Este e-mail já tem conta.',
     'error.auth.invalidCredentials': 'E-mail ou senha não conferem.',
@@ -224,6 +318,11 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'backends.credentialNote':
       'A credencial é cifrada com a chave-mestra do servidor e nunca volta numa ' +
       'resposta da API. Quem alcança o RPC do seu nó pode pará-lo.',
+    'backends.datadir': 'Diretório de dados do nó',
+    'backends.datadirHint':
+      'Onde o bitcoind guarda os dados, por exemplo /mnt/dados2 ou ~/.bitcoin.',
+    'backends.detect': 'Procurar o nó',
+    'backends.detectFound': 'Achei um nó de {network} na altura {blocks}.',
     'backends.dockerHint':
       'Este watchtower roda em container: localhost aqui é o próprio container, não a sua máquina. Use host.docker.internal.',
     'error.backend.unknownPreset': 'Não conheço a fonte "{preset}". Escolha uma do catálogo.',
@@ -295,6 +394,8 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'backends.global': 'configurado no servidor',
     'backends.own': 'seu',
     'backends.addToggle': '+ outro backend',
+    'backends.addSource': 'Adicionar fonte',
+    'backends.newSource': 'Nova fonte',
     'backends.urlPlaceholder': 'https://... ou electrum://host:50001',
     'backends.isPublic': 'É um serviço público de terceiro',
     'backends.publicNote':
@@ -353,6 +454,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'theme.bone': 'bone · light',
     'theme.carvao': 'carvão · neutral dark',
     'theme.contraste': 'contraste · high contrast',
+    'theme.cypherpunk': 'cypherpunk · phosphor on black',
     'prefs.price': 'BTC price',
     'prefs.priceNote':
       'No source is on out of the box. Turning one on makes this server ask it for the ' +
@@ -390,7 +492,7 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'settings.sessionNote':
       'The session lives in a session cookie, and logging out ends it in this browser.',
     'access.roadmap':
-      'How the panel can be reached from outside, and what each path sees. This page reads the configuration; turning it on and off happens on the host machine, on purpose: a panel that opens a tunnel by itself is a panel that publishes itself with nobody asking.',
+      'How the panel can be reached from outside, and what each path sees. Open a path to get the step by step, the address with a QR, and what to do when it does not answer. By default, turning it on and off happens on the host machine: a panel that opens a tunnel by itself is a panel that publishes itself with nobody asking.',
     'access.tor': 'Tor',
     'access.torNote':
       'The most sovereign: nobody in the middle sees the traffic or the destination. The onion address opens in Tor Browser, and the QR saves typing 56 characters on a phone.',
@@ -402,6 +504,83 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
       'Cloudflare terminates TLS and sees your traffic in the clear. It is a legitimate choice, and this product exists so that it is made knowingly.',
     'access.off': 'not configured',
     'access.howTo': 'turn it on with {comando}, on the host machine',
+    'access.steps': 'Step by step',
+    'access.sees': 'What this path sees',
+    'access.trouble': 'When it does not work',
+    'access.address': 'Address',
+    'access.up': 'up',
+    'access.down': 'off',
+    'access.unknown': 'not measured',
+    'access.by.docker': 'measured from the container state',
+    'access.by.dns': 'measured from the MagicDNS name',
+    'access.by.http': 'measured from the cloudflared readiness endpoint',
+    'access.by.none': 'this instance has no way to look from here, so it claims nothing',
+    'access.copy': 'copy',
+    'access.copied': 'copied',
+    'access.copyFailed': 'the browser refused to copy; select and copy by hand',
+    'access.open': 'open',
+    'access.all': 'all access paths',
+    'access.docs': 'full documentation for this path',
+    'access.details': 'step by step, state and QR for this path',
+    'access.activate': 'Turn on',
+    'access.deactivate': 'Turn off',
+    'access.working': 'talking to Docker…',
+    'access.controlTitle': 'Turning it on and off from here',
+    'access.socketNote':
+      'This instance came up with the Docker socket mounted. While it is there, a panel session is worth code execution on the host machine; if the panel is published through a tunnel, that goes for whoever obtains a session from outside. What narrows it: only the instance admin reaches this, and only three profiles and two verbs get through, assembled by the backend and never received ready made.',
+    'access.socketOff':
+      'This instance reads the access paths and does not control them: it came up without DOCKER_SOCKET. Turning them on and off happens on the host machine, with the commands above.',
+    'access.adminOnlyNote':
+      'Turning external access on and off belongs to the instance admin. You still see the state of every path.',
+    'access.runOnce':
+      'This profile has never come up on this machine, so there is no container to start. Run the command below once; after it, the panel turns it on and off by itself.',
+    'access.tor.sees':
+      'Nobody in the middle sees the traffic or the destination, and no third party is involved. The address is the reach credential: whoever has it gets to the login screen, and your password is the only barrier past that.',
+    'access.tor.step1':
+      'Bring the profile up on the host machine. The first time, Tor generates the key and the address.',
+    'access.tor.step2':
+      'The address shows up here within seconds. It comes from the hostname file, mounted read only: the backend never sees the private key of the address.',
+    'access.tor.step3':
+      'Open the address in Tor Browser, or scan the QR on a phone that has Tor Browser installed.',
+    'access.tor.trouble1':
+      'Address empty after bringing it up: the tor-data volume never reached the backend. Check the read only volume on the backend service, and TOR_HOSTNAME_PATH in .env.',
+    'access.tor.trouble2':
+      'Address shows up and does not open: the service stopped after generating the key. The address outlives the container, so it stays on screen even with Tor down.',
+    'access.tor.trouble3':
+      'Without the Docker socket, this page has no way to see whether the Tor process is up, so it says "not measured" instead of painting a green it never measured.',
+    'access.tailscale.sees':
+      'A private network between your own devices. Tailscale sees connection metadata, not content. Only someone on your tailnet reaches the address, which makes this the most closed of the paths that do not require Tor.',
+    'access.tailscale.step1':
+      'Generate an auth key in the Tailscale admin and put it in TS_AUTHKEY, in .env.',
+    'access.tailscale.step2': 'Bring the profile up on the host machine.',
+    'access.tailscale.step3':
+      'Approve the machine in the Tailscale admin, if your tailnet requires approval.',
+    'access.tailscale.step4':
+      'Copy the MagicDNS name shown in the admin into TAILSCALE_HOSTNAME, in .env. That is the name this page resolves to tell whether the machine joined the tailnet.',
+    'access.tailscale.trouble1':
+      'Name does not resolve: the machine never joined the tailnet. An expired auth key and a pending approval are the two common causes.',
+    'access.tailscale.trouble2':
+      'Name resolves and the page does not open: the device you are on is not in the tailnet. The name is public, the 100.x address is not reachable from outside it.',
+    'access.tailscale.trouble3':
+      'The Tailscale address is http, not https: the browser does not treat it as a secure context, and the copy button falls back to the legacy path. It still copies.',
+    'access.cloudflare.sees':
+      'Cloudflare terminates TLS and sees your traffic in the clear, including the addresses you watch. It is a legitimate choice, and this product exists so that it is made knowingly. In exchange, it is the only path that opens in any browser with nothing installed.',
+    'access.cloudflare.step1':
+      'Create the tunnel in the Cloudflare dashboard and copy the token into TUNNEL_TOKEN, in .env.',
+    'access.cloudflare.step2': 'Bring the profile up on the host machine.',
+    'access.cloudflare.step3':
+      'In the Cloudflare dashboard, point the public hostname at the nginx service on port 80, and put the domain in CLOUDFLARE_HOSTNAME.',
+    'access.cloudflare.trouble1':
+      'Tunnel with no connections: wrong token, or the machine blocks outbound port 7844. The state here comes from cloudflared own readiness endpoint.',
+    'access.cloudflare.trouble2':
+      'The domain opens and the panel does not answer: the tunnel route points at another service. It has to point at nginx on 80, which is what serves the interface.',
+    'access.cloudflare.trouble3':
+      'Without the metrics port in the compose file there is nobody to ask, and the state stays "not measured". The tunnel may be perfectly up.',
+    'error.access.adminOnly':
+      'Turning external access on and off belongs to the instance admin.',
+    'error.access.noSocket':
+      'This instance came up without DOCKER_SOCKET: the panel reads the access paths, it does not control them.',
+    'error.access.badRequest': 'Profile or action outside the allowlist.',
     'alert.txid': 'Transaction',
     'alert.height': 'Height',
     'alert.blockHash': 'Block hash',
@@ -416,6 +595,10 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'alert.inputs': 'Inputs',
     'alert.outputs': 'Outputs',
     'alert.fee': 'fee of {value} sats',
+    'alert.txPrivacy': 'Transaction privacy',
+    'alert.txPrivacyRunning': 'transaction analysis running...',
+    'alert.txType': 'type',
+    'alert.boltzmann': 'Boltzmann matrix',
     'alert.close': 'Close',
     'error.alert.notFound': 'That alert does not exist, or is not yours.',
     'error.tx.unsupportedByBackend':
@@ -438,6 +621,8 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
       'Paste the extended public key of the wallet you want to watch. ' +
       'Stealth Badger will alert you about movement and, above all, about ' +
       'privacy leaks.',
+    'onboarding.stepSource': 'Choose where to watch through',
+    'onboarding.stepWallet': 'Paste the key',
     'wallets.add': '+ Watch a wallet',
     'wallets.formTitle': 'Watch a wallet',
     'wallets.labelPlaceholder': 'Label, for example Cold wallet',
@@ -494,6 +679,16 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'privacy.scanning': 'analyzing...',
     'privacy.never': 'privacy not analyzed yet',
     'privacy.findings': 'What the scanner saw',
+    'privacy.scanUsedAddresses': 'Analyze used addresses',
+    'privacy.addressScanQueued': '{n} addresses queued',
+    'privacy.chartScore': 'Score',
+    'privacy.chartHistory': 'History',
+    'privacy.chartSeverity': 'Severity',
+    'privacy.chartUtxos': 'UTXO ranges',
+    'privacy.chartReuse': 'Address reuse',
+    'privacy.chartCounterparties': 'Recurring counterparties',
+    'privacy.reusedAddresses': '{reused} of {total} addresses reused',
+    'privacy.utxoTotal': 'histogram total: {value}',
     'error.auth.invalidInput': 'Invalid email, or password shorter than 12 characters.',
     'error.auth.emailTaken': 'That email already has an account.',
     'error.auth.invalidCredentials': 'Email and password do not match.',
@@ -519,6 +714,11 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'backends.credentialNote':
       'The credential is encrypted with the server master key and never comes back ' +
       'in an API response. Whoever reaches your node RPC can stop it.',
+    'backends.datadir': 'Node data directory',
+    'backends.datadirHint':
+      'Where bitcoind stores its data, for example /mnt/dados2 or ~/.bitcoin.',
+    'backends.detect': 'Find the node',
+    'backends.detectFound': 'Found a {network} node at height {blocks}.',
     'backends.dockerHint':
       'This watchtower runs in a container: localhost here is the container itself, not your machine. Use host.docker.internal.',
     'error.backend.unknownPreset': 'I do not know the source "{preset}". Pick one from the catalogue.',
@@ -590,6 +790,8 @@ export const CATALOG: Record<Lang, Record<string, string>> = {
     'backends.global': 'server default',
     'backends.own': 'yours',
     'backends.addToggle': '+ another backend',
+    'backends.addSource': 'Add source',
+    'backends.newSource': 'New source',
     'backends.urlPlaceholder': 'https://... or electrum://host:50001',
     'backends.isPublic': "It is someone else's public service",
     'backends.publicNote':

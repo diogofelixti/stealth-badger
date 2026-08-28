@@ -1,10 +1,46 @@
 import { pool } from '../db/pool'
-import type { PrivacyFinding } from './scan'
+import type { PrivacyFinding, TxScan } from './scan'
 
 export interface TransacaoPendente {
   txid: string
   /** o evento que trouxe os fundos, para o alerta poder se amarrar a ele */
   eventId: number
+}
+
+export interface TxScanSalvo extends TxScan {
+  txid: string
+  scannedAt: Date
+  error: string | null
+}
+
+interface LinhaTxScan {
+  txid: string
+  score: number | null
+  grade: string | null
+  tx_type: string | null
+  tx_info: Record<string, unknown>
+  chain_analysis: Record<string, unknown>
+  boltzmann: Record<string, unknown> | null
+  findings: PrivacyFinding[]
+  scanner_version: string
+  scanned_at: Date
+  error: string | null
+}
+
+function daLinha(r: LinhaTxScan): TxScanSalvo {
+  return {
+    txid: r.txid,
+    score: r.score,
+    grade: r.grade,
+    txType: r.tx_type,
+    txInfo: r.tx_info,
+    chainAnalysis: r.chain_analysis,
+    boltzmann: r.boltzmann,
+    findings: r.findings,
+    scannerVersion: r.scanner_version,
+    scannedAt: r.scanned_at,
+    error: r.error,
+  }
 }
 
 export async function salvarTxScan(
@@ -24,6 +60,59 @@ export async function salvarTxScan(
        scanned_at      = now()`,
     [walletId, txid, JSON.stringify(findings), scannerVersion, error],
   )
+}
+
+export async function salvarTxScanCompleto(
+  walletId: number,
+  txid: string,
+  scan: TxScan,
+  error: string | null = null,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO tx_scans
+       (wallet_id, txid, score, grade, tx_type, tx_info, chain_analysis,
+        boltzmann, findings, scanner_version, error)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     ON CONFLICT (wallet_id, txid) DO UPDATE SET
+       score           = EXCLUDED.score,
+       grade           = EXCLUDED.grade,
+       tx_type         = EXCLUDED.tx_type,
+       tx_info         = EXCLUDED.tx_info,
+       chain_analysis  = EXCLUDED.chain_analysis,
+       boltzmann       = EXCLUDED.boltzmann,
+       findings        = EXCLUDED.findings,
+       scanner_version = EXCLUDED.scanner_version,
+       error           = EXCLUDED.error,
+       scanned_at      = now()`,
+    [
+      walletId,
+      txid,
+      scan.score ?? null,
+      scan.grade ?? null,
+      scan.txType ?? null,
+      JSON.stringify(scan.txInfo ?? {}),
+      JSON.stringify(scan.chainAnalysis ?? {}),
+      scan.boltzmann == null ? null : JSON.stringify(scan.boltzmann),
+      JSON.stringify(scan.findings),
+      scan.scannerVersion,
+      error,
+    ],
+  )
+}
+
+export async function ultimoTxScan(
+  walletId: number,
+  txid: string,
+): Promise<TxScanSalvo | null> {
+  const { rows } = await pool.query<LinhaTxScan>(
+    `SELECT txid, score, grade, tx_type, tx_info, chain_analysis, boltzmann,
+            findings, scanner_version, scanned_at, error
+       FROM tx_scans
+      WHERE wallet_id = $1 AND txid = $2
+      ORDER BY scanned_at DESC LIMIT 1`,
+    [walletId, txid],
+  )
+  return rows[0] ? daLinha(rows[0]) : null
 }
 
 /**

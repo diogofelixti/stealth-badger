@@ -7,6 +7,7 @@ import { WalletPage } from './pages/WalletPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { AccessPage } from './pages/AccessPage'
+import { AcessoPage } from './pages/AcessoPage'
 
 /** O painel lê catálogo e idioma do contexto, como as outras páginas. */
 function Painel() {
@@ -40,6 +41,7 @@ export function Rotas({
         <Route path="/alertas" element={<AlertsPage />} />
         <Route path="/configuracoes" element={<SettingsPage />} />
         <Route path="/acessos" element={<AccessPage />} />
+        <Route path="/acessos/:caminho" element={<AcessoPage />} />
         {/* Rota desconhecida cai no painel: melhor a tela cheia que um vazio. */}
         <Route path="*" element={<Painel />} />
       </Route>

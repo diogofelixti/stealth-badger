@@ -7,6 +7,7 @@ import { AlertDetail } from '../components/AlertDetail'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { render } from '../lib/i18n'
 import { useDadosDoPainel } from './Layout'
+import { Button } from '../components/ui/Button'
 
 function host(url: string): string {
   try {
@@ -74,14 +75,9 @@ export function WalletPage() {
         }
       />
 
-      <a
-        href={api.exportLabels(carteira.id)}
-        download
-        className="text-xs uppercase tracking-label"
-        style={{ color: 'var(--sb-accent)' }}
-      >
+      <Button as="a" href={api.exportLabels(carteira.id)} download className="self-start">
         {render(catalog, 'utxos.export', {}, lang)}
-      </a>
+      </Button>
 
       <section>
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-label text-faint">

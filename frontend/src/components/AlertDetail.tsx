@@ -6,13 +6,33 @@ import {
   type Catalog,
   type Lang,
   type TxDetail,
+  type TxPrivacyReport,
 } from '../lib/api'
 import { formatSats } from '../lib/format'
 import { render, renderAlert } from '../lib/i18n'
+import { RecommendationView } from './PrivacyPanel'
 import { Button } from './ui/Button'
 
 const linha = 'flex flex-wrap items-baseline gap-2 text-sm'
 const rotulo = 'text-xs uppercase tracking-label text-faint'
+
+function matrizBoltzmann(boltzmann: Record<string, unknown> | null | undefined): number[][] | null {
+  const direta = boltzmann?.matrix
+  const aninhada = typeof direta === 'object' && direta !== null && !Array.isArray(direta)
+    ? (direta as Record<string, unknown>).probabilities
+    : null
+  const candidata = Array.isArray(direta)
+    ? direta
+    : Array.isArray(boltzmann?.probabilities)
+      ? boltzmann.probabilities
+      : aninhada
+  if (!Array.isArray(candidata)) return null
+  const matriz = candidata
+    .filter(linha => Array.isArray(linha))
+    .map(linha => linha.filter(v => typeof v === 'number' && Number.isFinite(v)) as number[])
+    .filter(linha => linha.length > 0)
+  return matriz.length > 0 ? matriz : null
+}
 
 /**
  * O detalhe de um alerta.
@@ -40,6 +60,7 @@ export function AlertDetail({
 }) {
   const [detalhe, setDetalhe] = useState<Detalhe | null>(null)
   const [tx, setTx] = useState<TxDetail | null>(null)
+  const [txPrivacy, setTxPrivacy] = useState<TxPrivacyReport | null>(null)
   const [buscando, setBuscando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
@@ -55,7 +76,11 @@ export function AlertDetail({
     setBuscando(true)
     setErro(null)
     try {
-      setTx(await api.transaction(detalhe.event.txid, detalhe.wallet.id))
+      const walletId = detalhe.wallet.id
+      const txid = detalhe.event.txid
+      setTx(await api.transaction(txid, walletId))
+      await api.scanTxPrivacy(walletId, txid)
+      setTxPrivacy(await api.txPrivacy(walletId, txid))
     } catch (err) {
       setErro(mensagemDoErro(catalog, err, lang))
     } finally {
@@ -64,6 +89,7 @@ export function AlertDetail({
   }
 
   const alerta = detalhe ? renderAlert(catalog, detalhe.alert.type, detalhe.alert.params, lang) : null
+  const matriz = matrizBoltzmann(txPrivacy?.latest?.boltzmann)
 
   return (
     <div
@@ -139,7 +165,7 @@ export function AlertDetail({
         )}
 
         {tx && (
-          <div className="mb-2 flex flex-col gap-3 sm:flex-row">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row">
             <div className="flex-1">
               <span className={rotulo}>{render(catalog, 'alert.inputs', {}, lang)}</span>
               <ul className="text-sm">
@@ -168,6 +194,69 @@ export function AlertDetail({
               )}
             </div>
           </div>
+        )}
+
+        {txPrivacy?.running && !txPrivacy.latest && (
+          <p className="mb-3 text-sm text-faint">
+            {render(catalog, 'alert.txPrivacyRunning', {}, lang)}
+          </p>
+        )}
+
+        {txPrivacy?.latest && (
+          <section className="mb-3 border-t border-line pt-3">
+            <div className="mb-3 flex flex-wrap items-baseline gap-2">
+              <span className={rotulo}>{render(catalog, 'alert.txPrivacy', {}, lang)}</span>
+              {txPrivacy.latest.score !== null && txPrivacy.latest.grade && (
+                <span className="text-sm">
+                  {txPrivacy.latest.score}/100 · {txPrivacy.latest.grade}
+                </span>
+              )}
+              {txPrivacy.latest.txType && (
+                <span className="text-xs text-faint">
+                  {render(catalog, 'alert.txType', {}, lang)}: {txPrivacy.latest.txType}
+                </span>
+              )}
+            </div>
+
+            {matriz && (
+              <div className="mb-3">
+                <span className={rotulo}>{render(catalog, 'alert.boltzmann', {}, lang)}</span>
+                <div className="mt-2 overflow-x-auto">
+                  <div
+                    className="inline-grid gap-1"
+                    style={{ gridTemplateColumns: `repeat(${matriz[0]?.length ?? 1}, minmax(1.75rem, 1fr))` }}
+                  >
+                    {matriz.flatMap((linha, y) =>
+                      linha.map((valor, x) => (
+                        <span
+                          key={y + ':' + x}
+                          className="flex h-7 min-w-7 items-center justify-center text-xs text-ink"
+                          style={{
+                            background: `color-mix(in srgb, var(--sb-critical) ${Math.round(valor * 100)}%, var(--sb-surface-raised))`,
+                          }}
+                          title={`in ${y + 1} -> out ${x + 1}`}
+                        >
+                          {Math.round(valor * 100)}
+                        </span>
+                      )),
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {txPrivacy.latest.findings.length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {txPrivacy.latest.findings.map(f => (
+                  <li key={f.id} className="border-l-2 border-line pl-[10px]">
+                    <p className="text-xs font-medium">{f.title}</p>
+                    <p className="font-prose text-sm leading-relaxed text-muted">{f.description}</p>
+                    <RecommendationView recommendation={f.recommendation} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         )}
 
         {erro && (

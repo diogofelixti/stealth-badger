@@ -4,6 +4,8 @@ import { pool } from '../db/pool'
 import { erro } from '../http/erro'
 import type { Network } from '../wallet/descriptor'
 import { createAdapter, type BackendRow } from './adapter'
+import { criarRpc } from './core-rpc'
+import { detectarNo, type SondaDoNo } from './detectar-no'
 import type { ChainAdapter } from './types'
 import {
   criarBackend,
@@ -36,6 +38,15 @@ function redeValida(v: unknown): v is Network {
 
 export interface BackendRouteOptions {
   adapterFactory?: (backend: BackendRow) => ChainAdapter
+  /** injetável para o teste não precisar de um nó de verdade */
+  sonda?: SondaDoNo
+}
+
+/** Pergunta ao nó quem ele é, pelo cookie que acabou de ser encontrado. */
+const sondaReal: SondaDoNo = async (url, cookiePath) => {
+  const rpc = criarRpc({ url, cookiePath, timeoutMs: 5_000 })
+  const info = (await rpc('getblockchaininfo')) as { blocks: number; chain: string }
+  return { blocks: info.blocks, chain: info.chain }
 }
 
 export function registerBackendRoutes(
@@ -43,6 +54,29 @@ export function registerBackendRoutes(
   opts: BackendRouteOptions = {},
 ): void {
   const adapterFactory = opts.adapterFactory ?? createAdapter
+  const sonda = opts.sonda ?? sondaReal
+
+  /**
+   * Procura o nó do usuário a partir do diretório de dados dele.
+   *
+   * Cadastrar o Core pedia host, porta, modo de autenticação e caminho do
+   * cookie — quatro campos e três conceitos. Aqui é um campo: onde o nó guarda
+   * os dados. A subpasta diz a rede, a rede diz a porta, e o cookie é achado.
+   */
+  app.post<{ Body: { datadir?: string } }>(
+    '/api/backends/detect',
+    async (req, reply) => {
+      if (!req.userId) return reply.code(401).send({ error: 'não autenticado' })
+
+      const datadir = req.body?.datadir?.trim()
+      if (!datadir) {
+        return reply
+          .code(400)
+          .send(erro('backend.datadirRequired', 'informe o diretório de dados do nó'))
+      }
+      return reply.send(await detectarNo(datadir, sonda))
+    },
+  )
 
   /**
    * A altura real da ponta, perguntada à fonte que a instância já usa.

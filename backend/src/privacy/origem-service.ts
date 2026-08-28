@@ -3,7 +3,7 @@ import { alertsForOrigin } from '../alerts/rules'
 import { saveAlert } from '../alerts/store'
 import type { Network } from '../wallet/descriptor'
 import { origensEm } from './origem'
-import { salvarTxScan, transacoesSemAnalise } from './origem-store'
+import { salvarTxScan, salvarTxScanCompleto, transacoesSemAnalise } from './origem-store'
 import { scanTransaction, type TxScan } from './scan'
 
 export interface TxScanContext {
@@ -70,12 +70,7 @@ export function analisarOrigens(ctx: OrigemContext): boolean {
           network: ctx.network,
           backendUrl: ctx.backendUrl,
         })
-        await salvarTxScan(
-          ctx.walletId,
-          pendente.txid,
-          resultado.findings,
-          resultado.scannerVersion,
-        )
+        await salvarTxScanCompleto(ctx.walletId, pendente.txid, resultado)
 
         for (const candidato of alertsForOrigin(origensEm(resultado.findings), {
           userId: ctx.userId,

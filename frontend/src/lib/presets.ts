@@ -9,6 +9,7 @@ import type { Network } from './api'
  * monta URL sozinha seria uma segunda fonte da verdade.
  */
 export type PresetId =
+  | 'core-datadir'
   | 'core'
   | 'fulcrum'
   | 'electrs'
@@ -22,7 +23,7 @@ export interface PresetDaTela {
   id: PresetId
   /** nome próprio: não se traduz, e é como a pessoa conhece a fonte */
   nome: string
-  pede: 'host-porta' | 'url' | 'nada'
+  pede: 'host-porta' | 'url' | 'nada' | 'datadir'
   portaPadrao?: Record<Network, number>
   precisaAutenticar?: boolean
   isPublic: boolean
@@ -32,8 +33,17 @@ const ELECTRUM = { mainnet: 50001, signet: 50001, testnet: 50001 }
 
 export const PRESETS: PresetDaTela[] = [
   {
+    // O caminho de menor atrito: um campo só, e o programa deduz rede, porta
+    // e cookie. Vem primeiro porque é o que quem tem nó deveria usar.
+    id: 'core-datadir',
+    nome: 'Bitcoin Core (procurar o meu nó)',
+    pede: 'datadir',
+    precisaAutenticar: false,
+    isPublic: false,
+  },
+  {
     id: 'core',
-    nome: 'Bitcoin Core (seu nó)',
+    nome: 'Bitcoin Core (host e porta)',
     pede: 'host-porta',
     portaPadrao: { mainnet: 8332, signet: 38332, testnet: 18332 },
     precisaAutenticar: true,

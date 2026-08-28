@@ -11,6 +11,8 @@ const search = vi.fn()
 const utxos = vi.fn()
 // o painel pergunta as preferências para saber se mostra preço e taxa
 const preferences = vi.fn()
+const price = vi.fn()
+const fees = vi.fn()
 const chainTip = vi.fn()
 
 vi.mock('../src/lib/api', async importOriginal => {
@@ -25,6 +27,8 @@ vi.mock('../src/lib/api', async importOriginal => {
       channels: () => channels(),
       search: () => search(),
       preferences: () => preferences(),
+      price: () => price(),
+      fees: () => fees(),
       chainTip: () => chainTip(),
       utxos: () => utxos(),
     },
@@ -53,6 +57,10 @@ const CATALOGO: Catalog = {
   'wallet.alerts': 'Alertas desta carteira',
   'wallet.notFoundOnScreen': 'Esta carteira não existe, ou não é sua.',
   'privacy.severalHosts': '{n} backends',
+  'prefs.price': 'Preço do BTC',
+  'prefs.fees': 'Estimativa de taxa',
+  'fees.blocks': '{n} blocos',
+  'fees.next': 'próximo bloco',
 }
 
 const ME: Me = { email: 'quem@exemplo.local', isAdmin: false, language: 'pt' }
@@ -69,6 +77,10 @@ beforeEach(() => {
   preferences.mockResolvedValue({
     theme: 'sett', currency: 'BRL', priceSources: [], feeSource: 'off',
   })
+  price.mockReset()
+  price.mockResolvedValue({ currency: 'BRL', sources: [], median: null })
+  fees.mockReset()
+  fees.mockResolvedValue({ source: 'off', blocks: null, at: '' })
   chainTip.mockResolvedValue({ height: 100, backendHost: 'x', isPublic: true, at: '' })
   wallets.mockResolvedValue([PUBLICA])
   alerts.mockResolvedValue({ items: [], nextCursor: null })
@@ -100,6 +112,29 @@ describe('todas as rotas vivem dentro da Shell', () => {
       expect(container.querySelector('[role="status"][data-posture="public"]')).not.toBeNull()
     })
   }
+})
+
+describe('mercado no cabeçalho', () => {
+  it('mostra preço e taxa no topo sem apagar o selo de postura', async () => {
+    preferences.mockResolvedValue({
+      theme: 'sett',
+      currency: 'BRL',
+      priceSources: ['coingecko'],
+      feeSource: 'mempool',
+    })
+    price.mockResolvedValue({
+      currency: 'BRL',
+      sources: [{ id: 'coingecko', price: 550000, at: '' }],
+      median: 550000,
+    })
+    fees.mockResolvedValue({ source: 'mempool', blocks: { 1: 12, 3: 8, 6: 5 }, at: '' })
+    const { container } = montarEm('/alertas')
+
+    await waitFor(() => expect(screen.getByText(/550\.000/)).toBeDefined())
+    expect(screen.getByText(/12/)).toBeDefined()
+    expect(container.querySelector('[role="status"][data-posture="public"]')).not.toBeNull()
+    expect(container.querySelector('header [data-market="header"]')).not.toBeNull()
+  })
 })
 
 // A postura é da sessão inteira, e não da primeira carteira: basta uma

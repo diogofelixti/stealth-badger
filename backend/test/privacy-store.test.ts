@@ -61,6 +61,35 @@ describe('privacy_scans', () => {
     expect(salvo!.findings[0]!.id).toBe('wallet-address-reuse')
   })
 
+  it('guarda recomendação estruturada sem achatar para texto', async () => {
+    await salvarScan(walletId, {
+      ...scan(10),
+      findings: [
+        {
+          id: 'address-reuse-critical',
+          severity: 'critical',
+          confidence: 'deterministic',
+          title: 'Address reused',
+          description: 'x',
+          recommendation: {
+            urgency: 'immediate',
+            headline: 'Stop receiving on this address',
+            text: 'Use fresh addresses from now on.',
+            tools: [{ name: 'Guide', url: 'https://am-i.exposed/docs/address-reuse' }],
+          },
+          scoreImpact: -90,
+          params: { txCount: 97 },
+        },
+      ],
+    })
+
+    expect((await ultimoScan(walletId))!.findings[0]!.recommendation).toMatchObject({
+      urgency: 'immediate',
+      headline: 'Stop receiving on this address',
+      tools: [{ name: 'Guide' }],
+    })
+  })
+
   // O eixo do tempo é o que este projeto acrescenta ao scanner original.
   // Sobrescrever o anterior apagaria a história que importa: o score caiu.
   it('acumula as análises em vez de sobrescrever a anterior', async () => {

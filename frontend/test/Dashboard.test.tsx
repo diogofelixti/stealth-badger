@@ -41,6 +41,8 @@ const { Dashboard } = await import('../src/pages/Dashboard')
 const CATALOGO: Catalog = {
   'wallets.empty': 'Nenhuma carteira vigiada ainda.',
   'wallets.emptyHint': 'Cole a chave pública estendida da carteira.',
+  'onboarding.stepSource': 'Escolha por onde vigiar',
+  'onboarding.stepWallet': 'Cole a chave',
   'wallets.add': '+ Vigiar carteira',
   'wallets.keyPlaceholder': 'xpub, ypub, zpub, tpub, upub ou vpub',
   'balance.total': 'Saldo total',
@@ -115,6 +117,16 @@ describe('Dashboard — primeiro acesso', () => {
     await waitFor(() =>
       expect(screen.getByText(/cole a chave pública estendida/i)).toBeDefined(),
     )
+  })
+
+  it('mostra os dois passos do primeiro acesso na ordem', async () => {
+    wallets.mockResolvedValue([])
+    montar()
+
+    await waitFor(() => expect(screen.getByText(/escolha por onde vigiar/i)).toBeDefined())
+    const passo1 = screen.getByText(/escolha por onde vigiar/i).closest('li')!
+    const passo2 = screen.getByText(/^Cole a chave$/i).closest('li')!
+    expect(Boolean(passo1.compareDocumentPosition(passo2) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
   })
 })
 

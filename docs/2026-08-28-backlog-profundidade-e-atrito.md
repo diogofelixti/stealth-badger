@@ -7,6 +7,26 @@ Como o backlog anterior: cada item traz **o que construir, por que, o contrato, 
 que provam e quando está pronto**. O que ele não traz é decisão que não é minha — essas
 estão marcadas com **decisão pendente** e agrupadas no fim.
 
+## Retomada em 28/08 — estado antes de seguir
+
+O trabalho deixado pelo Claude Code ficou no working tree, sem commit. A retomada
+confirmou que o plano continua sendo este documento, e que os itens devem ser fechados em
+fatias pequenas, com teste e sem misturar superfícies de risco.
+
+| Item | Estado | Próximo critério |
+|---|---|---|
+| A · ações clicáveis com forma | implementado localmente | manter o teste de varredura de `<a>`/`<label>` sem `sb-btn` passando |
+| H · reset de usuário | implementado localmente | usar `npm run reset:user -- <email>` antes do teste do zero |
+| B · cadastro de fonte visível | implementado localmente | validar visualmente o botão em Configurações e no formulário de carteira |
+| C · Core pelo diretório | implementado localmente | testar no nó real com `/mnt/dados2` |
+| D · mainnet e signet no primeiro acesso | implementado localmente | validar cadastro de carteira mainnet em instância `NETWORK=signet` |
+| E · preço e taxa no cabeçalho | implementado localmente | manter `Rotas.test` cobrindo mercado no header e selo de postura |
+| G · análise profunda | G1 a G5 implementados localmente | seguir para o item F |
+| F · acessos externos tipo phoenixd-dashboard | implementado localmente | provar o controle contra o Docker desta máquina, com `docker-compose.controle.yml` somado |
+
+Ordem mantida: terminar o atrito primeiro, depois a profundidade da análise, e deixar
+acessos externos por último porque envolve o socket do Docker.
+
 ---
 
 ## Primeiro, as duas perguntas
@@ -198,7 +218,73 @@ documentação por caminho, com o passo a passo de conectar o celular.
 **Decisão pendente 1 — o botão "Ativar".** Ele exige falar com o Docker. O phoenixd-
 dashboard monta o socket; nós recusamos isso em 27/08 com a razão escrita: quem alcança
 o socket é root na máquina hospedeira, e este projeto é multi-usuário e ensina a publicar
-o painel num túnel. Três caminhos, no fim do documento.
+o painel num túnel. Resolvida em 28/08 pela decisão 1, e a exceção está escrita no fim
+deste documento.
+
+## Implementado localmente em F
+
+**O que foi construído**, uma frase por peça:
+
+- `GET /api/access` passa a devolver `status` e `statusSource` por caminho, além de
+  `enabled`, e um bloco `control` que diz se a instância oferece ligar pela tela e se
+  este usuário pode;
+- `access/sondas.ts` mede Tailscale pelo DNS da MagicDNS e Cloudflare pelo `/ready` do
+  próprio `cloudflared`, cada uma com prazo e sem nunca lançar;
+- `access/docker.ts` fala HTTP por socket de domínio Unix, sem biblioteca de Docker e
+  sem shell em lugar nenhum do caminho;
+- `access/controle.ts` traz a lista branca de três perfis e dois verbos, e `POST
+  /api/access/control` a aplica atrás de sessão, de `users.is_admin` e do socket;
+- `lib/caminhos.ts` descreve os três caminhos uma vez só, e `CaminhoExterno` é a mesma
+  página lida três vezes: `/acessos/tor`, `/acessos/tailscale`, `/acessos/cloudflare`;
+- `ui/Copiar.tsx` copia endereço e comando, com caminho de reserva e sem falhar calado;
+- `docs/acessos/{tor,tailscale,cloudflare}.md`, e um `docker-compose.controle.yml`
+  separado que é o único jeito de o socket entrar.
+
+**O que quebrou a premissa.** Cinco coisas, e as cinco mudaram o que foi entregue:
+
+1. **O Tor não tem por onde ser sondado pela rede.** O plano pedia "o `hostname` existe
+   **e** o serviço está de pé". O `torrc` deste projeto traz `SocksPort 0`, então não há
+   porta a que perguntar, e a alternativa seria abrir um proxy SOCKS na rede do compose
+   só para poder dar um ping nele. O estado do Tor é `unknown` sem o socket do Docker, e
+   a tela diz por quê;
+2. **`up` não existe na API do Docker Engine.** Existem `start` e `stop`, sobre container
+   que já existe. O "Ativar" do phoenixd-dashboard baixa imagem e cria o container;
+   replicar isso exigiria reescrever a definição do serviço dentro do backend, e aí tela
+   e `docker-compose.yml` passariam a discordar em silêncio na primeira vez que um dos
+   dois mudasse. Ficou a falha honesta do item C: `notCreated` devolve
+   `docker compose --profile <perfil> create`, uma vez por perfil, com botão de copiar;
+3. **`:ro` no socket do Docker não protege nada.** Um socket não é arquivo que se lê: é
+   canal, e o engine do outro lado obedece a quem fala nele. O `docker-compose.controle.yml`
+   monta sem `:ro` e diz isso por escrito, em vez de sugerir uma segurança que não existe;
+4. **`navigator.clipboard` não existe fora de contexto seguro.** O endereço da Tailscale
+   é `http://100.x`, que o navegador não considera seguro, e é **justamente ali** que a
+   pessoa está copiando um endereço para o celular. O `Copiar` cai no `execCommand`
+   sozinho, e diz quando os dois falham;
+5. **Dois estados não bastavam.** `down` é a sonda ter respondido que não; `unknown` é a
+   sonda não ter conseguido perguntar. Colapsar os dois num vermelho manda a pessoa
+   consertar um túnel que talvez esteja perfeitamente de pé. `unknown` é pintado de
+   atenção, e nunca de crítico.
+
+**O que ficou de dívida**, com a razão:
+
+- **`create` continua na mão**, uma vez por perfil, pelo motivo 2 acima. O painel liga e
+  desliga do segundo uso em diante;
+- **o estado do Tor sem o socket continua `unknown`**, pelo motivo 1. É a medição que não
+  existe, e não um indicador por fazer;
+- **`docs/acessos/*.md` não é servido pela aplicação.** O container do frontend é
+  construído com `./frontend` de contexto, e a pasta `docs/` não entra nele. A página
+  nomeia o arquivo com botão de copiar em vez de ligar para um domínio de terceiro:
+  linkar para fora faria a página de acessos entregar a esse terceiro que alguém está
+  lendo sobre acessos, que é exatamente o que ela ensina a evitar;
+- **a porta do QR é a que o navegador está usando agora.** Serve a instalação padrão, que
+  publica os três caminhos atrás do mesmo nginx. Instalação que publique cada caminho numa
+  porta diferente precisaria de mais.
+
+**Testes.** `access-sondas` (9), `access-controle` (12), `access-docker` (3),
+`access` (27 casos de rota, dos quais 8 do controle), `Copiar` (4),
+`CaminhoExterno` (13), `Acessos` (5). O caso que mais paga o item é a tabela de payloads
+fora da lista branca — `postgres`, `backend`, `exec`, `logs`, travessia de caminho — que
+exige 400 **e** que o engine não tenha sido tocado.
 
 ---
 
@@ -240,6 +326,11 @@ Medido hoje numa transação real: `score 24 · F`, `txType simple-payment`, ach
 *"entrada desnecessária"*, e Boltzmann com `entropy 0`, `efficiency 0.33`, matriz
 `[[1,1],[1,1]]` — ou seja, **ligação determinística**.
 
+**Implementado localmente em G3.** `tx_scans` guarda `score`, `grade`, `txType`,
+`txInfo`, `chainAnalysis`, achados completos e Boltzmann. O detalhe do alerta mantém a
+regra de não consultar nada ao abrir; no clique em **Buscar na cadeia**, busca a
+transação, dispara a análise profunda e mostra score, tipo, matriz e recomendações.
+
 ## G4 · Os gráficos
 
 Sete, e cada um responde a uma pergunta que hoje fica sem resposta:
@@ -256,11 +347,33 @@ Sete, e cada um responde a uma pergunta que hoje fica sem resposta:
 
 Todos com a paleta dos temas, e nenhum com cor literal — a regra 4 do backlog anterior.
 
+**Implementado localmente em G4.** O painel de privacidade mostra score, histórico,
+severidade, histograma de UTXOs com faixa de dust, reuso de endereço e contrapartes
+recorrentes. O detalhe da transação troca o JSON cru de Boltzmann por mapa de calor.
+
 ## G5 · Tema `cypherpunk`
 
 O quinto tema: fundo preto, verde de fósforo, e a listra de exposição em magenta. Passa
 pelo mesmo `theme.test.ts` dos outros quatro — contraste medido, exposto distinguível de
 soberano.
+
+**Implementado localmente em G5.** `TEMAS` passa a ter cinco, e `tokens.css` ganha o
+bloco `cypherpunk`: fundo `#04070A`, fósforo pálido `#B4F5CE` no corpo do texto, verde
+cru `#2BFF95` no selo de soberano, magenta `#FF5FD1` no explorador público e `#FF4E7A`
+no crítico. Medido pelo `theme.test.ts`: texto sobre fundo **16,2:1**, secundário sobre
+superfície **9,9:1**, público sobre fundo **7,5:1**, crítico sobre fundo **6,4:1**, e
+distância RGB entre público e soberano **272** — o mínimo do teste é 60.
+
+**O que quebrou a premissa.** O arquivo prometia que tema mexe *só* na matéria-prima, e
+este é o primeiro que não pode cumprir isso inteiro. `--sb-stripe-warning` é montada com
+`--sb-bone` sobre `--sb-sett`, e num tema em que a tela inteira já é verde sobre preto a
+listra passaria a ter a cor de tudo o mais — deixando de ser sinal exatamente onde o
+produto mais depende dela. O `cypherpunk` remonta a listra sobre `--sb-caution`, e a
+exceção ficou escrita no comentário do bloco de temas.
+
+Para que a remontagem não possa sair errada em silêncio, `theme.test.ts` ganhou um caso
+que vale para os cinco: as duas barras da listra de aviso resolvem até hexadecimal e
+cumprem 3:1 entre si. No `cypherpunk` esse par é `#FF5FD1` sobre `#04070A`, **7,5:1**.
 
 ## A restrição honesta deste item
 
@@ -326,6 +439,12 @@ O que estreita a superfície, e é obrigatório neste item:
    régua do aviso da Cloudflare;
 4. **o README diz** que o perfil de controle é opt-in: sem `DOCKER_SOCKET=/var/run/docker.sock`
    montado, tudo continua como antes, em leitura.
+
+**Como isso ficou, na prática.** O opt-in não é uma linha no `.env`, e sim um arquivo
+inteiro a mais no comando: `docker compose -f docker-compose.yml -f
+docker-compose.controle.yml up -d`. Uma variável esquecida em `.env` se liga por
+descuido; um segundo arquivo no comando, não. O arquivo carrega o aviso por escrito, e é
+ele que define `DOCKER_SOCKET` e `COMPOSE_PROJECT`.
 
 ---
 

@@ -4,6 +4,7 @@ import { api, type Backend, type Catalog, type Lang, type Me, type Wallet } from
 import { Shell } from '../components/Shell'
 import { LangToggle } from '../components/LangToggle'
 import { Button } from '../components/ui/Button'
+import { Mercado } from '../components/Mercado'
 import { render } from '../lib/i18n'
 
 function host(url: string): string {
@@ -121,6 +122,7 @@ export function Layout({
   return (
     <Shell
       backend={postura(wallets, catalog, lang)}
+      market={<Mercado catalog={catalog} lang={lang} compact />}
       actions={
         <>
           <LangToggle lang={lang} onChange={onLang} />

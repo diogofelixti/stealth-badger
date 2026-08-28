@@ -7,13 +7,33 @@ const exec = promisify(execFile)
 /** Como o scanner é invocado. Injetável para que o teste não precise dele. */
 export type ScanRunner = (args: string[]) => Promise<string>
 
+export interface RecommendationTool {
+  name?: string
+  title?: string
+  url?: string
+  [campo: string]: unknown
+}
+
+export type PrivacyRecommendation =
+  | string
+  | {
+      urgency?: string
+      headline?: string
+      title?: string
+      text?: string
+      detail?: string
+      action?: string
+      tools?: RecommendationTool[]
+      [campo: string]: unknown
+    }
+
 export interface PrivacyFinding {
   id: string
   severity: string
   confidence: string
   title: string
   description: string
-  recommendation: string
+  recommendation: PrivacyRecommendation
   scoreImpact: number
   params: Record<string, unknown>
 }
@@ -174,8 +194,14 @@ export interface TxScanOptions {
 }
 
 export interface TxScan {
+  score?: number | null
+  grade?: string | null
+  txType?: string | null
+  txInfo?: Record<string, unknown>
+  chainAnalysis?: Record<string, unknown>
   findings: PrivacyFinding[]
   scannerVersion: string
+  boltzmann?: Record<string, unknown> | null
 }
 
 /**
@@ -192,14 +218,36 @@ export async function scanTransaction(opts: TxScanOptions): Promise<TxScan> {
   const bruto = await rodar(
     [...argumentosBase(opts.network, opts.backendUrl), 'scan', 'tx', opts.txid],
     runner,
-  )
+  ) as {
+    version?: string
+    score?: number
+    grade?: string
+    txType?: string
+    txInfo?: Record<string, unknown>
+    chainAnalysis?: Record<string, unknown>
+    findings?: PrivacyFinding[]
+  }
 
   // `links` traz a transação numa URL de site de terceiro; fica de fora do que
   // é guardado, pela mesma razão do xpub na varredura de carteira.
   return {
-    findings: (bruto.findings as PrivacyFinding[]) ?? [],
-    scannerVersion: (bruto.version as string) ?? 'desconhecida',
+    score: typeof bruto.score === 'number' ? bruto.score : null,
+    grade: bruto.grade ?? null,
+    txType: bruto.txType ?? null,
+    txInfo: bruto.txInfo ?? {},
+    chainAnalysis: bruto.chainAnalysis ?? {},
+    findings: bruto.findings ?? [],
+    scannerVersion: bruto.version ?? 'desconhecida',
   }
+}
+
+export async function scanBoltzmann(opts: TxScanOptions): Promise<Record<string, unknown>> {
+  const timeoutMs = opts.timeoutMs ?? 120_000
+  const runner = opts.runner ?? cliRunner(timeoutMs)
+  return rodar(
+    [...argumentosBase(opts.network, opts.backendUrl), 'boltzmann', opts.txid],
+    runner,
+  )
 }
 
 export interface AddressScanOptions {

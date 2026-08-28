@@ -1,0 +1,43 @@
+# Ligar e desligar acesso externo pela tela.
+#
+# ── Leia isto antes de usar ────────────────────────────────────────────────
+#
+# Este arquivo monta `/var/run/docker.sock` no backend. **Quem alcança o socket
+# do Docker é root na máquina que hospeda** — não há montagem em modo leitura
+# que mude isso, porque um socket não é um arquivo que se lê: é um canal, e o
+# engine do outro lado obedece a quem fala nele.
+#
+# A consequência, escrita em vez de descoberta depois: com este arquivo somado
+# ao principal, **uma sessão do painel vale execução de código na máquina que
+# hospeda**. Se o painel estiver publicado num túnel, isso vale para quem
+# obtiver uma sessão de fora.
+#
+# O que estreita a superfície, e está no código:
+#
+#   1. o backend não recebe comando. Ele recebe `{ profile, action }`, confere
+#      contra três perfis e dois verbos, e monta ele mesmo as duas únicas
+#      chamadas que sabe fazer: `/start` e `/stop`, sobre um id que veio do
+#      próprio engine. Não há shell em lugar nenhum desse caminho;
+#   2. `users.is_admin`: quem não é admin da instância recebe 403;
+#   3. este arquivo. Sem somá-lo, nada disto existe.
+#
+# ── Como usar ──────────────────────────────────────────────────────────────
+#
+#   docker compose -f docker-compose.yml -f docker-compose.controle.yml up -d
+#
+# E, uma vez por perfil que você queira controlar pela tela:
+#
+#   docker compose --profile tor create
+#
+# O engine liga e desliga container que existe; ele não sabe o que este arquivo
+# diz. O painel mostra esse comando quando esbarra nisso, em vez de dar erro.
+
+services:
+  backend:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DOCKER_SOCKET: /var/run/docker.sock
+      # O filtro por projeto existe para o painel não alcançar o `tor` de outro
+      # compose que por acaso rode na mesma máquina.
+      COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-coin-controll}

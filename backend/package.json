@@ -11,7 +11,8 @@
     "start": "tsx src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "migrate": "tsx src/db/migrate.ts"
+    "migrate": "tsx src/db/migrate.ts",
+    "reset:user": "tsx src/db/reset-user-cli.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^10.0.1",

@@ -3,6 +3,7 @@ import {
   descriptorFor,
   mensagemDeFalha,
   scanAddress,
+  scanBoltzmann,
   scanTransaction,
   scanWallet,
   type ScanRunner,
@@ -152,6 +153,16 @@ const SAIDA_TX = JSON.stringify({
   network: 'signet',
   score: 8,
   grade: 'F',
+  txType: 'simple-payment',
+  txInfo: {
+    inputs: 1,
+    outputs: 2,
+    sameAddressInputOutput: true,
+  },
+  chainAnalysis: {
+    entities: [{ name: 'Exchange conhecido', type: 'exchange' }],
+    addressReuse: true,
+  },
   findings: [
     {
       id: 'entity-behavior-exchange',
@@ -180,6 +191,15 @@ describe('scanTransaction', () => {
     expect(scan.findings).toHaveLength(1)
     expect(scan.findings[0]!.id).toBe('entity-behavior-exchange')
     expect(scan.scannerVersion).toBe('0.34.2')
+  })
+
+  it('lê score, tipo e análise de cadeia da transação', async () => {
+    const scan = await scanTransaction({ ...base, runner: async () => SAIDA_TX })
+    expect(scan.score).toBe(8)
+    expect(scan.grade).toBe('F')
+    expect(scan.txType).toBe('simple-payment')
+    expect(scan.txInfo).toMatchObject({ inputs: 1, sameAddressInputOutput: true })
+    expect(scan.chainAnalysis).toMatchObject({ addressReuse: true })
   })
 
   it('pede a análise da transação, e não da carteira', async () => {
@@ -221,6 +241,20 @@ describe('scanTransaction', () => {
     await expect(
       scanTransaction({ ...base, runner: async () => 'nem json é' }),
     ).rejects.toThrow(/scanner/i)
+  })
+
+  it('pede a matriz de Boltzmann da mesma transação', async () => {
+    let recebidos: string[] = []
+    const boltzmann = await scanBoltzmann({
+      ...base,
+      runner: async args => {
+        recebidos = args
+        return JSON.stringify({ matrix: [[1, 1], [1, 1]], entropy: 0 })
+      },
+    })
+    expect(recebidos).toContain('boltzmann')
+    expect(recebidos).toContain(TXID)
+    expect(boltzmann).toMatchObject({ entropy: 0 })
   })
 })
 
@@ -285,6 +319,37 @@ const SAIDA_ENDERECO = JSON.stringify({
   links: { analysis: 'https://am-i.exposed/#addr=tb1q' },
 })
 
+const SAIDA_COM_RECOMENDACAO_ESTRUTURADA = JSON.stringify({
+  version: '0.34.3',
+  network: 'mainnet',
+  score: 0,
+  grade: 'F',
+  addressInfo: {
+    type: 'p2wpkh',
+    txCount: 97,
+    fundedTxoCount: 97,
+    balance: 7831700000,
+  },
+  findings: [
+    {
+      id: 'address-reuse-critical',
+      severity: 'critical',
+      confidence: 'deterministic',
+      title: 'Address reused in 97 transactions',
+      description: 'Address reuse links every payment to the same owner.',
+      recommendation: {
+        urgency: 'immediate',
+        headline: 'Stop receiving on this address',
+        text: 'Move future receipts to fresh addresses and label the existing UTXOs before spending.',
+        tools: [{ name: 'Address reuse guide', url: 'https://am-i.exposed/docs/address-reuse' }],
+      },
+      scoreImpact: -90,
+      params: { txCount: 97 },
+    },
+  ],
+  links: { analysis: 'https://am-i.exposed/#addr=bc1q' },
+})
+
 describe('scanAddress', () => {
   const base = {
     address: 'tb1qxfskf5u0v6',
@@ -314,6 +379,19 @@ describe('scanAddress', () => {
     expect(scan.score).toBe(96)
     expect(scan.grade).toBe('A+')
     expect(scan.findings[0]!.id).toBe('h8-no-reuse')
+  })
+
+  it('preserva a recomendação estruturada que o scanner devolve', async () => {
+    const scan = await scanAddress({
+      ...base,
+      runner: async () => SAIDA_COM_RECOMENDACAO_ESTRUTURADA,
+    })
+
+    expect(scan.findings[0]!.recommendation).toMatchObject({
+      urgency: 'immediate',
+      headline: 'Stop receiving on this address',
+      tools: [{ name: 'Address reuse guide' }],
+    })
   })
 
   // O que o scanner devolve sobre um endereço não tem a mesma forma do que ele

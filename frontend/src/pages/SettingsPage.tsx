@@ -3,6 +3,7 @@ import { api } from '../lib/api'
 import { BackendForm } from '../components/BackendForm'
 import { Channels } from '../components/Channels'
 import { Preferencias } from '../components/Preferencias'
+import { Mercado } from '../components/Mercado'
 import { Button } from '../components/ui/Button'
 import { render } from '../lib/i18n'
 import { useDadosDoPainel } from './Layout'
@@ -63,8 +64,8 @@ export function SettingsPage() {
             }}
           />
         ) : (
-          <Button onClick={() => setCadastrando(true)}>
-            {render(catalog, 'backends.addToggle', {}, lang)}
+          <Button variant="primary" onClick={() => setCadastrando(true)}>
+            {render(catalog, 'backends.addSource', {}, lang)}
           </Button>
         )}
       </section>
@@ -72,6 +73,8 @@ export function SettingsPage() {
       <div className="h-px bg-line" />
 
       <Preferencias catalog={catalog} lang={lang} />
+
+      <Mercado catalog={catalog} lang={lang} />
 
       <div className="h-px bg-line" />
 

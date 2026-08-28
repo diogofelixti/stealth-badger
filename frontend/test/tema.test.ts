@@ -7,8 +7,8 @@ beforeEach(() => {
 })
 
 describe('tema', () => {
-  it('oferece os quatro templates', () => {
-    expect(TEMAS).toEqual(['sett', 'bone', 'carvao', 'contraste'])
+  it('oferece os cinco templates', () => {
+    expect(TEMAS).toEqual(['sett', 'bone', 'carvao', 'contraste', 'cypherpunk'])
   })
 
   it('aplica o tema no documento e guarda a escolha', () => {

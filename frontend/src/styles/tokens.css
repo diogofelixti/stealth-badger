@@ -112,6 +112,10 @@
    nenhum componente sabe que temas existem — é o que o comentário do topo
    deste arquivo prometia desde o primeiro dia.
 
+   A única exceção aberta até hoje é o `cypherpunk`, que remonta
+   `--sb-stripe-warning` a partir da própria matéria-prima; a razão está
+   escrita em cima do bloco dele.
+
    A regra que nenhum tema pode quebrar: o par texto/fundo cumpre WCAG AA, e
    `--sb-public` continua **distinguível** de `--sb-sovereign`. Um tema bonito
    que apague o aviso de explorador público desmonta a tese do produto sem
@@ -182,4 +186,40 @@
   --sb-caution-lit: #FFE566;
   --sb-alarm-lit:   #FF9A8E;
   --sb-clay-lit:    #1C1C1C;
+}
+
+/* Cypherpunk: terminal de fósforo. Preto sem calor nenhum, verde para tudo o
+   que é rotina, e magenta reservado para o que expõe.
+
+   A troca de papel que este tema faz, e a razão dela: nos outros quatro, o
+   croma de aviso é âmbar e o texto é claro e sem croma — a listra de bone
+   sobre sett lê como alarme porque é a única coisa listrada na tela. Aqui a
+   tela inteira já é verde sobre preto, então uma listra de `--sb-bone` teria
+   a cor de todo o resto e deixaria de ser sinal. Por isso, e só aqui,
+   `--sb-stripe-warning` é montada sobre `--sb-caution`: o magenta é a única
+   cor que este tema não gasta em nada que seja rotina. */
+:root[data-theme='cypherpunk'] {
+  color-scheme: dark;
+
+  --sb-sett:  #04070A;
+  --sb-soil:  #080D10;
+  --sb-clay:  #0E1519;
+  --sb-root:  #1D3A2C;
+
+  /* Fósforo pálido no corpo do texto; o verde cru fica para o selo de
+     soberano, que é o que precisa saltar. */
+  --sb-bone:  #B4F5CE;
+  --sb-muted: #6ECB9C;
+  --sb-faint: #4B9B72;
+
+  --sb-caution: #FF5FD1; /* explorador público */
+  --sb-alarm:   #FF4E7A; /* crítico */
+  --sb-moss:    #2BFF95; /* soberano */
+
+  --sb-caution-lit: #FF8ADE;
+  --sb-alarm-lit:   #FF7C9C;
+  --sb-clay-lit:    #152026;
+
+  --sb-stripe-warning: repeating-linear-gradient(
+    90deg, var(--sb-caution) 0 13px, var(--sb-sett) 13px 26px);
 }

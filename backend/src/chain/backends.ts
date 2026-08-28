@@ -206,11 +206,39 @@ export async function ensureBackendGlobal(network: Network): Promise<number> {
   return Number(rows[0]!.id)
 }
 
+/**
+ * As duas fontes públicas que existem sem ninguém cadastrar nada.
+ *
+ * Antes disto, a instância só garantia a fonte da própria `NETWORK`, e a
+ * pergunta de 28/08 — *"está tudo apontando só pra signet, por quê?"* — tinha
+ * esta resposta. Rede é propriedade da fonte desde o item 0; o que faltava era
+ * mainnet **existir** para quem abre a tela pela primeira vez.
+ *
+ * São públicas, e a listra dirá isso na hora em que uma carteira usar uma
+ * delas. Oferecer não é escolher: quem tem nó cadastra o dele e troca.
+ */
+const PUBLICAS_PRONTAS: { url: string; network: Network }[] = [
+  { url: 'https://mempool.space/api', network: 'mainnet' },
+  { url: 'https://mempool.space/signet/api', network: 'signet' },
+]
+
+export async function ensureBackendsPublicos(): Promise<void> {
+  for (const fonte of PUBLICAS_PRONTAS) {
+    await pool.query(
+      `INSERT INTO backends (user_id, kind, url, is_public, network, preset)
+       VALUES (NULL, 'esplora', $1, true, $2, 'mempool')
+       ON CONFLICT (user_id, url, network) DO NOTHING`,
+      [fonte.url, fonte.network],
+    )
+  }
+}
+
 export async function listarBackends(
   userId: number,
   network?: Network,
 ): Promise<BackendResumo[]> {
   await ensureBackendGlobal(loadConfig().network)
+  await ensureBackendsPublicos()
   const { rows } = await pool.query<{
     id: string
     kind: BackendKind

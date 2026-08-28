@@ -18,6 +18,8 @@ function host(url: string): string {
   }
 }
 
+const ORDEM_DAS_REDES = ['mainnet', 'signet', 'testnet'] as const
+
 export function AddWallet({
   catalog,
   lang,
@@ -162,39 +164,41 @@ export function AddWallet({
       {/* Escolher o backend é escolher quem vê os endereços consultados. Fica
           no mesmo formulário, e não numa tela de configuração distante, porque
           é uma decisão sobre esta carteira. */}
-      <label
-        htmlFor="backend-da-carteira"
-        className="mb-1 block text-xs uppercase tracking-label text-faint"
-      >
+      <label htmlFor="backend-da-carteira" className="mb-1 block text-xs uppercase tracking-label text-faint">
         {render(catalog, 'backends.title', {}, lang)}
       </label>
-      <select
-        id="backend-da-carteira"
-        value={escolhido ?? ''}
-        onChange={e => setEscolhido(Number(e.target.value))}
-        className={`mb-2 ${campo}`}
-      >
-        {backends.map(b => (
-          <option key={b.id} value={b.id}>
-            {host(b.url)} · {render(catalog, `network.${b.network}`, {}, lang)} · {render(catalog, `backends.${b.scope}`, {}, lang)}
-          </option>
-        ))}
-      </select>
+      <div className="mb-2 flex gap-2">
+        <select
+          id="backend-da-carteira"
+          value={escolhido ?? ''}
+          onChange={e => setEscolhido(Number(e.target.value))}
+          className={campo}
+        >
+          {ORDEM_DAS_REDES.flatMap(rede => {
+            const daRede = backends.filter(b => b.network === rede)
+            if (daRede.length === 0) return []
+            return [
+              <optgroup key={rede} label={render(catalog, `network.${rede}`, {}, lang)}>
+                {daRede.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {render(catalog, `network.${b.network}`, {}, lang)} · {host(b.url)} · {render(catalog, `backends.${b.scope}`, {}, lang)}
+                  </option>
+                ))}
+              </optgroup>,
+            ]
+          })}
+        </select>
+        {!abrindoBackend && (
+          <Button variant="secondary" onClick={() => setAbrindoBackend(true)} className="shrink-0">
+            {render(catalog, 'backends.newSource', {}, lang)}
+          </Button>
+        )}
+      </div>
 
       {atual?.isPublic && (
         <p className="mb-2 font-prose text-sm leading-relaxed" style={{ color: 'var(--sb-public)' }}>
           {render(catalog, 'backends.publicNote', {}, lang)}
         </p>
-      )}
-
-      {!abrindoBackend && (
-        <Button
-          variant="ghost"
-          onClick={() => setAbrindoBackend(true)}
-          className="mb-3"
-        >
-          {render(catalog, 'backends.addToggle', {}, lang)}
-        </Button>
       )}
 
       {abrindoBackend && (

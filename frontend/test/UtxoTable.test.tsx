@@ -38,10 +38,14 @@ const TXID = 'aa'.repeat(32)
 const utxo = (over: Partial<Utxo> = {}): Utxo => ({
   txid: TXID,
   vout: 0,
+  addressId: 1,
   valueSats: 412850,
   height: 319233,
   address: 'tb1qexemplo000000000000000000000000000',
   derivationPath: '0/0',
+  addressPrivacyScore: null,
+  addressPrivacyGrade: null,
+  addressPrivacyScannedAt: null,
   label: null,
   tags: [],
   frozen: false,
@@ -107,6 +111,14 @@ describe('UtxoTable', () => {
     const { container } = montar()
     await waitFor(() => expect(screen.getByText(/poeira/i)).toBeDefined())
     expect(container.querySelector('[data-dust="true"]')).not.toBeNull()
+  })
+
+  it('mostra o score profundo do endereço quando já foi analisado', async () => {
+    utxos.mockResolvedValue([utxo({ addressPrivacyScore: 0, addressPrivacyGrade: 'F' })])
+    const { container } = montar()
+
+    await waitFor(() => expect(screen.getByText(/0\/100 · F/)).toBeDefined())
+    expect(container.querySelector('[data-address-privacy-grade="F"]')).not.toBeNull()
   })
 
   it('oferece baixar o arquivo de rótulos', async () => {

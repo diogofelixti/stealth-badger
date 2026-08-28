@@ -1983,6 +1983,116 @@ o que o produto denuncia nos exploradores públicos.
 - **A imagem do `tor` instala o pacote na subida** em vez de trazer um Dockerfile
   próprio. Funciona e é uma linha; um `Dockerfile` seria mais rápido a cada restart.
 
+## Rodada 35 — G5 e item F: o tema cypherpunk, e o controle dos acessos
+
+Rodada do backlog de 28/08, retomada com o working tree já carregando A, H, B, C, D, E e
+G1 a G4 sem commit. Fechou os dois itens que faltavam: **G5** e o **item F**, que o plano
+deixou por último de propósito porque envolve o socket do Docker.
+
+### O que foi construído
+
+- **G5** · quinto tema, `cypherpunk`: fundo `#04070A`, fósforo pálido no corpo do texto,
+  verde cru no selo de soberano, magenta no explorador público e no crítico.
+- `GET /api/access` passa a devolver `status` e `statusSource` por caminho, além do
+  `enabled` que já existia, e um bloco `control` com o que a instância oferece.
+- `access/sondas.ts` mede Tailscale pelo DNS da MagicDNS e Cloudflare pelo `/ready` do
+  próprio `cloudflared`; `access/docker.ts` fala HTTP por socket de domínio Unix.
+- `access/controle.ts` e `POST /api/access/control`: três perfis, dois verbos, atrás de
+  sessão, de `users.is_admin` e do socket montado de propósito.
+- Uma página por caminho — `/acessos/tor`, `/acessos/tailscale`, `/acessos/cloudflare` —
+  com passo a passo numerado, comandos e endereço com botão de copiar, QR, estado medido
+  e o que fazer quando não funciona.
+- `docs/acessos/{tor,tailscale,cloudflare}.md`, e um `docker-compose.controle.yml`
+  separado que é o único jeito de o socket entrar.
+
+### O que quebrou a premissa
+
+**O tema não conseguiu mexer só na matéria-prima.** O `tokens.css` prometia isso desde o
+primeiro dia, e o `cypherpunk` é o primeiro que não pode cumprir: a listra de aviso é
+montada com `--sb-bone` sobre `--sb-sett`, e num tema em que a tela inteira já é verde
+sobre preto ela passaria a ter a cor de tudo o mais — deixando de ser sinal exatamente
+onde o produto mais depende dela. A listra foi remontada sobre `--sb-caution`, e
+`theme.test.ts` ganhou um caso que vale para os cinco temas: as duas barras resolvem até
+hexadecimal e cumprem 3:1 entre si. No `cypherpunk`, 7,5:1.
+
+**O Tor não tem por onde ser sondado pela rede.** O backlog pedia "o `hostname` existe
+**e** o serviço está de pé". O `torrc` deste projeto traz `SocksPort 0`, então não há
+porta a que perguntar, e a alternativa seria abrir um proxy SOCKS na rede do compose só
+para poder dar um ping nele — trocar uma pergunta por uma superfície. O estado do Tor é
+`unknown` sem o socket do Docker, e a tela escreve o motivo.
+
+**`up` não existe na API do Docker Engine.** Existem `start` e `stop`, sobre container
+que já existe. O "Ativar" do phoenixd-dashboard baixa imagem e cria; replicar isso exigiria
+reescrever a definição do serviço dentro do backend, e aí tela e `docker-compose.yml`
+discordariam em silêncio na primeira vez que um dos dois mudasse. Ficou a falha honesta
+do item C: `notCreated` devolve `docker compose --profile <perfil> create`, uma vez por
+perfil, com botão de copiar.
+
+**`:ro` no socket do Docker não protege nada.** Um socket não é arquivo que se lê: é
+canal, e o engine do outro lado obedece a quem fala nele. O `docker-compose.controle.yml`
+monta sem `:ro` e diz isso por escrito, em vez de sugerir uma segurança que não existe.
+
+**`navigator.clipboard` não existe fora de contexto seguro**, e o endereço da Tailscale é
+`http://100.x` — que é **justamente** onde a pessoa está copiando um endereço para o
+celular. O `Copiar` cai no `execCommand` sozinho, e diz quando os dois caminhos falham,
+porque copiar em silêncio faria colar o endereço antigo achando que colou o novo.
+
+**Dois estados não bastavam.** `down` é a sonda ter respondido que não; `unknown` é a
+sonda não ter conseguido perguntar. Colapsar os dois num vermelho manda a pessoa
+consertar um túnel que talvez esteja perfeitamente de pé — `unknown` é pintado de
+atenção, e nunca de crítico.
+
+### A exceção do socket, e o que a estreita
+
+A decisão 1 de 28/08 reverteu a recusa de 27/08. A consequência fica registrada, e não
+descoberta depois: **com o socket montado, uma sessão do painel vale execução de código
+na máquina que hospeda**, e num painel publicado num túnel isso vale para quem obtiver
+uma sessão de fora.
+
+O que estreita, e está no código:
+
+1. o backend não recebe comando. Recebe `{ profile, action }`, confere contra três
+   perfis e dois verbos, e monta ele mesmo as duas únicas chamadas que sabe fazer, sobre
+   um id que veio do próprio engine. **Não há shell em lugar nenhum desse caminho**;
+2. `users.is_admin`, que existia no schema desde o item 1 e nunca tinha sido usado,
+   conferido antes de qualquer chamada;
+3. o opt-in não é uma linha no `.env`, e sim um arquivo a mais no comando. Variável
+   esquecida se liga por descuido; segundo arquivo no comando, não.
+
+O caso de teste que mais paga o item é a tabela de payloads fora da lista branca —
+`postgres`, `backend`, `exec`, `logs`, travessia de caminho — que exige 400 **e** que o
+engine não tenha sido tocado.
+
+### O que ficou de dívida
+
+- **`create` continua na mão**, uma vez por perfil, pela razão acima. O painel liga e
+  desliga do segundo uso em diante.
+- **O estado do Tor sem o socket continua `unknown`.** É a medição que não existe, e não
+  um indicador por fazer.
+- **`docs/acessos/*.md` não é servido pela aplicação.** O container do frontend é
+  construído com `./frontend` de contexto, e `docs/` não entra nele. A página nomeia o
+  arquivo com botão de copiar em vez de ligar para um domínio de terceiro: linkar para
+  fora faria a página de acessos entregar a esse terceiro que alguém está lendo sobre
+  acessos, que é o que ela ensina a evitar.
+- **Nenhum dos três perfis foi subido nesta rodada**, e o controle não foi provado contra
+  o Docker desta máquina. Subir o `cloudflared` publica o painel na internet: continua
+  sendo decisão de quem hospeda, como em 27/08.
+
+## Estado em 28/08
+
+O working tree carrega, sem commit, os itens A, H, B, C, D, E e G1 a G5 do backlog de
+28/08, mais o item F desta rodada.
+
+- backend: 48 arquivos de teste, **581 testes**
+- frontend: 25 arquivos de teste, **222 testes**
+- **cinco temas**, com contraste medido por teste em cada um, e a listra de aviso agora
+  medida junto
+- migrações aplicadas: `001` a `014`
+- **seis rotas**, com a página de cada caminho externo dentro da `Shell`
+- `npx tsc --noEmit` limpo nos dois
+- `docker compose config` válido com o arquivo de controle somado
+- o resto igual ao estado de 27/08, abaixo
+
 ## Estado em 27/08
 
 - backend: 43 arquivos de teste, **510 testes**

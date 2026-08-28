@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest'
 // e não uma cópia dos valores mantida à parte — que envelheceria sozinha.
 const CSS = readFileSync(resolve(process.cwd(), 'src/styles/tokens.css'), 'utf8')
 
-/** Os quatro temas que a tela oferece. `sett` mora no `:root` sem atributo. */
-const TEMAS = ['sett', 'bone', 'carvao', 'contraste'] as const
+/** Os cinco temas que a tela oferece. `sett` mora no `:root` sem atributo. */
+const TEMAS = ['sett', 'bone', 'carvao', 'contraste', 'cypherpunk'] as const
 
 function blocoDoTema(tema: string): string {
   if (tema === 'sett') {
@@ -50,6 +50,20 @@ function contraste(a: string, b: string): number {
   return (maior! + 0.05) / (menor! + 0.05)
 }
 
+/**
+ * As duas cores da listra de aviso, resolvidas até o hexadecimal.
+ *
+ * `valor()` não serve aqui: ele segue **o primeiro** `var()` e para. A listra
+ * é um gradiente de dois tons, e o que importa dela é justamente o par.
+ */
+function coresDaListra(tema: string): [string, string] {
+  const padrao = /--sb-stripe-warning:\s*([^;]+);/
+  const bruto =
+    blocoDoTema(tema).match(padrao)?.[1] ?? blocoDoTema('sett').match(padrao)![1]!
+  const nomes = [...bruto.matchAll(/var\((--[a-z0-9-]+)\)/g)].map(m => m[1]!)
+  return [valor(tema, nomes[0]!), valor(tema, nomes[1]!)]
+}
+
 function distanciaRgb(a: string, b: string): number {
   const canais = (hex: string) => {
     const h = hex.replace('#', '')
@@ -83,6 +97,15 @@ describe.each(TEMAS)('tema %s', tema => {
 
   it('o crítico aparece sobre o fundo, com 3:1', () => {
     expect(contraste(valor(tema, '--sb-critical'), valor(tema, '--sb-bg'))).toBeGreaterThanOrEqual(3)
+  })
+
+  // A listra de aviso é a assinatura da interface, e ela só avisa enquanto as
+  // duas barras se distinguem. O `cypherpunk` remonta a listra sobre
+  // `--sb-caution` porque, num tema todo verde, a barra de `--sb-bone` teria a
+  // cor de todo o resto — este caso é o que impede a remontagem de sair errada.
+  it('as duas barras da listra de aviso se distinguem, com 3:1', () => {
+    const [clara, escura] = coresDaListra(tema)
+    expect(contraste(clara, escura)).toBeGreaterThanOrEqual(3)
   })
 
   // Não basta cada um ser visível: exposto e soberano precisam ser

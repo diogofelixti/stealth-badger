@@ -9,7 +9,15 @@ import { render } from '../lib/i18n'
  * não desenha nada e não consulta ninguém. É a diferença entre oferecer uma
  * conveniência e assinar o usuário num serviço sem perguntar.
  */
-export function Mercado({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
+export function Mercado({
+  catalog,
+  lang,
+  compact = false,
+}: {
+  catalog: Catalog
+  lang: Lang
+  compact?: boolean
+}) {
   const [precos, setPrecos] = useState<Precos | null>(null)
   const [taxas, setTaxas] = useState<Taxas | null>(null)
 
@@ -35,28 +43,35 @@ export function Mercado({ catalog, lang }: { catalog: Catalog; lang: Lang }) {
   })
 
   return (
-    <div className="flex flex-wrap gap-6">
+    <div
+      data-market={compact ? 'header' : 'full'}
+      className={
+        compact
+          ? 'flex flex-wrap items-center gap-3 text-xs'
+          : 'flex flex-wrap gap-6'
+      }
+    >
       {temPreco && (
         <div>
           <span className="block text-xs uppercase tracking-label text-faint">
             {render(catalog, 'prefs.price', {}, lang)}
           </span>
-          <span className="text-lg">
+          <span className={compact ? 'text-sm' : 'text-lg'}>
             {moeda.format(precos!.median!)}{' '}
             <span className="text-sm text-faint">{precos!.currency}</span>
           </span>
-          <span className="block text-xs text-faint">
+          <span className={compact ? 'hidden text-xs text-faint xl:block' : 'block text-xs text-faint'}>
             {precos!.sources.filter(s => s.price !== null).map(s => s.id).join(' · ')}
           </span>
         </div>
       )}
 
       {temTaxa && (
-        <div>
+        <div className={compact ? 'hidden lg:block' : ''}>
           <span className="block text-xs uppercase tracking-label text-faint">
             {render(catalog, 'prefs.fees', {}, lang)}
           </span>
-          <span className="flex gap-3 text-lg">
+          <span className={compact ? 'flex gap-2 text-sm' : 'flex gap-3 text-lg'}>
             {[1, 3, 6].map(alvo => (
               <span key={alvo}>
                 {taxas!.blocks![alvo] ?? '—'}

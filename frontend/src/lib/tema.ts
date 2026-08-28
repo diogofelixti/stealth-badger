@@ -1,4 +1,4 @@
-export const TEMAS = ['sett', 'bone', 'carvao', 'contraste'] as const
+export const TEMAS = ['sett', 'bone', 'carvao', 'contraste', 'cypherpunk'] as const
 export type Tema = (typeof TEMAS)[number]
 
 const CHAVE = 'sb_theme'

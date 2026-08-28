@@ -32,10 +32,62 @@ export interface Taxas {
   at: string
 }
 
+export interface Deteccao {
+  found: boolean
+  network?: Network
+  host?: string
+  url?: string
+  rpcPort?: number
+  cookiePath?: string
+  cookieReadable?: boolean
+  reachable?: boolean
+  blocks?: number
+  chain?: string
+  reason?: 'notMounted' | 'noCookie' | 'unreachable'
+  hint?: string
+  compose?: string
+}
+
+/**
+ * `enabled` diz que alguém configurou o caminho; `status` diz se ele respondeu.
+ *
+ * São medidas diferentes, e a diferença entre elas é o caso em que a pessoa
+ * acha que está publicada e não está: o `.onion` no arquivo, e o Tor parado.
+ * `unknown` é o terceiro valor de propósito, e nunca é pintado de vermelho: ele
+ * quer dizer que a sonda não conseguiu perguntar, e não que a resposta foi não.
+ */
+export type EstadoDoAcesso = 'up' | 'down' | 'unknown'
+export type FonteDoEstado = 'docker' | 'dns' | 'http' | 'none'
+
+export interface CaminhoDeAcesso {
+  enabled: boolean
+  status: EstadoDoAcesso
+  statusSource: FonteDoEstado
+}
+
 export interface Acessos {
-  tor: { enabled: boolean; onion?: string }
-  tailscale: { enabled: boolean; hostname?: string }
-  cloudflare: { enabled: boolean; hostname?: string; warning: boolean }
+  tor: CaminhoDeAcesso & { onion?: string }
+  tailscale: CaminhoDeAcesso & { hostname?: string }
+  cloudflare: CaminhoDeAcesso & { hostname?: string; warning: boolean }
+  /**
+   * Se esta instância oferece ligar e desligar pela tela, e se este usuário
+   * pode. `available: false` é o padrão: sem `DOCKER_SOCKET` montado por quem
+   * hospeda, o painel lê os acessos e não os controla.
+   */
+  control: { available: boolean; isAdmin: boolean }
+}
+
+export type PerfilDeAcesso = 'tor' | 'tailscale' | 'cloudflared'
+
+export interface ResultadoDoControle {
+  ok: boolean
+  profile: PerfilDeAcesso
+  action: 'up' | 'down'
+  state?: string
+  reason?: 'notCreated' | 'ambiguous' | 'unreachable' | 'engineError'
+  hint?: string
+  /** o comando de uma linha, quando o painel não pode resolver sozinho */
+  command?: string
 }
 
 export interface PontaDaCadeia {
@@ -120,25 +172,80 @@ export interface Wallet {
   archivedAt?: string | null
 }
 
+export interface RecommendationTool {
+  name?: string
+  title?: string
+  url?: string
+  [campo: string]: unknown
+}
+
+export type PrivacyRecommendation =
+  | string
+  | {
+      urgency?: string
+      headline?: string
+      title?: string
+      text?: string
+      detail?: string
+      action?: string
+      tools?: RecommendationTool[]
+      [campo: string]: unknown
+    }
+
 export interface PrivacyFinding {
   id: string
   severity: string
   confidence: string
   title: string
   description: string
-  recommendation: string
+  recommendation: PrivacyRecommendation
   scoreImpact: number
+  params?: Record<string, unknown>
 }
 
 export interface PrivacyReport {
   latest: {
     score: number
     grade: string
+    walletInfo: Record<string, unknown>
     findings: PrivacyFinding[]
     scannerVersion: string
     scannedAt: string
   } | null
   history: { score: number; grade: string; scannedAt: string }[]
+  running: boolean
+  error: string | null
+}
+
+export interface AddressPrivacyReport {
+  latest: {
+    id: number
+    addressId: number
+    score: number
+    grade: string
+    walletInfo: Record<string, unknown>
+    findings: PrivacyFinding[]
+    scannerVersion: string
+    scannedAt: string
+  } | null
+  running: boolean
+  error: string | null
+}
+
+export interface TxPrivacyReport {
+  latest: {
+    txid: string
+    score: number | null
+    grade: string | null
+    txType: string | null
+    txInfo: Record<string, unknown>
+    chainAnalysis: Record<string, unknown>
+    boltzmann: Record<string, unknown> | null
+    findings: PrivacyFinding[]
+    scannerVersion: string
+    scannedAt: string
+    error: string | null
+  } | null
   running: boolean
   error: string | null
 }
@@ -161,10 +268,14 @@ export interface Backend {
 export interface Utxo {
   txid: string
   vout: number
+  addressId: number
   valueSats: number
   height: number | null
   address: string
   derivationPath: string
+  addressPrivacyScore: number | null
+  addressPrivacyGrade: string | null
+  addressPrivacyScannedAt: string | null
   label: string | null
   tags: string[]
   frozen: boolean
@@ -268,6 +379,11 @@ export const api = {
   fees: () => request<Taxas>('/api/fees'),
   chainTip: () => request<PontaDaCadeia>('/api/chain/tip'),
   access: () => request<Acessos>('/api/access'),
+  accessControl: (profile: PerfilDeAcesso, action: 'up' | 'down') =>
+    request<ResultadoDoControle>('/api/access/control', {
+      method: 'POST',
+      body: JSON.stringify({ profile, action }),
+    }),
   alertDetail: (id: number) => request<AlertDetail>(`/api/alerts/${id}`),
   /**
    * A transação inteira, na fonte da carteira. **Só sai por clique**: num
@@ -299,6 +415,11 @@ export const api = {
       body: JSON.stringify({ label, ...entrada, backendId }),
     }),
   backends: () => request<Backend[]>('/api/backends'),
+  detectNode: (datadir: string) =>
+    request<Deteccao>('/api/backends/detect', {
+      method: 'POST',
+      body: JSON.stringify({ datadir }),
+    }),
   addBackend: (corpo: {
     preset?: string
     kind?: BackendKind
@@ -342,6 +463,22 @@ export const api = {
   scanPrivacy: (walletId: number) =>
     request<{ status: string }>(`/api/wallets/${walletId}/scan`, { method: 'POST' }),
   privacy: (walletId: number) => request<PrivacyReport>(`/api/wallets/${walletId}/privacy`),
+  scanAddressPrivacy: (walletId: number, addressId: number) =>
+    request<{ status: string }>(`/api/wallets/${walletId}/addresses/${addressId}/privacy`, {
+      method: 'POST',
+    }),
+  scanUsedAddressPrivacy: (walletId: number) =>
+    request<{ status: string; addresses: number }>(`/api/wallets/${walletId}/addresses/privacy`, {
+      method: 'POST',
+    }),
+  addressPrivacy: (walletId: number, addressId: number) =>
+    request<AddressPrivacyReport>(`/api/wallets/${walletId}/addresses/${addressId}/privacy`),
+  scanTxPrivacy: (walletId: number, txid: string) =>
+    request<{ status: string }>(`/api/wallets/${walletId}/tx/${txid}/privacy`, {
+      method: 'POST',
+    }),
+  txPrivacy: (walletId: number, txid: string) =>
+    request<TxPrivacyReport>(`/api/wallets/${walletId}/tx/${txid}/privacy`),
   utxos: (walletId: number) => request<Utxo[]>(`/api/wallets/${walletId}/utxos`),
   markUtxo: (
     walletId: number,

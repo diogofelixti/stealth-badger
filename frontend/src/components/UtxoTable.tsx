@@ -75,17 +75,10 @@ export function UtxoTable({
           {render(catalog, 'utxos.title', {}, lang)}
         </h3>
         <div className="flex items-center gap-3">
-          <a
-            href={api.exportLabels(walletId)}
-            className="text-xs uppercase tracking-label"
-            style={{ color: 'var(--sb-accent)' }}
-          >
+          <Button as="a" href={api.exportLabels(walletId)}>
             {render(catalog, 'utxos.export', {}, lang)}
-          </a>
-          <label
-            className="cursor-pointer text-xs uppercase tracking-label"
-            style={{ color: 'var(--sb-accent)' }}
-          >
+          </Button>
+          <Button as="label" className="cursor-pointer">
             {render(catalog, 'utxos.import', {}, lang)}
             <input
               type="file"
@@ -102,7 +95,7 @@ export function UtxoTable({
                 }
               }}
             />
-          </label>
+          </Button>
         </div>
       </div>
 
@@ -127,8 +120,16 @@ export function UtxoTable({
                   <span className="text-sm font-medium">
                     {formatSats(u.valueSats, lang)}
                   </span>
-                  <span className="text-xs text-faint">
-                    {encurtar(u.txid)}:{u.vout} · {u.derivationPath}
+                  <span className="flex flex-wrap items-center gap-2 text-xs text-faint">
+                    <span>{encurtar(u.txid)}:{u.vout} · {u.derivationPath}</span>
+                    {u.addressPrivacyGrade && u.addressPrivacyScore !== null && (
+                      <span
+                        data-address-privacy-grade={u.addressPrivacyGrade}
+                        className="rounded border border-line px-2 py-[2px] uppercase tracking-label"
+                      >
+                        {u.addressPrivacyScore}/100 · {u.addressPrivacyGrade}
+                      </span>
+                    )}
                   </span>
                 </div>
 

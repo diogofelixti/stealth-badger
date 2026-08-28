@@ -48,8 +48,10 @@ describe('GET /api/backends', () => {
       cookies: { sb_session: cookie },
     })
     expect(res.statusCode).toBe(200)
-    expect(res.json()).toHaveLength(1)
-    expect(res.json()[0]).toMatchObject({ kind: 'esplora', scope: 'global' })
+    // desde 28/08 são três: a fonte da instância e as duas públicas prontas,
+    // uma de mainnet e uma de signet
+    expect(res.json().length).toBeGreaterThanOrEqual(1)
+    expect(res.json().every((b: { scope: string }) => b.scope === 'global')).toBe(true)
   })
 
   it('não devolve o backend de outro usuário', async () => {
@@ -90,7 +92,7 @@ describe('GET /api/backends', () => {
       url: '/api/backends',
       cookies: { sb_session: cookie },
     })
-    expect(todos.json().map((b: { network: string }) => b.network).sort()).toEqual([
+    expect([...new Set(todos.json().map((b: { network: string }) => b.network))].sort()).toEqual([
       'mainnet',
       'signet',
     ])
@@ -100,8 +102,10 @@ describe('GET /api/backends', () => {
       url: '/api/backends?network=mainnet',
       cookies: { sb_session: cookie },
     })
-    expect(filtrados.json()).toHaveLength(1)
-    expect(filtrados.json()[0]).toMatchObject({ network: 'mainnet' })
+    expect(filtrados.json().length).toBeGreaterThanOrEqual(1)
+    expect(
+      filtrados.json().every((b: { network: string }) => b.network === 'mainnet'),
+    ).toBe(true)
   })
 })
 
@@ -122,7 +126,10 @@ describe('POST /api/backends', () => {
       url: '/api/backends',
       cookies: { sb_session: cookie },
     })
-    expect(lista.json()).toHaveLength(2)
+    // a fonte nova aparece ao lado das globais, e é a única do usuário
+    expect(
+      lista.json().filter((b: { scope: string }) => b.scope === 'own'),
+    ).toHaveLength(1)
   })
 
   it('recusa tipo de backend sem adapter, nomeando o que aceita', async () => {
@@ -459,5 +466,96 @@ describe('POST /api/backends — catálogo de fontes', () => {
 
     expect(res.statusCode).toBe(201)
     expect(res.json().url).toBe('https://exemplo.local/api')
+  })
+})
+
+describe('as fontes que a instância oferece prontas', () => {
+  // A pergunta de 28/08: "está tudo apontando só pra signet, por quê?". Porque
+  // a instância só garantia a fonte da própria `NETWORK`. Rede é propriedade
+  // da fonte desde o item 0, e mainnet precisa existir sem ninguém cadastrar.
+  it('oferece mainnet e signet no primeiro acesso, mesmo com NETWORK=signet', async () => {
+    process.env.NETWORK = 'signet'
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+    })
+
+    const redes = res.json().map((b: { network: string }) => b.network)
+    expect(redes).toContain('mainnet')
+    expect(redes).toContain('signet')
+  })
+
+  it('as fontes públicas prontas vêm marcadas como públicas', async () => {
+    process.env.NETWORK = 'signet'
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+    })
+
+    const mainnet = res
+      .json()
+      .find((b: { network: string; url: string }) => b.network === 'mainnet')
+    expect(mainnet.isPublic).toBe(true)
+    expect(mainnet.url).toContain('mempool.space')
+  })
+
+  it('não duplica a fonte da instância quando ela já é uma das públicas', async () => {
+    process.env.NETWORK = 'signet'
+    const { app, cookie } = await logado()
+
+    await app.inject({ method: 'GET', url: '/api/backends', cookies: { sb_session: cookie } })
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+    })
+
+    const urls = res
+      .json()
+      .map((b: { url: string; network: string }) => b.url + '|' + b.network)
+    expect(new Set(urls).size).toBe(urls.length)
+  })
+})
+
+describe('POST /api/backends/detect', () => {
+  it('recusa sem diretório', async () => {
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backends/detect',
+      cookies: { sb_session: cookie },
+      payload: {},
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('backend.datadirRequired')
+  })
+
+  it('devolve o que achou, sem cadastrar nada', async () => {
+    const { app, cookie } = await logado()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backends/detect',
+      cookies: { sb_session: cookie },
+      payload: { datadir: '/nao/existe/aqui' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({ found: false, reason: 'notMounted' })
+    // detectar é olhar, não cadastrar
+    const lista = await app.inject({
+      method: 'GET',
+      url: '/api/backends',
+      cookies: { sb_session: cookie },
+    })
+    expect(lista.json().every((b: { kind: string }) => b.kind !== 'core')).toBe(true)
   })
 })

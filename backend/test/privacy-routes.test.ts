@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { buildApp } from '../src/app'
 import { pool } from '../src/db/pool'
 import type { PrivacyScan } from '../src/privacy/scan'
-import { aguardarScan } from '../src/privacy/andamento'
+import { aguardarAddressScan, aguardarScan } from '../src/privacy/andamento'
 import { aguardarOrigens } from '../src/privacy/origem-service'
 import { appendEvent } from '../src/events/log'
 import { projectWallet } from '../src/events/project'
@@ -522,5 +522,151 @@ describe('análise de privacidade de endereço avulso', () => {
     })
     expect(res.json().error).toBeNull()
     expect(res.json().latest).toMatchObject({ score: 96, grade: 'A+' })
+  })
+})
+
+describe('análise profunda por endereço usado', () => {
+  async function comEnderecoUsado() {
+    const pedidos: string[] = []
+    const app = buildApp({
+      addressScanner: (async (ctx: { address: string }) => {
+        pedidos.push(ctx.address)
+        return {
+          ...RESULTADO,
+          score: 0,
+          grade: 'F',
+          walletInfo: { txCount: 97, balance: 7831700000 },
+          findings: [
+            {
+              id: 'address-reuse-critical',
+              severity: 'critical',
+              confidence: 'deterministic',
+              title: 'Address reused in 97 transactions',
+              description: 'd',
+              recommendation: {
+                urgency: 'immediate',
+                headline: 'Stop receiving on this address',
+                text: 'Use fresh addresses from now on.',
+                tools: [{ name: 'Guide', url: 'https://am-i.exposed/docs/address-reuse' }],
+              },
+              scoreImpact: -90,
+              params: { txCount: 97 },
+            },
+          ],
+        }
+      }) as never,
+    })
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'enderecos@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'enderecos@exemplo.com', password: 'senha-bem-comprida' },
+    })
+    const cookie = login.cookies.find(c => c.name === 'sb_session')!.value
+    const criada = await app.inject({
+      method: 'POST',
+      url: '/api/wallets',
+      cookies: { sb_session: cookie },
+      payload: { label: 'Cofre', key: ZPUB },
+    })
+    const walletId = Number(criada.json().id)
+    const a = await pool.query<{ id: string }>(
+      `INSERT INTO addresses (wallet_id, chain, idx, derivation_path, address, scripthash, is_used)
+       VALUES ($1,0,0,'0/0','bc1qreusado','ff', true) RETURNING id`,
+      [walletId],
+    )
+    await appendEvent({
+      walletId,
+      type: 'utxo_created',
+      height: 100,
+      blockHash: 'bb',
+      txid: 'ef'.repeat(32),
+      vout: 0,
+      payload: { addressId: Number(a.rows[0]!.id), valueSats: 500000 },
+    })
+    await projectWallet(walletId)
+    return { app, cookie, walletId, addressId: Number(a.rows[0]!.id), pedidos }
+  }
+
+  it('analisa um endereço usado da carteira e guarda o relatório detalhado', async () => {
+    const ctx = await comEnderecoUsado()
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/wallets/${ctx.walletId}/addresses/${ctx.addressId}/privacy`,
+      cookies: { sb_session: ctx.cookie },
+    })
+    expect(res.statusCode).toBe(202)
+    await aguardarAddressScan(ctx.addressId)
+
+    const relatorio = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/wallets/${ctx.walletId}/addresses/${ctx.addressId}/privacy`,
+      cookies: { sb_session: ctx.cookie },
+    })
+    expect(relatorio.json().latest).toMatchObject({
+      score: 0,
+      grade: 'F',
+      walletInfo: { txCount: 97 },
+    })
+    expect(relatorio.json().latest.findings[0].recommendation).toMatchObject({
+      headline: 'Stop receiving on this address',
+    })
+  })
+
+  it('a lista de UTXOs traz o último score profundo do endereço', async () => {
+    const ctx = await comEnderecoUsado()
+    await ctx.app.inject({
+      method: 'POST',
+      url: `/api/wallets/${ctx.walletId}/addresses/${ctx.addressId}/privacy`,
+      cookies: { sb_session: ctx.cookie },
+    })
+    await aguardarAddressScan(ctx.addressId)
+
+    const utxos = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/wallets/${ctx.walletId}/utxos`,
+      cookies: { sb_session: ctx.cookie },
+    })
+    expect(utxos.json()[0]).toMatchObject({
+      addressId: ctx.addressId,
+      addressPrivacyScore: 0,
+      addressPrivacyGrade: 'F',
+    })
+  })
+
+  it('dispara análise para todos os endereços usados da carteira', async () => {
+    const ctx = await comEnderecoUsado()
+    const naoUsado = await pool.query<{ id: string }>(
+      `INSERT INTO addresses (wallet_id, chain, idx, derivation_path, address, scripthash, is_used)
+       VALUES ($1,0,1,'0/1','bc1qsemuso','aa', false) RETURNING id`,
+      [ctx.walletId],
+    )
+
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/wallets/${ctx.walletId}/addresses/privacy`,
+      cookies: { sb_session: ctx.cookie },
+    })
+    expect(res.statusCode).toBe(202)
+    expect(res.json()).toMatchObject({ addresses: 1 })
+    await aguardarAddressScan(ctx.addressId)
+    await aguardarAddressScan(Number(naoUsado.rows[0]!.id))
+
+    expect(ctx.pedidos).toEqual(['bc1qreusado'])
+  })
+
+  it('recusa analisar endereço de outra carteira', async () => {
+    const dono = await comEnderecoUsado()
+    const outro = await comCarteira()
+    const res = await outro.app.inject({
+      method: 'POST',
+      url: `/api/wallets/${outro.walletId}/addresses/${dono.addressId}/privacy`,
+      cookies: { sb_session: outro.cookie },
+    })
+    expect(res.statusCode).toBe(404)
   })
 })
